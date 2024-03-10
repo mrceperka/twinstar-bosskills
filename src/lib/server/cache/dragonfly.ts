@@ -12,3 +12,16 @@ export const createDragonflyClient = () => {
 	}
 	return globalDf!;
 };
+
+const byPathKey = (path: string) => `page-by-path-${path}`;
+export const getCachedPageByPath = async (path: string) => {
+	const client = createDragonflyClient();
+	const key = byPathKey(path);
+	return client.get(key);
+};
+
+export const setCachedPageByPath = (path: string, content: string) => {
+	const client = createDragonflyClient();
+	const key = byPathKey(path);
+	return client.setex(key, 10 * 60, content);
+};
