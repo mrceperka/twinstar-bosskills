@@ -1,0 +1,589 @@
+package character
+
+import (
+	"context"
+	"database/sql"
+	"net/http"
+	"sort"
+	"strconv"
+	"time"
+
+	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/router"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
+)
+
+type Deps struct {
+	DB      *sql.DB
+	CSSHash string
+	JSHash  string
+}
+
+const killsPageSize = 20
+
+func Handler(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		realmName := middleware.Realm(r.Context())
+		if middleware.GatePrivateRealm(w, r) {
+			return
+		}
+		name := r.PathValue("name")
+		if name == "" {
+			http.NotFound(w, r)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		expansion := realm.Expansion(realmName)
+		isPartial := middleware.IsHTMX(r) && r.URL.Query().Get("full") == ""
+
+		guid, class, firstSeen, lastSeen, killCount, err := lookupCharacter(ctx, deps.DB, realmName, name)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if guid == 0 {
+			http.NotFound(w, r)
+			return
+		}
+
+		killsPage := atoiOr(r.URL.Query().Get("page"), 0)
+		if killsPage < 0 {
+			killsPage = 0
+		}
+
+		recent, killsTotal, err := loadRecentKills(ctx, deps.DB, realmName, guid, expansion, killsPage, killsPageSize)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		vm := ViewModel{
+			Meta: layouts.PageMeta{
+				Title:   name + " — " + realmName,
+				Realm:   realmName,
+				CSSHash: deps.CSSHash,
+				JSHash:  deps.JSHash,
+			},
+			Realm: realmName,
+			Char: CharacterInfo{
+				Name:       name,
+				Class:      class,
+				ClassLabel: wow.Class(class),
+				FirstSeen:  firstSeen.Format("2006-01-02"),
+				LastSeen:   lastSeen.Format("2006-01-02 15:04"),
+				KillCount:  killCount,
+			},
+			KillsPage:     killsPage,
+			KillsPageSize: killsPageSize,
+			KillsTotal:    killsTotal,
+			RecentKills:   recent,
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+		if isPartial {
+			_ = KillsTableFragment(vm).Render(r.Context(), w)
+			return
+		}
+
+		_ = Page(vm).Render(r.Context(), w)
+	}
+}
+
+// RankingsHandler handles GET /{realm}/character/{name}/rankings and returns
+// the lazy-loaded rankings fragment inserted into the <details> element.
+func RankingsHandler(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		realmName := middleware.Realm(r.Context())
+		if middleware.GatePrivateRealm(w, r) {
+			return
+		}
+		name := r.PathValue("name")
+		if name == "" {
+			http.NotFound(w, r)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		expansion := realm.Expansion(realmName)
+		currentSpec := atoiOr(r.URL.Query().Get("spec"), 0)
+
+		guid, _, _, _, _, err := lookupCharacter(ctx, deps.DB, realmName, name)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if guid == 0 {
+			http.NotFound(w, r)
+			return
+		}
+
+		rankRows, err := loadRankings(ctx, deps.DB, realmName, guid)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		killDetails, err := loadBestKillDetails(ctx, deps.DB, realmName, guid)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		bossIDsSet := map[uint32]bool{}
+		for _, rr := range rankRows {
+			bossIDsSet[rr.BossID] = true
+		}
+		bossNames, err := loadBossNames(ctx, deps.DB, realmName, mapKeysU32(bossIDsSet))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		dpsGroups, hpsGroups := buildBossGroups(rankRows, killDetails, bossNames, expansion, currentSpec)
+		specButtons := buildSpecButtons(rankRows, currentSpec, realmName, name)
+
+		vm := RankingsViewModel{
+			Realm:       realmName,
+			CharName:    name,
+			DPSGroups:   dpsGroups,
+			HPSGroups:   hpsGroups,
+			SpecButtons: specButtons,
+			CurrentSpec: currentSpec,
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_ = RankingsFragment(vm).Render(r.Context(), w)
+	}
+}
+
+// rankRow is one character's best-per-(boss, mode, spec) with pre-computed ranks.
+type rankRow struct {
+	BossID    uint32
+	Mode      int
+	Spec      int
+	SpecLabel string
+	Class     int
+	DPS       int64
+	HPS       int64
+	DPSRank   int
+	HPSRank   int
+}
+
+type bossKey struct {
+	BossID uint32
+	Mode   int
+	Spec   int
+}
+
+type killDetail struct {
+	DPSKillID string
+	DPSilvl   float32
+	HPSKillID string
+	HPSilvl   float32
+}
+
+func loadRankings(ctx context.Context, db *sql.DB, realmName string, guid uint64) ([]rankRow, error) {
+	// my_bests: character's best DPS/HPS per (boss, mode, spec)
+	// peers: all players' best on the same (boss, mode, spec) combos
+	// Final: count peers with higher value to compute rank (1-indexed)
+	const q = `
+	WITH
+	  my_bests AS (
+	    SELECT boss_remote_id, mode, talent_spec,
+	           maxMerge(dps_state) AS dps, maxMerge(hps_state) AS hps
+	    FROM character_boss_rankings
+	    WHERE realm = ? AND guid = ?
+	    GROUP BY realm, boss_remote_id, mode, talent_spec, guid
+	    HAVING dps > 0 OR hps > 0
+	  ),
+	  peers AS (
+	    SELECT boss_remote_id, mode, talent_spec,
+	           maxMerge(dps_state) AS dps, maxMerge(hps_state) AS hps
+	    FROM character_boss_rankings
+	    WHERE realm = ?
+	      AND (boss_remote_id, mode, talent_spec) IN (
+	        SELECT boss_remote_id, mode, talent_spec FROM my_bests
+	      )
+	    GROUP BY realm, boss_remote_id, mode, talent_spec, guid
+	  )
+	SELECT
+	  m.boss_remote_id,
+	  m.mode,
+	  m.talent_spec,
+	  m.dps,
+	  m.hps,
+	  countIf(p.dps > m.dps) + 1 AS dps_rank,
+	  countIf(p.hps > m.hps) + 1 AS hps_rank
+	FROM my_bests m
+	JOIN peers p USING (boss_remote_id, mode, talent_spec)
+	GROUP BY m.boss_remote_id, m.mode, m.talent_spec, m.dps, m.hps
+	`
+	rows, err := db.QueryContext(ctx, q, realmName, guid, realmName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []rankRow
+	for rows.Next() {
+		var (
+			bossID           uint32
+			mode             uint8
+			spec             uint16
+			dps, hps         uint64
+			dpsRank, hpsRank uint64
+		)
+		if err := rows.Scan(&bossID, &mode, &spec, &dps, &hps, &dpsRank, &hpsRank); err != nil {
+			return nil, err
+		}
+		s := int(spec)
+		out = append(out, rankRow{
+			BossID:    bossID,
+			Mode:      int(mode),
+			Spec:      s,
+			SpecLabel: wow.Spec(s),
+			Class:     wow.ClassFromSpec(s),
+			DPS:       int64(dps),
+			HPS:       int64(hps),
+			DPSRank:   int(dpsRank),
+			HPSRank:   int(hpsRank),
+		})
+	}
+	return out, rows.Err()
+}
+
+func loadBestKillDetails(ctx context.Context, db *sql.DB, realmName string, guid uint64) (map[bossKey]killDetail, error) {
+	const q = `
+	WITH indexOf(players.guid, ?) AS idx
+	SELECT
+	  boss_remote_id,
+	  mode,
+	  players.talent_spec[idx] AS spec,
+	  argMax(remote_id, toUInt64(players.dmg_done[idx] * 1000 / greatest(length, 1))) AS dps_kill_id,
+	  toFloat32(argMax(players.avg_item_lvl[idx], toUInt64(players.dmg_done[idx] * 1000 / greatest(length, 1)))) AS dps_ilvl,
+	  argMax(remote_id, toUInt64((players.healing_done[idx] + players.absorb_done[idx]) * 1000 / greatest(length, 1))) AS hps_kill_id,
+	  toFloat32(argMax(players.avg_item_lvl[idx], toUInt64((players.healing_done[idx] + players.absorb_done[idx]) * 1000 / greatest(length, 1)))) AS hps_ilvl
+	FROM boss_kill
+	WHERE realm = ? AND has(players.guid, ?)
+	GROUP BY boss_remote_id, mode, spec
+	`
+	rows, err := db.QueryContext(ctx, q, guid, realmName, guid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[bossKey]killDetail{}
+	for rows.Next() {
+		var (
+			bossID    uint32
+			mode      uint8
+			spec      uint16
+			dpsKillID string
+			dpsIlvl   float32
+			hpsKillID string
+			hpsIlvl   float32
+		)
+		if err := rows.Scan(&bossID, &mode, &spec, &dpsKillID, &dpsIlvl, &hpsKillID, &hpsIlvl); err != nil {
+			return nil, err
+		}
+		out[bossKey{bossID, int(mode), int(spec)}] = killDetail{
+			DPSKillID: dpsKillID,
+			DPSilvl:   dpsIlvl,
+			HPSKillID: hpsKillID,
+			HPSilvl:   hpsIlvl,
+		}
+	}
+	return out, rows.Err()
+}
+
+func buildBossGroups(rows []rankRow, details map[bossKey]killDetail, names map[uint32]string, expansion int, specFilter int) (dpsGroups, hpsGroups []BossGroup) {
+	type bossMode struct {
+		BossID uint32
+		Mode   int
+	}
+
+	dpsMap := map[bossMode]rankRow{}
+	hpsMap := map[bossMode]rankRow{}
+
+	for _, r := range rows {
+		if specFilter != 0 && r.Spec != specFilter {
+			continue
+		}
+		k := bossMode{r.BossID, r.Mode}
+		if existing, ok := dpsMap[k]; !ok || r.DPS > existing.DPS {
+			dpsMap[k] = r
+		}
+		if existing, ok := hpsMap[k]; !ok || r.HPS > existing.HPS {
+			hpsMap[k] = r
+		}
+	}
+
+	bossName := func(id uint32) string {
+		if n := names[id]; n != "" {
+			return n
+		}
+		return uitoa(uint64(id))
+	}
+
+	dpsByBoss := map[uint32][]RankingEntry{}
+	for k, r := range dpsMap {
+		if r.DPS <= 0 {
+			continue
+		}
+		d := details[bossKey{k.BossID, k.Mode, r.Spec}]
+		dpsByBoss[k.BossID] = append(dpsByBoss[k.BossID], RankingEntry{
+			ModeLabel: wow.Difficulty(expansion, k.Mode),
+			Spec:      r.Spec,
+			SpecLabel: r.SpecLabel,
+			Class:     r.Class,
+			Value:     r.DPS,
+			Rank:      r.DPSRank,
+			KillID:    d.DPSKillID,
+			Ilvl:      d.DPSilvl,
+		})
+	}
+	for bossID, entries := range dpsByBoss {
+		sort.Slice(entries, func(i, j int) bool { return entries[i].ModeLabel < entries[j].ModeLabel })
+		dpsGroups = append(dpsGroups, BossGroup{BossID: bossID, Name: bossName(bossID), Entries: entries})
+	}
+	sort.Slice(dpsGroups, func(i, j int) bool {
+		oi := wow.BossOrder(dpsGroups[i].BossID)
+		oj := wow.BossOrder(dpsGroups[j].BossID)
+		if oi != oj {
+			return oi < oj
+		}
+		return dpsGroups[i].Name < dpsGroups[j].Name
+	})
+
+	hpsByBoss := map[uint32][]RankingEntry{}
+	for k, r := range hpsMap {
+		if r.HPS <= 0 {
+			continue
+		}
+		d := details[bossKey{k.BossID, k.Mode, r.Spec}]
+		hpsByBoss[k.BossID] = append(hpsByBoss[k.BossID], RankingEntry{
+			ModeLabel: wow.Difficulty(expansion, k.Mode),
+			Spec:      r.Spec,
+			SpecLabel: r.SpecLabel,
+			Class:     r.Class,
+			Value:     r.HPS,
+			Rank:      r.HPSRank,
+			KillID:    d.HPSKillID,
+			Ilvl:      d.HPSilvl,
+		})
+	}
+	for bossID, entries := range hpsByBoss {
+		sort.Slice(entries, func(i, j int) bool { return entries[i].ModeLabel < entries[j].ModeLabel })
+		hpsGroups = append(hpsGroups, BossGroup{BossID: bossID, Name: bossName(bossID), Entries: entries})
+	}
+	sort.Slice(hpsGroups, func(i, j int) bool {
+		oi := wow.BossOrder(hpsGroups[i].BossID)
+		oj := wow.BossOrder(hpsGroups[j].BossID)
+		if oi != oj {
+			return oi < oj
+		}
+		return hpsGroups[i].Name < hpsGroups[j].Name
+	})
+
+	return dpsGroups, hpsGroups
+}
+
+func buildSpecButtons(rows []rankRow, currentSpec int, realmName, charName string) []SpecButton {
+	seen := map[int]bool{}
+	var buttons []SpecButton
+	for _, r := range rows {
+		if seen[r.Spec] {
+			continue
+		}
+		seen[r.Spec] = true
+		// Clicking the active spec deselects (goes to spec=0); otherwise selects.
+		targetSpec := r.Spec
+		if r.Spec == currentSpec {
+			targetSpec = 0
+		}
+		buttons = append(buttons, SpecButton{
+			Spec:     r.Spec,
+			Class:    r.Class,
+			IsActive: r.Spec == currentSpec,
+			Href:     rankingsHref(realmName, charName, targetSpec),
+		})
+	}
+	sort.Slice(buttons, func(i, j int) bool { return buttons[i].Spec < buttons[j].Spec })
+	return buttons
+}
+
+func atoiOr(s string, fallback int) int {
+	if n, err := strconv.Atoi(s); err == nil {
+		return n
+	}
+	return fallback
+}
+
+func lookupCharacter(ctx context.Context, db *sql.DB, realmName, name string) (
+	guid uint64, class int, firstSeen, lastSeen time.Time, killCount int, err error,
+) {
+	const q = `
+		SELECT guid,
+		       argMaxMerge(class_state) AS class,
+		       minMerge(first_seen_state) AS first_seen,
+		       maxMerge(last_seen_state)  AS last_seen,
+		       sumMerge(kill_count_state) AS kills
+		FROM character
+		WHERE realm = ?
+		GROUP BY realm, guid
+		HAVING argMaxMerge(name_state) = ?
+		ORDER BY kills DESC
+		LIMIT 1
+	`
+	row := db.QueryRowContext(ctx, q, realmName, name)
+	var cls uint8
+	var kc uint64
+	if err = row.Scan(&guid, &cls, &firstSeen, &lastSeen, &kc); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, 0, time.Time{}, time.Time{}, 0, nil
+		}
+		return 0, 0, time.Time{}, time.Time{}, 0, err
+	}
+	return guid, int(cls), firstSeen, lastSeen, int(kc), nil
+}
+
+func loadRecentKills(ctx context.Context, db *sql.DB, realmName string, guid uint64, expansion int, page, pageSize int) ([]KillRow, int, error) {
+	const rowsQ = `
+	WITH indexOf(players.guid, ?) AS idx
+	SELECT remote_id, kill_time, boss_name, boss_remote_id, mode, length,
+	       toUInt64(players.dmg_done[idx] * 1000 / greatest(length, 1)) AS dps,
+	       toUInt64((players.healing_done[idx] + players.absorb_done[idx]) * 1000 / greatest(length, 1)) AS hps,
+	       players.talent_spec[idx] AS spec,
+	       toFloat32(players.avg_item_lvl[idx]) AS avg_item_lvl
+	FROM boss_kill
+	WHERE realm = ? AND has(players.guid, ?)
+	ORDER BY kill_time DESC
+	LIMIT ? OFFSET ?
+	`
+	rows, err := db.QueryContext(ctx, rowsQ, guid, realmName, guid, pageSize, page*pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var out []KillRow
+	for rows.Next() {
+		var (
+			remoteID   string
+			t          time.Time
+			bossName   string
+			bossID     uint32
+			mode       uint8
+			length     uint32
+			dps        uint64
+			hps        uint64
+			spec       uint16
+			avgItemLvl float32
+		)
+		if err := rows.Scan(&remoteID, &t, &bossName, &bossID, &mode, &length, &dps, &hps, &spec, &avgItemLvl); err != nil {
+			return nil, 0, err
+		}
+		s := int(spec)
+		out = append(out, KillRow{
+			RemoteID:   remoteID,
+			KillTime:   t.Format("2006-01-02 15:04"),
+			BossName:   bossName,
+			BossID:     bossID,
+			Mode:       int(mode),
+			ModeLabel:  wow.Difficulty(expansion, int(mode)),
+			Class:      wow.ClassFromSpec(s),
+			Spec:       s,
+			SpecLabel:  wow.Spec(s),
+			DPS:        int64(dps),
+			HPS:        int64(hps),
+			LengthSec:  int(length) / 1000,
+			AvgItemLvl: avgItemLvl,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	var total uint64
+	if err := db.QueryRowContext(ctx,
+		"SELECT count() FROM boss_kill WHERE realm = ? AND has(players.guid, ?)",
+		realmName, guid,
+	).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	return out, int(total), nil
+}
+
+func loadBossNames(ctx context.Context, db *sql.DB, realmName string, ids []uint32) (map[uint32]string, error) {
+	out := map[uint32]string{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, realmName)
+	ph := make([]byte, 0, len(ids)*2)
+	for i, id := range ids {
+		if i > 0 {
+			ph = append(ph, ',')
+		}
+		ph = append(ph, '?')
+		args = append(args, id)
+	}
+	q := "SELECT boss_remote_id, any(boss_name) FROM boss_kill " +
+		"WHERE realm = ? AND boss_remote_id IN (" + string(ph) + ") " +
+		"GROUP BY boss_remote_id"
+	rows, err := db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id uint32
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		out[id] = name
+	}
+	return out, rows.Err()
+}
+
+func mapKeysU32(m map[uint32]bool) []uint32 {
+	out := make([]uint32, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+func uitoa(v uint64) string {
+	if v == 0 {
+		return "0"
+	}
+	var b [20]byte
+	i := len(b)
+	for v > 0 {
+		i--
+		b[i] = byte('0' + v%10)
+		v /= 10
+	}
+	return string(b[i:])
+}
+
+func Mount(mux *http.ServeMux, deps Deps) {
+	h := middleware.RequireRealm(Handler(deps))
+	rh := middleware.RequireRealm(RankingsHandler(deps))
+	router.ForEachRealmPrefix(func(prefix string) {
+		mux.Handle("GET "+prefix+"/character/{name}", h)
+		mux.Handle("GET "+prefix+"/character/{name}/rankings", rh)
+	})
+}

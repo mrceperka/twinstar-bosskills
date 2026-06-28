@@ -1,0 +1,37 @@
+package changelog
+
+import "github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+
+type ViewModel struct {
+	Meta    layouts.PageMeta
+	Entries []Entry
+}
+
+type Entry struct {
+	Date  string
+	Title string
+	Notes []string
+}
+
+templ Page(vm ViewModel) {
+	@layouts.Root(vm.Meta) {
+		<div class="space-y-6">
+			<h1 class="text-2xl font-semibold">Changelog</h1>
+			<ol class="space-y-6">
+				for _, e := range vm.Entries {
+					<li class="rounded-md border border-bk-border bg-bk-panel p-4">
+						<div class="flex items-baseline justify-between">
+							<h2 class="text-lg font-medium">{ e.Title }</h2>
+							<time class="text-sm text-bk-muted">{ e.Date }</time>
+						</div>
+						<ul class="mt-3 list-disc space-y-1 pl-5 text-sm text-bk-text">
+							for _, n := range e.Notes {
+								<li>{ n }</li>
+							}
+						</ul>
+					</li>
+				}
+			</ol>
+		</div>
+	}
+}

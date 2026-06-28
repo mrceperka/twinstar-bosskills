@@ -1,0 +1,44 @@
+package components
+
+import (
+	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
+)
+
+// ClassSpecIcons renders the small class + spec icon stack used across the
+// app (boss top tables, bosskill stats, character profile, ranks…). Both
+// icons are sourced through /img/icon so they go through the disk cache.
+//
+// Pass 0 for either argument to omit that icon — useful for pre-MoP rows
+// where talent spec data is missing.
+templ ClassSpecIcons(realmName string, class, spec int) {
+	<span class="inline-flex items-center gap-1 align-middle">
+		if class > 0 {
+			<img
+				src={ templ.SafeURL(links.ClassIcon(class)) }
+				alt={ wow.Class(class) }
+				title={ wow.Class(class) }
+				width="18" height="18"
+				class="rounded"
+			/>
+		}
+		if spec > 0 {
+			<img
+				src={ templ.SafeURL(links.TalentIcon(realmName, spec)) }
+				alt={ wow.Spec(spec) }
+				title={ wow.Spec(spec) }
+				width="18" height="18"
+				class="rounded"
+			/>
+		}
+	</span>
+}
+
+// ClassSpecCell is the same icons + the spec name, used inside table cells
+// where we want both visual signal and a searchable text label.
+templ ClassSpecCell(realmName string, class, spec int) {
+	<span class="inline-flex items-center gap-1">
+		@ClassSpecIcons(realmName, class, spec)
+		<span>{ wow.Spec(spec) }</span>
+	</span>
+}

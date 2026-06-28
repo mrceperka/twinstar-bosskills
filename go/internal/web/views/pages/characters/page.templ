@@ -1,0 +1,92 @@
+package characters
+
+import (
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/components"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/format"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+)
+
+type ViewModel struct {
+	Meta    layouts.PageMeta
+	Realm   string
+	Query   string
+	Matches []Match
+}
+
+type Match struct {
+	Name       string
+	Class      int
+	ClassLabel string
+	Level      int
+	KillCount  int
+	LastSeen   string
+}
+
+templ Page(vm ViewModel) {
+	@layouts.Root(vm.Meta) {
+		<div class="space-y-6">
+			<header>
+				<h1 class="text-2xl font-semibold">{ vm.Realm } / Characters</h1>
+				<p class="text-sm text-bk-muted">Search characters tracked on this realm.</p>
+			</header>
+			@components.Panel("Search") {
+				<form
+					hx-get={ formAction(vm.Realm) }
+					hx-target="#matches"
+					hx-trigger="input changed delay:300ms, search, submit"
+					hx-push-url="true"
+					class="flex gap-2"
+				>
+					<input
+						name="q"
+						type="search"
+						value={ vm.Query }
+						placeholder="Type a name…"
+						autofocus
+						class="flex-1 rounded border border-bk-border bg-bk-bg p-2 font-mono"
+					/>
+					<button type="submit" class="rounded bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Search</button>
+				</form>
+				<div id="matches" class="mt-4">
+					@Matches(vm)
+				</div>
+			}
+		</div>
+	}
+}
+
+templ Matches(vm ViewModel) {
+	if vm.Query == "" {
+		@components.EmptyState("Start typing to search.")
+	} else if len(vm.Matches) == 0 {
+		@components.EmptyState(`No characters match "` + vm.Query + `".`)
+	} else {
+		@components.Table() {
+			<thead>
+				<tr>
+					<th>Name</th>
+					<th>Class</th>
+					<th class="text-right">Kills</th>
+					<th class="text-right">Last seen</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, m := range vm.Matches {
+					<tr>
+						<td>
+							<a href={ characterHref(vm.Realm, m.Name) } class="hover:text-bk-accent">{ m.Name }</a>
+						</td>
+						<td class="text-bk-muted">
+							<span class="inline-flex items-center gap-1">
+								@components.ClassSpecIcons(vm.Realm, m.Class, 0)
+								<span>{ m.ClassLabel }</span>
+							</span>
+						</td>
+						<td class="text-right">{ format.IntCtx(ctx, m.KillCount) }</td>
+						<td class="text-right text-bk-muted text-xs">{ m.LastSeen }</td>
+					</tr>
+				}
+			</tbody>
+		}
+	}
+}

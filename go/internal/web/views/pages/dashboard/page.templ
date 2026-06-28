@@ -1,0 +1,111 @@
+package dashboard
+
+import (
+	"github.com/mrceperka/twinstar-bosskills/go/internal/format"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/components"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+)
+
+type ViewModel struct {
+	Meta         layouts.PageMeta
+	Realm        string
+	CurrentLock  LockSummary
+	PreviousLock LockSummary
+}
+
+type LockSummary struct {
+	StartLabel  string
+	EndLabel    string
+	TotalKills  int
+	TotalWipes  int
+	WipeChance  float64
+	TopKills    []BossCount
+	TopWipes    []BossCount
+	ByDayJSON   []byte
+	ByHourJSON  []byte
+	TopDayName  string
+	TopHourName string
+}
+
+type BossCount struct {
+	Count     int
+	BossID    uint32
+	BossName  string
+	ModeLabel string
+}
+
+templ Page(vm ViewModel) {
+	@layouts.Root(vm.Meta) {
+		<section class="space-y-2">
+			<h1 class="text-2xl font-semibold">Twinstar Bosskills</h1>
+		</section>
+		@lockSection(vm.Realm, "Current raid lockout bosskills", vm.CurrentLock)
+		@lockSection(vm.Realm, "Previous raid lockout bosskills", vm.PreviousLock)
+	}
+}
+
+templ lockSection(realmName string, title string, lock LockSummary) {
+	<section class="mt-8 space-y-3">
+		<header>
+			<h2 class="text-lg font-semibold">{ title }</h2>
+			<div class="text-xs text-bk-muted">between { lock.StartLabel } and { lock.EndLabel }</div>
+		</header>
+		<div class="grid gap-6 lg:grid-cols-2">
+			<div class="space-y-2">
+				<h3 class="font-semibold">
+					Most kills - total <span class="text-bk-accent">{ format.IntCtx(ctx, lock.TotalKills) }</span>
+				</h3>
+				@bossCountTable(realmName, lock.TopKills)
+			</div>
+			<div class="space-y-2">
+				<h3 class="font-semibold">
+					Most wipes - total <span style="color: tomato">{ format.IntCtx(ctx, lock.TotalWipes) }</span>,
+					wipe chance <span style="color: tomato">{ formatFloat(lock.WipeChance, 2) }%</span>
+				</h3>
+				@bossCountTable(realmName, lock.TopWipes)
+			</div>
+		</div>
+		<div class="mt-6">
+			<h3 class="font-semibold mb-1">Number of bosskills grouped by day of week</h3>
+			if lock.TopDayName != "" {
+				<div class="text-xs"><span style="color: lawngreen">{ lock.TopDayName }</span> is top raiding day</div>
+			}
+			if len(lock.ByDayJSON) > 2 {
+				@components.ChartFromJSON("block w-full h-72", lock.ByDayJSON)
+			}
+		</div>
+		<div class="mt-4">
+			<h3 class="font-semibold mb-1">Number of bosskills grouped by hour</h3>
+			if lock.TopHourName != "" {
+				<div class="text-xs"><span style="color: lawngreen">{ lock.TopHourName }</span> is top raiding hour</div>
+			}
+			if len(lock.ByHourJSON) > 2 {
+				@components.ChartFromJSON("block w-full h-72", lock.ByHourJSON)
+			}
+		</div>
+	</section>
+}
+
+templ bossCountTable(realmName string, rows []BossCount) {
+	@components.Table() {
+		<thead>
+			<tr>
+				<th>Count ↓</th>
+				<th>Boss</th>
+				<th>Difficulty</th>
+			</tr>
+		</thead>
+		<tbody>
+			for _, r := range rows {
+				<tr>
+					<td>{ format.IntCtx(ctx, r.Count) }</td>
+					<td>
+						<a href={ templ.SafeURL(links.Boss(realmName, r.BossID)) }>{ r.BossName }</a>
+					</td>
+					<td>{ r.ModeLabel }</td>
+				</tr>
+			}
+		</tbody>
+	}
+}

@@ -1,0 +1,12 @@
+package components
+
+// ChartFromJSON renders a <bk-chart> custom element with embedded echarts
+// JSON config. Sizing comes from the class arg (Tailwind utilities, typically
+// like "h-64 w-full"). The web component instantiates echarts on
+// connectedCallback — see internal/web/static/bk-chart.js.
+//
+// The config is passed via a data attribute. templ HTML-escapes the value
+// (including quotes), and the JS reads `dataset.config` and JSON.parse-s it.
+templ ChartFromJSON(class string, jsonBytes []byte) {
+	<bk-chart class={ class } data-config={ string(jsonBytes) }></bk-chart>
+}

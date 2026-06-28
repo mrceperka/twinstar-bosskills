@@ -1,0 +1,326 @@
+package character
+
+import (
+	"github.com/mrceperka/twinstar-bosskills/go/internal/format"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/components"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+)
+
+type ViewModel struct {
+	Meta          layouts.PageMeta
+	Realm         string
+	Char          CharacterInfo
+	RecentKills   []KillRow
+	KillsPage     int
+	KillsPageSize int
+	KillsTotal    int
+}
+
+type CharacterInfo struct {
+	Name       string
+	Class      int
+	ClassLabel string
+	FirstSeen  string
+	LastSeen   string
+	KillCount  int
+}
+
+type KillRow struct {
+	RemoteID   string
+	KillTime   string
+	BossName   string
+	BossID     uint32
+	Mode       int
+	ModeLabel  string
+	Class      int
+	Spec       int
+	SpecLabel  string
+	DPS        int64
+	HPS        int64
+	LengthSec  int
+	AvgItemLvl float32
+}
+
+// RankingsViewModel is used for the lazy-loaded rankings fragment.
+type RankingsViewModel struct {
+	Realm       string
+	CharName    string
+	DPSGroups   []BossGroup
+	HPSGroups   []BossGroup
+	SpecButtons []SpecButton
+	CurrentSpec int
+}
+
+type RankingEntry struct {
+	ModeLabel string
+	Spec      int
+	SpecLabel string
+	Class     int
+	Value     int64
+	Rank      int
+	KillID    string
+	Ilvl      float32
+}
+
+type BossGroup struct {
+	BossID  uint32
+	Name    string
+	Entries []RankingEntry
+}
+
+type SpecButton struct {
+	Spec     int
+	Class    int
+	IsActive bool
+	Href     string
+}
+
+templ Page(vm ViewModel) {
+	@layouts.Root(vm.Meta) {
+		<div class="space-y-6">
+			<header class="flex flex-wrap items-baseline justify-between gap-4">
+				<div>
+					<div class="text-xs uppercase tracking-wide text-bk-muted inline-flex items-center gap-1">
+						@components.ClassSpecIcons(vm.Realm, vm.Char.Class, 0)
+						<span>{ vm.Char.ClassLabel }</span>
+					</div>
+					<h1 class="text-2xl font-semibold">{ vm.Char.Name }</h1>
+					<a href={ characterPerformanceHref(vm.Realm, vm.Char.Name) } class="text-xs text-bk-muted hover:text-bk-accent">Performance →</a>
+				</div>
+				<dl class="grid grid-cols-3 gap-x-6 gap-y-1 text-sm">
+					<dt class="text-bk-muted">Kills tracked</dt>
+					<dd class="col-span-2 font-mono">{ format.IntCtx(ctx, vm.Char.KillCount) }</dd>
+					<dt class="text-bk-muted">First seen</dt>
+					<dd class="col-span-2 font-mono">{ vm.Char.FirstSeen }</dd>
+					<dt class="text-bk-muted">Last seen</dt>
+					<dd class="col-span-2 font-mono">{ vm.Char.LastSeen }</dd>
+				</dl>
+			</header>
+			<details
+				class="rounded border border-bk-border"
+				hx-get={ rankingsHref(vm.Realm, vm.Char.Name, 0) }
+				hx-trigger="toggle once"
+				hx-target="#rankings-content"
+				hx-swap="innerHTML"
+			>
+				<summary class="px-4 py-3 font-semibold cursor-pointer select-none">Overall rankings by DPS and HPS</summary>
+				<div id="rankings-content" class="px-4 pb-4">
+					<span class="text-bk-muted text-sm">Loading…</span>
+				</div>
+			</details>
+			<div id="kills-table">
+				@KillsTableFragment(vm)
+			</div>
+		</div>
+	}
+}
+
+// RankingsFragment is the lazy-loaded inner content of the rankings <details>.
+// It is returned by GET /{realm}/character/{name}/rankings.
+templ RankingsFragment(vm RankingsViewModel) {
+	if len(vm.SpecButtons) > 0 {
+		<div class="flex flex-wrap gap-1.5 items-center mb-4">
+			if vm.CurrentSpec == 0 {
+				<a
+					hx-get={ rankingsHref(vm.Realm, vm.CharName, 0) }
+					hx-target="#rankings-content"
+					hx-swap="innerHTML"
+					href={ templ.SafeURL(rankingsHref(vm.Realm, vm.CharName, 0)) }
+					class="px-2 py-0.5 text-xs rounded border border-bk-accent text-bk-accent"
+				>All</a>
+			} else {
+				<a
+					hx-get={ rankingsHref(vm.Realm, vm.CharName, 0) }
+					hx-target="#rankings-content"
+					hx-swap="innerHTML"
+					href={ templ.SafeURL(rankingsHref(vm.Realm, vm.CharName, 0)) }
+					class="px-2 py-0.5 text-xs rounded border border-bk-border text-bk-muted hover:text-bk-fg"
+				>All</a>
+			}
+			for _, btn := range vm.SpecButtons {
+				if btn.IsActive {
+					<a
+						hx-get={ btn.Href }
+						hx-target="#rankings-content"
+						hx-swap="innerHTML"
+						href={ templ.SafeURL(btn.Href) }
+						class="p-0.5 rounded border border-bk-accent"
+					>
+						@components.ClassSpecIcons(vm.Realm, btn.Class, btn.Spec)
+					</a>
+				} else {
+					<a
+						hx-get={ btn.Href }
+						hx-target="#rankings-content"
+						hx-swap="innerHTML"
+						href={ templ.SafeURL(btn.Href) }
+						class="p-0.5 rounded border border-bk-border hover:border-bk-muted"
+					>
+						@components.ClassSpecIcons(vm.Realm, btn.Class, btn.Spec)
+					</a>
+				}
+			}
+		</div>
+	}
+	if len(vm.DPSGroups) == 0 && len(vm.HPSGroups) == 0 {
+		<p class="text-bk-muted text-sm">No ranking data yet.</p>
+	} else {
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+			<div class="space-y-4">
+				<div class="text-xs font-semibold uppercase tracking-wider text-bk-muted">DPS</div>
+				if len(vm.DPSGroups) == 0 {
+					<p class="text-bk-muted text-sm">—</p>
+				} else {
+					for _, bg := range vm.DPSGroups {
+						@rankingBossGroup(vm.Realm, bg)
+					}
+				}
+			</div>
+			<div class="space-y-4">
+				<div class="text-xs font-semibold uppercase tracking-wider text-bk-muted">HPS</div>
+				if len(vm.HPSGroups) == 0 {
+					<p class="text-bk-muted text-sm">—</p>
+				} else {
+					for _, bg := range vm.HPSGroups {
+						@rankingBossGroup(vm.Realm, bg)
+					}
+				}
+			</div>
+		</div>
+	}
+}
+
+templ rankingBossGroup(realmName string, bg BossGroup) {
+	<div class="space-y-1.5">
+		<div class="text-sm font-medium">
+			<a href={ bossHref(realmName, bg.BossID) } class="hover:text-bk-accent">{ bg.Name }</a>
+		</div>
+		<div class="space-y-1">
+			for _, e := range bg.Entries {
+				<div class="flex items-center gap-2 text-sm">
+					if e.Rank == 1 {
+						<span class="text-xs font-bold text-yellow-400 w-8">#1</span>
+					} else if e.Rank <= 10 {
+						<span class="text-xs font-semibold text-slate-300 w-8">{ rankLabel(e.Rank) }</span>
+					} else {
+						<span class="text-xs text-bk-muted w-8">{ rankLabel(e.Rank) }</span>
+					}
+					<span class="text-bk-muted text-xs w-16">{ e.ModeLabel }</span>
+					<span class="inline-flex items-center gap-1">
+						@components.ClassSpecIcons(realmName, e.Class, e.Spec)
+						if e.KillID != "" {
+							<a href={ bosskillHref(realmName, e.KillID) } class="font-mono hover:text-bk-accent">{ format.Int64Ctx(ctx, e.Value) }</a>
+						} else {
+							<span class="font-mono">{ format.Int64Ctx(ctx, e.Value) }</span>
+						}
+					</span>
+					if e.Ilvl > 0 {
+						<span class="text-bk-muted text-xs">{ fmtIlvl(e.Ilvl) }ilvl</span>
+					}
+				</div>
+			}
+		</div>
+	</div>
+}
+
+// KillsTableFragment is rendered both as part of the full page and as an htmx
+// partial response when the user pages through kills.
+templ KillsTableFragment(vm ViewModel) {
+	@components.Panel("Recent kills") {
+		if len(vm.RecentKills) == 0 {
+			@components.EmptyState("No kills found.")
+		} else {
+			@components.Table() {
+				<thead>
+					<tr>
+						<th>Boss</th>
+						<th>Diff</th>
+						<th>Spec</th>
+						<th class="text-right">DPS</th>
+						<th class="text-right">HPS</th>
+						<th class="text-right">Length</th>
+						<th class="text-right">iLvl</th>
+						<th>Time</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, k := range vm.RecentKills {
+						<tr>
+							<td>
+								<a href={ bossWithFiltersHref(vm.Realm, k.BossID, k.Mode, k.Class, k.Spec) } class="hover:text-bk-accent">{ k.BossName }</a>
+							</td>
+							<td>{ k.ModeLabel }</td>
+							<td class="text-xs">
+								<span class="inline-flex items-center gap-1">
+									@components.ClassSpecIcons(vm.Realm, k.Class, k.Spec)
+									<span class="text-bk-muted">{ k.SpecLabel }</span>
+								</span>
+							</td>
+							<td class="text-right">
+								if k.DPS > 0 {
+									{ format.Int64Ctx(ctx, k.DPS) }
+								} else {
+									<span class="text-bk-muted">—</span>
+								}
+							</td>
+							<td class="text-right">
+								if k.HPS > 0 {
+									{ format.Int64Ctx(ctx, k.HPS) }
+								} else {
+									<span class="text-bk-muted">—</span>
+								}
+							</td>
+							<td class="text-right text-bk-muted text-xs">{ format.Duration(k.LengthSec) }</td>
+							<td class="text-right text-bk-muted text-xs">
+								if k.AvgItemLvl > 0 {
+									{ fmtIlvl(k.AvgItemLvl) }
+								} else {
+									—
+								}
+							</td>
+							<td class="text-bk-muted text-xs">{ k.KillTime }</td>
+							<td>
+								if k.RemoteID != "" {
+									<a href={ bosskillHref(vm.Realm, k.RemoteID) } class="hover:text-bk-accent text-xs">Detail</a>
+								}
+							</td>
+						</tr>
+					}
+				</tbody>
+			}
+		}
+		@killsPagination(vm)
+	}
+}
+
+templ killsPagination(vm ViewModel) {
+	if vm.KillsTotal > 0 {
+		<nav class="mt-4 flex items-center justify-between text-sm">
+			<div class="text-bk-muted">
+				Page { format.IntCtx(ctx, vm.KillsPage+1) }
+				· showing { format.IntCtx(ctx, len(vm.RecentKills)) } of { format.IntCtx(ctx, vm.KillsTotal) }
+			</div>
+			<div class="flex gap-1">
+				if vm.KillsPage > 0 {
+					<a
+						hx-get={ pagedKillsURL(vm, vm.KillsPage-1) }
+						hx-target="#kills-table"
+						hx-push-url="true"
+						href={ templ.SafeURL(pagedKillsURL(vm, vm.KillsPage-1)) }
+						class="rounded border border-bk-border px-2 py-1 hover:text-bk-accent cursor-pointer"
+					>Prev</a>
+				}
+				if (vm.KillsPage+1)*vm.KillsPageSize < vm.KillsTotal {
+					<a
+						hx-get={ pagedKillsURL(vm, vm.KillsPage+1) }
+						hx-target="#kills-table"
+						hx-push-url="true"
+						href={ templ.SafeURL(pagedKillsURL(vm, vm.KillsPage+1)) }
+						class="rounded border border-bk-border px-2 py-1 hover:text-bk-accent cursor-pointer"
+					>Next</a>
+				}
+			</div>
+		</nav>
+	}
+}

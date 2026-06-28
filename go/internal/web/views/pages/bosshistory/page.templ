@@ -1,0 +1,134 @@
+package bosshistory
+
+import (
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/components"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/format"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+)
+
+type ViewModel struct {
+	Meta         layouts.PageMeta
+	Realm        string
+	Boss         BossInfo
+	Difficulties []DifficultyChoice
+	SelectedMode int
+	Lock         LockChoice
+	LockOptions  []LockChoice
+	TopDPS       []Row
+	TopHPS       []Row
+}
+
+type BossInfo struct {
+	RemoteID uint32
+	Name     string
+	RaidName string
+}
+
+type DifficultyChoice struct {
+	Mode  int
+	Label string
+}
+
+type LockChoice struct {
+	Offset int
+	Label  string
+}
+
+type Row struct {
+	Rank      int
+	Name      string
+	Class     int
+	Spec      int
+	SpecLabel string
+	DPS       int64
+	HPS       int64
+}
+
+templ Page(vm ViewModel) {
+	@layouts.Root(vm.Meta) {
+		<div class="space-y-6">
+			<header class="flex flex-wrap items-baseline justify-between gap-4">
+				<div>
+					<div class="text-xs uppercase tracking-wide text-bk-muted">{ vm.Boss.RaidName } · history</div>
+					<h1 class="text-2xl font-semibold">
+						<a href={ bossOverviewHref(vm.Realm, vm.Boss.RemoteID) } class="hover:text-bk-accent">{ vm.Boss.Name }</a>
+					</h1>
+				</div>
+				<div class="flex flex-wrap items-center gap-3">
+					@difficultyTabs(vm)
+					@lockSelect(vm)
+				</div>
+			</header>
+			<div class="grid gap-6 lg:grid-cols-2">
+				@components.Panel("Top DPS this lock") {
+					@topTable(vm.Realm, vm.TopDPS, "DPS")
+				}
+				@components.Panel("Top HPS this lock") {
+					@topTable(vm.Realm, vm.TopHPS, "HPS")
+				}
+			</div>
+		</div>
+	}
+}
+
+templ difficultyTabs(vm ViewModel) {
+	<div class="flex gap-1 text-xs">
+		for _, d := range vm.Difficulties {
+			<a href={ tabHref(vm.Realm, vm.Boss.RemoteID, d.Mode, vm.Lock.Offset) }
+			   class={ "rounded px-2 py-1 border border-bk-border",
+					   tabActiveClass(d.Mode == vm.SelectedMode) }>
+				{ d.Label }
+			</a>
+		}
+	</div>
+}
+
+templ lockSelect(vm ViewModel) {
+	<form method="GET" class="flex items-center gap-2 text-xs">
+		<input type="hidden" name="mode" value={ intStr(vm.SelectedMode) }/>
+		<label class="text-bk-muted">Lock</label>
+		<select name="offset" data-form-submit class="rounded border border-bk-border bg-bk-bg p-1 text-xs">
+			for _, l := range vm.LockOptions {
+				<option value={ intStr(l.Offset) } selected?={ l.Offset == vm.Lock.Offset }>{ l.Label }</option>
+			}
+		</select>
+	</form>
+}
+
+templ topTable(realmName string, rows []Row, metric string) {
+	if len(rows) == 0 {
+		@components.EmptyState("No data for this lock + difficulty.")
+	} else {
+		@components.Table() {
+			<thead>
+				<tr>
+					<th class="w-8">#</th>
+					<th>Name</th>
+					<th>Spec</th>
+					<th class="text-right">{ metric }</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, r := range rows {
+					<tr>
+						<td class="text-bk-muted">{ intStr(r.Rank) }</td>
+						<td>{ r.Name }</td>
+						<td class="text-xs">
+							<span class="inline-flex items-center gap-1">
+								@components.ClassSpecIcons(realmName, r.Class, r.Spec)
+								<span class="text-bk-muted">{ r.SpecLabel }</span>
+							</span>
+						</td>
+						<td class="text-right">
+							if metric == "DPS" {
+								{ format.Int64Ctx(ctx, r.DPS) }
+							} else {
+								{ format.Int64Ctx(ctx, r.HPS) }
+							}
+						</td>
+					</tr>
+				}
+			</tbody>
+		}
+	}
+}

@@ -1,0 +1,72 @@
+package components
+
+templ Panel(title string) {
+	<section class="rounded-md border border-bk-border bg-bk-panel">
+		if title != "" {
+			<header class="border-b border-bk-border px-4 py-2 text-sm font-medium uppercase tracking-wide text-bk-muted">
+				{ title }
+			</header>
+		}
+		<div class="p-4">
+			{ children... }
+		</div>
+	</section>
+}
+
+// Table wraps its children in a horizontally-scrollable container with the
+// sticky-header / sticky-first-column behaviour defined in input.css. Use
+// this everywhere you'd otherwise write `<div class="bk-table-wrap"><table
+// class="w-full text-sm">...`:
+//
+//   @components.Table() {
+//       <thead><tr>...</tr></thead>
+//       <tbody>...</tbody>
+//   }
+//
+// On mobile the wrapper scrolls; the first column and header row stay
+// pinned so users keep their bearings.
+templ Table() {
+	<div class="bk-table-wrap">
+		<table class="w-full text-sm">
+			{ children... }
+		</table>
+	</div>
+}
+
+// SortableTable is Table with `data-sortable` so the small client-side
+// sorter in static/bk-sortable.js (when present) can attach. Use for player
+// rows on the bosskill detail page, etc.
+templ SortableTable() {
+	<div class="bk-table-wrap">
+		<table class="w-full text-sm" data-sortable>
+			{ children... }
+		</table>
+	</div>
+}
+
+// TablePanel is a shortcut for `@Panel(title) { @Table() { ... } }`.
+templ TablePanel(title string) {
+	<section class="rounded-md border border-bk-border bg-bk-panel">
+		if title != "" {
+			<header class="border-b border-bk-border px-4 py-2 text-sm font-medium uppercase tracking-wide text-bk-muted">
+				{ title }
+			</header>
+		}
+		<div class="bk-table-wrap max-h-[70vh]">
+			<table class="w-full text-sm">
+				{ children... }
+			</table>
+		</div>
+	</section>
+}
+
+templ StatRow(label, value string) {
+	<div class="flex items-baseline justify-between gap-4 py-1">
+		<span class="text-bk-muted">{ label }</span>
+		<span class="font-mono">{ value }</span>
+	</div>
+}
+
+templ EmptyState(msg string) {
+	<div class="py-4 text-center text-sm text-bk-muted">{ msg }</div>
+}

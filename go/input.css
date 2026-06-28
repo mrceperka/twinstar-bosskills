@@ -1,0 +1,226 @@
+@import "tailwindcss";
+
+@source "./internal/web/views/**/*.templ";
+@source "./internal/web/views/**/*_templ.go";
+
+/* ----------------------------------------------------------------------
+ * Color palette and design tokens
+ *
+ * Mirrors packages/sveltekit/src/routes/+layout.svelte so the Go rewrite
+ * looks like the existing app (https://bosskills.twinstar-wow.com).
+ * --------------------------------------------------------------------*/
+@theme {
+  --color-bk-bg: #1b1b1b;          /* page background — rgb(27,27,27) */
+  --color-bk-row: #000000bf;        /* zebra-stripe row (75% black) */
+  --color-bk-fg: #f5f5f5;           /* whitesmoke */
+  --color-bk-muted: #c5c5c5;
+  --color-bk-border: rgba(0, 0, 0, 0.3);
+  --color-bk-accent: #daa520;       /* goldenrod */
+  --color-bk-accent-soft: rgba(218, 165, 32, 0.18);
+  --color-bk-secondary: hsl(43 89% 50% / 1);
+
+  /* WoW item quality colors */
+  --color-q0: #9d9d9d;
+  --color-q1: #ffffff;
+  --color-q2: #1eff00;
+  --color-q3: #0070dd;
+  --color-q4: #a335ee;
+  --color-q5: #ff8000;
+  --color-q6: #e5cc80;
+  --color-q7: #e5cc80;
+
+  /* WoW class colors (1=Warrior … 11=Druid) */
+  --color-c1:  #c69b6d;
+  --color-c2:  #f48cba;
+  --color-c3:  #aad372;
+  --color-c4:  #fff468;
+  --color-c5:  #ffffff;
+  --color-c6:  #c41e3b;
+  --color-c7:  #2359ff;
+  --color-c8:  #68ccef;
+  --color-c9:  #9382c9;
+  --color-c10: #00ff96;
+  --color-c11: #ff7c0a;
+}
+
+/* ----------------------------------------------------------------------
+ * Base body styles. Mirrors the SvelteKit body: Helvetica/Arial 14px,
+ * 1920px max width, 0.5rem padding, whitesmoke on dark gray.
+ * --------------------------------------------------------------------*/
+html, body {
+  background-color: var(--color-bk-bg);
+  color: var(--color-bk-fg);
+  font-family: 'Helvetica', 'Arial', sans-serif;
+  font-size: 14px;
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  max-width: 1920px;
+  margin: 0 auto;
+  padding: 0.5rem;
+  min-height: 100vh;
+}
+
+/* Gold links (matches the old app). */
+a {
+  color: var(--color-bk-accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* Scrollbar — gold track, dark thumb */
+* {
+  scrollbar-color: rgba(0, 0, 0, 0.75) var(--color-bk-accent);
+}
+::-webkit-scrollbar      { width: 0.75rem; height: 0.75rem; }
+::-webkit-scrollbar-track { background: var(--color-bk-accent); }
+::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.75); }
+::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 1); }
+
+/* ----------------------------------------------------------------------
+ * Tables
+ *
+ * Wrap each <table> in a `.bk-table-wrap` for sticky header / first
+ * column + horizontal scroll. Inside, tables are flat (no rounded
+ * corners), gold-headed, with zebra-striped rows — same as the SvelteKit
+ * app's :global(table) rules.
+ * --------------------------------------------------------------------*/
+.bk-table-wrap {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.bk-table-wrap table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: max-content;
+  white-space: nowrap;
+}
+.bk-table-wrap th {
+  color: var(--color-bk-accent);
+  text-align: left;
+  font-weight: normal;
+  background-color: var(--color-bk-bg);
+}
+.bk-table-wrap th,
+.bk-table-wrap td {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-bk-border);
+}
+.bk-table-wrap tbody {
+  font-family: monospace;
+}
+.bk-table-wrap tbody tr:nth-child(even) {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* Sticky header + first column. Disabled on very narrow screens. */
+.bk-table-wrap thead th {
+  position: -webkit-sticky;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.bk-table-wrap tbody td:first-child,
+.bk-table-wrap thead th:first-child {
+  position: -webkit-sticky;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background-color: var(--color-bk-bg);
+  box-shadow: 2px 0 4px -1px rgba(0, 0, 0, 0.4);
+}
+.bk-table-wrap thead th:first-child { z-index: 3; }
+.bk-table-wrap tbody tr:nth-child(even) td:first-child {
+  background-color: #1f1f1f; /* zebra-tinted, still solid for sticky */
+}
+@media (max-width: 360px) {
+  .bk-table-wrap thead th,
+  .bk-table-wrap tbody td:first-child,
+  .bk-table-wrap thead th:first-child {
+    position: static;
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+/* ----------------------------------------------------------------------
+ * Top bar — 3-column grid mirroring the SvelteKit layout
+ * --------------------------------------------------------------------*/
+.bk-topbar {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 1fr max-content max-content;
+  align-items: center;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 2px solid var(--color-bk-accent);
+}
+@media (max-width: 640px) {
+  .bk-topbar {
+    grid-template-columns: 1fr;
+  }
+}
+.bk-topbar nav ul {
+  display: flex;
+  gap: 0.75rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.bk-topbar nav a.active {
+  color: var(--color-bk-fg);
+}
+
+/* ----------------------------------------------------------------------
+ * Footer
+ * --------------------------------------------------------------------*/
+.bk-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem;
+  margin-top: 1.5rem;
+  font-size: 80%;
+  color: var(--color-bk-muted);
+  border-top: 1px solid var(--color-bk-border);
+}
+@media (max-width: 640px) {
+  .bk-footer { flex-direction: column; text-align: center; }
+}
+
+/* ----------------------------------------------------------------------
+ * Headings, small typography tweaks
+ * --------------------------------------------------------------------*/
+h1 { font-size: 1.5rem; margin: 0.75rem 0; }
+h2 { font-size: 1.15rem; margin: 0.5rem 0; }
+
+/* ----------------------------------------------------------------------
+ * Item tooltip popovers. Wrap a list item with `.bk-tip-row` and include a
+ * `.bk-tip` element holding the upstream HTML; it appears on hover, focus,
+ * or tap (focus-within covers mobile when the link gets focus).
+ * --------------------------------------------------------------------*/
+.bk-tip-row { position: relative; }
+.bk-tip {
+  position: absolute;
+  display: none;
+  z-index: 50;
+  top: 100%;
+  left: 0;
+  margin-top: 0.4rem;
+  max-width: min(28rem, calc(100vw - 1rem));
+  padding: 0.5rem 0.75rem;
+  background-color: rgba(0, 0, 0, 0.94);
+  border: 1px solid var(--color-bk-accent);
+  border-radius: 0.25rem;
+  color: var(--color-bk-fg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  white-space: normal;
+}
+.bk-tip-row:hover .bk-tip,
+.bk-tip-row:focus-within .bk-tip,
+.bk-tip-row.bk-tip-open .bk-tip { display: block; }
+.bk-tip a { color: var(--color-bk-accent); }

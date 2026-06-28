@@ -1,0 +1,107 @@
+package characterperf
+
+import (
+	"github.com/mrceperka/twinstar-bosskills/go/internal/format"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/components"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+)
+
+type ViewModel struct {
+	Meta        layouts.PageMeta
+	Realm       string
+	CharName    string
+	Char        CharacterInfo
+	Filter      FilterValues
+	BossOptions []Option
+	ModeOptions []Option
+	Charts      []BossChart
+}
+
+type CharacterInfo struct {
+	Class      int
+	ClassLabel string
+	KillCount  int
+	LastSeen   string
+}
+
+type FilterValues struct {
+	Bosses []uint32
+	Modes  []int
+}
+
+type Option struct {
+	Value    string
+	Label    string
+	Selected bool
+}
+
+templ Page(vm ViewModel) {
+	@layouts.Root(vm.Meta) {
+		<div class="space-y-6">
+			<header class="flex flex-wrap items-baseline justify-between gap-4">
+				<div>
+					<div class="text-xs uppercase tracking-wide text-bk-muted inline-flex items-center gap-1">
+						@components.ClassSpecIcons(vm.Realm, vm.Char.Class, 0)
+						<span>{ vm.Char.ClassLabel } · performance</span>
+					</div>
+					<h1 class="text-2xl font-semibold">
+						<a href={ profileHref(vm.Realm, vm.CharName) } class="hover:text-bk-accent">{ vm.CharName }</a>
+					</h1>
+				</div>
+				<dl class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+					<dt class="text-bk-muted">Kills</dt>
+					<dd class="font-mono">{ format.IntCtx(ctx, vm.Char.KillCount) }</dd>
+					<dt class="text-bk-muted">Last seen</dt>
+					<dd class="font-mono">{ vm.Char.LastSeen }</dd>
+				</dl>
+			</header>
+			@components.Panel("Filters") {
+				@filterForm(vm)
+			}
+			if len(vm.Charts) == 0 {
+				@components.EmptyState("No performance records found yet.")
+			} else {
+				<div class="space-y-6">
+					for _, chart := range vm.Charts {
+						<section class="rounded-md border border-bk-border bg-bk-panel">
+							<header class="border-b border-bk-border px-4 py-2 text-sm font-medium">
+								Performance on
+								<a href={ bossHref(vm.Realm, chart.BossID, chart.Mode) } class="hover:text-bk-accent">
+									{ chart.BossName } ({ chart.ModeLabel })
+								</a>
+							</header>
+							<div class="p-4">
+								@components.ChartFromJSON("block h-72 w-full", chart.ChartJSON)
+							</div>
+						</section>
+					}
+				</div>
+			}
+		</div>
+	}
+}
+
+templ filterForm(vm ViewModel) {
+	<form method="GET" class="grid gap-3 sm:grid-cols-2">
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Boss</span>
+			<select name="boss" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-32">
+				for _, o := range vm.BossOptions {
+					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
+				}
+			</select>
+		</label>
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Difficulty</span>
+			<select name="mode" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-32">
+				for _, o := range vm.ModeOptions {
+					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
+				}
+			</select>
+		</label>
+		<div class="sm:col-span-2 flex justify-end gap-2">
+			<a href={ resetHref(vm.Realm, vm.CharName) } class="rounded border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-text">Reset</a>
+			<button type="submit" class="rounded bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Apply</button>
+		</div>
+	</form>
+}

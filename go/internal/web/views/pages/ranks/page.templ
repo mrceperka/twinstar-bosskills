@@ -1,0 +1,157 @@
+package ranks
+
+import (
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/components"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/format"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+)
+
+type ViewModel struct {
+	Meta         layouts.PageMeta
+	Realm        string
+	LockLabel    string
+	Difficulties []DifficultyChoice
+	SelectedMode int
+	ModeLabel    string
+	DPSRaids     []RaidGroup
+	HPSRaids     []RaidGroup
+}
+
+type DifficultyChoice struct {
+	Mode  int
+	Label string
+}
+
+type RaidGroup struct {
+	Name   string
+	Bosses []BossRankGroup
+}
+
+type BossRankGroup struct {
+	BossID   uint32
+	BossName string
+	Entries  []Rank
+}
+
+type Rank struct {
+	Rank      int
+	Name      string
+	Class     int
+	Spec      int
+	SpecLabel string
+	DPS       int64
+	HPS       int64
+	LengthSec int
+	Ilvl      float32
+	KillID    string
+}
+
+templ Page(vm ViewModel) {
+	@layouts.Root(vm.Meta) {
+		<div class="space-y-8">
+			<header class="flex flex-wrap items-baseline gap-3">
+				<h1 class="text-2xl font-semibold">{ vm.Realm } / Ranks</h1>
+				<div class="ml-auto flex items-center gap-3">
+					<span class="text-xs text-bk-muted">{ vm.LockLabel }</span>
+					@difficultyTabs(vm)
+				</div>
+			</header>
+			<section class="space-y-6">
+				<h2 class="text-lg font-semibold">Top DPS ranks — { vm.ModeLabel }</h2>
+				if len(vm.DPSRaids) == 0 {
+					@components.EmptyState("No DPS data for this week yet.")
+				} else {
+					for _, raid := range vm.DPSRaids {
+						@raidSection(vm.Realm, raid, "DPS", vm.SelectedMode)
+					}
+				}
+			</section>
+			<section class="space-y-6">
+				<h2 class="text-lg font-semibold">Top HPS ranks — { vm.ModeLabel }</h2>
+				if len(vm.HPSRaids) == 0 {
+					@components.EmptyState("No HPS data for this week yet.")
+				} else {
+					for _, raid := range vm.HPSRaids {
+						@raidSection(vm.Realm, raid, "HPS", vm.SelectedMode)
+					}
+				}
+			</section>
+		</div>
+	}
+}
+
+templ difficultyTabs(vm ViewModel) {
+	<div class="flex gap-1 text-xs">
+		for _, d := range vm.Difficulties {
+			<a href={ tabHref(vm.Realm, d.Mode) }
+			   class={ "rounded px-2 py-1 border border-bk-border",
+					   tabActiveClass(d.Mode == vm.SelectedMode) }>
+				{ d.Label }
+			</a>
+		}
+	</div>
+}
+
+templ raidSection(realmName string, raid RaidGroup, metric string, mode int) {
+	<div class="space-y-4">
+		for _, boss := range raid.Bosses {
+			<div>
+				<h3 class="mb-2 font-medium">
+					{ raid.Name } —
+					<a href={ bossWithModeHref(realmName, boss.BossID, mode) } class="text-bk-accent hover:underline">{ boss.BossName }</a>
+				</h3>
+				@bossRankTable(realmName, boss.Entries, metric)
+			</div>
+		}
+	</div>
+}
+
+templ bossRankTable(realmName string, rows []Rank, metric string) {
+	if len(rows) == 0 {
+		@components.EmptyState("No data yet.")
+	} else {
+		@components.Table() {
+			<thead>
+				<tr>
+					<th class="w-8">#</th>
+					<th>Character</th>
+					<th>Spec</th>
+					<th class="text-right">{ metric }</th>
+					<th>Length</th>
+					<th>iLvl</th>
+					<th>Details</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, r := range rows {
+					<tr>
+						<td class="text-bk-muted">{ itoa(r.Rank) }</td>
+						<td>
+							<a href={ charHref(realmName, r.Name) } class="hover:underline">{ r.Name }</a>
+						</td>
+						<td class="text-xs">
+							<span class="inline-flex items-center gap-1">
+								@components.ClassSpecIcons(realmName, r.Class, r.Spec)
+								<span class="text-bk-muted">{ r.SpecLabel }</span>
+							</span>
+						</td>
+						<td class="text-right">
+							if metric == "DPS" {
+								{ format.Int64Ctx(ctx, r.DPS) }
+							} else {
+								{ format.Int64Ctx(ctx, r.HPS) }
+							}
+						</td>
+						<td class="text-bk-muted text-xs">{ fmtLength(r.LengthSec) }</td>
+						<td class="text-bk-muted text-xs">{ fmtIlvl(r.Ilvl) }</td>
+						<td>
+							if r.KillID != "" {
+								<a href={ killHref(realmName, r.KillID) } class="text-xs text-bk-muted hover:text-bk-accent">Detail</a>
+							}
+						</td>
+					</tr>
+				}
+			</tbody>
+		}
+	}
+}

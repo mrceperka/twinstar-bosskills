@@ -1,0 +1,114 @@
+package layouts
+
+import "github.com/mrceperka/twinstar-bosskills/go/internal/realm"
+
+// Root is the base HTML layout. Pages compose it with `@layouts.Root(...) { ... }`.
+// Subnav, page title and meta come in via PageMeta.
+type PageMeta struct {
+	Title       string
+	Subtitle    string
+	Realm       string // empty = no realm selected
+	ActivePath  string // for highlighting nav links
+	CSSHash     string // for cache-busting; "" disables
+	JSHash      string
+	IsHTMXBoot  bool
+	NeedsChart  bool // include echarts + bk-chart if true
+}
+
+templ Root(meta PageMeta) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ pageTitle(meta) }</title>
+			<link rel="stylesheet" href={ cssURL(meta) }/>
+			<script src={ jsURL(meta, "htmx.min.js") } defer></script>
+			<script src={ jsURL(meta, "bk-ui.js") } defer></script>
+			if meta.NeedsChart {
+				<script src={ jsURL(meta, "echarts.min.js") } defer></script>
+				<script src={ jsURL(meta, "bk-chart.js") } defer></script>
+			}
+		</head>
+		<body>
+			@topbar(meta)
+			<main>
+				{ children... }
+			</main>
+			@footer()
+		</body>
+	</html>
+}
+
+templ topbar(meta PageMeta) {
+	<header class="bk-topbar">
+		<div class="flex items-center gap-3">
+			<a href="/" class="font-semibold tracking-wide">Twinstar Bosskills</a>
+			if meta.Realm != "" {
+				<select
+					data-navigate
+					aria-label="Realm"
+					class="ml-2 rounded border border-bk-accent bg-bk-bg px-2 py-1 text-bk-fg"
+				>
+					for _, r := range realm.All() {
+						if r == meta.Realm {
+							<option value={ "/" + r + "/" } selected>{ r }</option>
+						} else {
+							<option value={ "/" + r + "/" }>{ r }</option>
+						}
+					}
+				</select>
+			}
+		</div>
+		<nav>
+			if meta.Realm != "" {
+				<ul>
+					<li><a href={ realmHref(meta.Realm, "/boss-kills") }>Latest</a></li>
+					<li><a href={ realmHref(meta.Realm, "/raids") }>Raids</a></li>
+					if realm.IsPublic(meta.Realm) {
+						<li><a href={ realmHref(meta.Realm, "/ranks") }>Ranks</a></li>
+					}
+					<li><a href={ realmHref(meta.Realm, "/characters") }>Characters</a></li>
+				</ul>
+			}
+		</nav>
+		<div></div>
+	</header>
+}
+
+templ footer() {
+	<footer class="bk-footer">
+		<a href="/changelog">🗒️ Changelog</a>
+		<div>
+			Made by hop and others.
+			<a href="https://github.com/twinstar-bosskills/twinstar-bosskills" target="_blank" rel="noopener">
+				Open source
+			</a>
+		</div>
+	</footer>
+}
+
+func pageTitle(m PageMeta) string {
+	if m.Title == "" {
+		return "Twinstar Bosskills"
+	}
+	return m.Title + " — Twinstar Bosskills"
+}
+
+func cssURL(m PageMeta) string {
+	if m.CSSHash == "" {
+		return "/static/app.css"
+	}
+	return "/static/app.css?v=" + m.CSSHash
+}
+
+func jsURL(m PageMeta, name string) string {
+	if m.JSHash == "" {
+		return "/static/" + name
+	}
+	return "/static/" + name + "?v=" + m.JSHash
+}
+
+func realmHref(realmName, suffix string) templ.SafeURL {
+	return templ.SafeURL("/" + realmName + suffix)
+}

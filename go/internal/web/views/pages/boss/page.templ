@@ -1,0 +1,381 @@
+package boss
+
+import (
+	
+	"github.com/mrceperka/twinstar-bosskills/go/internal/format"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/components"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+)
+
+type ViewModel struct {
+	Meta             layouts.PageMeta
+	Realm            string
+	Boss             BossInfo
+	Siblings         []SiblingBoss
+	Stats            HeaderStats
+	Difficulties     []DifficultyChoice
+	SelectedMode     int
+	SelectedSpec     int
+	SelectedClass    int
+	AvailableSpecs   []int
+	AvailableClasses []int
+	SelectedPctile   int
+	DPSCurveJSON     []byte
+	HPSCurveJSON     []byte
+	DPSBoxJSON       []byte
+	HPSBoxJSON       []byte
+	AtPercentile     []SpecAtPercentile
+	TopDPS           []Ranking
+	TopHPS           []Ranking
+}
+
+type BossInfo struct {
+	RemoteID uint32
+	Name     string
+	RaidName string
+}
+
+type SiblingBoss struct {
+	RemoteID uint32
+	Name     string
+	Current  bool
+}
+
+type HeaderStats struct {
+	ModeLabel    string
+	Kills        int
+	Wipes        int
+	AvgWipes     float64
+	KillChance   float64
+	WipeChance   float64
+	FastestSec   int
+	AverageSec   int
+	SlowestSec   int
+}
+
+type DifficultyChoice struct {
+	Mode  int
+	Label string
+}
+
+type Ranking struct {
+	Rank       int
+	Name       string
+	RemoteID   string
+	Spec       int
+	SpecLabel  string
+	Class      int
+	ClassLabel string
+	DPS        int64
+	HPS        int64
+	DmgDone    int64
+	HealDone   int64
+	LengthSec  int
+	KilledAt   string
+	ItemLevel  float64
+}
+
+templ Page(vm ViewModel) {
+	@layouts.Root(vm.Meta) {
+		<section class="space-y-3">
+			<h1 class="text-2xl font-semibold">Boss { vm.Boss.Name }</h1>
+			@siblingNav(vm)
+			@narrative(vm)
+			@durations(vm)
+		</section>
+		<section class="mt-6 space-y-3">
+			<h2 class="text-lg font-semibold">Top stats by spec</h2>
+			<div id="boss-content" class="space-y-6">
+				@Content(vm)
+			</div>
+		</section>
+	}
+}
+
+templ Content(vm ViewModel) {
+	@difficultyTabs(vm)
+	@filterRow(vm)
+	<div class="grid gap-6 lg:grid-cols-2">
+		@components.Panel("Top DPS") {
+			@topTable(vm.Realm, vm.TopDPS, "DPS")
+		}
+		@components.Panel("Top HPS") {
+			@topTable(vm.Realm, vm.TopHPS, "HPS")
+		}
+	</div>
+	<section class="mt-6">
+		<h2 class="mb-2 text-lg font-semibold">DPS by Talent Spec</h2>
+		if len(vm.DPSBoxJSON) > 2 {
+			@components.ChartFromJSON("block w-full h-[36rem]", vm.DPSBoxJSON)
+		} else {
+			@emptyChart()
+		}
+	</section>
+	<section class="mt-6">
+		<h2 class="mb-2 text-lg font-semibold">HPS by Talent Spec</h2>
+		if len(vm.HPSBoxJSON) > 2 {
+			@components.ChartFromJSON("block w-full h-[36rem]", vm.HPSBoxJSON)
+		} else {
+			@emptyChart()
+		}
+	</section>
+	@components.Panel("At percentile (exact, 1–99)") {
+		@percentileForm(vm)
+		@percentileTable(vm)
+	}
+}
+
+templ siblingNav(vm ViewModel) {
+	if len(vm.Siblings) > 0 {
+		<nav class="text-sm leading-7">
+			for i, s := range vm.Siblings {
+				if i > 0 {
+					<span class="mx-1 text-bk-muted">·</span>
+				}
+				if s.Current {
+					<span class="font-semibold underline">{ s.Name }</span>
+				} else {
+					<a href={ siblingHref(vm, s.RemoteID) }>{ s.Name }</a>
+				}
+			}
+		</nav>
+	}
+}
+
+templ narrative(vm ViewModel) {
+	<p class="text-sm">
+		{ vm.Boss.Name } ({ vm.Stats.ModeLabel }) was killed
+		<span class="text-bk-accent">{ format.IntCtx(ctx, vm.Stats.Kills) }</span>
+		times by raiders and wiped them
+		<span style="color: tomato">{ format.IntCtx(ctx, vm.Stats.Wipes) }</span>
+		times ({ formatFloat(vm.Stats.AvgWipes, 2) } times on average).
+		<br/>
+		You have
+		<span class="text-bk-accent">{ formatFloat(vm.Stats.KillChance, 2) }%</span>
+		chance to make a kill and
+		<span style="color: tomato">{ formatFloat(vm.Stats.WipeChance, 2) }%</span>
+		chance to wipe.
+	</p>
+}
+
+templ durations(vm ViewModel) {
+	if vm.Stats.Kills > 0 {
+		<p class="text-sm">
+			<span class="text-bk-accent">Fastest</span> kill took
+			{ longDuration(vm.Stats.FastestSec) },
+			average kill took { longDuration(vm.Stats.AverageSec) } and
+			<span style="color: tomato">slowest</span> kill took
+			{ longDuration(vm.Stats.SlowestSec) }.
+		</p>
+	}
+}
+
+templ difficultyTabs(vm ViewModel) {
+	<div class="flex flex-wrap items-center gap-3 text-sm">
+		<a href={ templ.SafeURL(links.Boss(vm.Realm, vm.Boss.RemoteID)) } class="text-bk-muted hover:text-bk-fg">Reset</a>
+		for _, d := range vm.Difficulties {
+			<a
+				hx-get={ string(tabHref(vm, d.Mode)) }
+				hx-target="#boss-content"
+				hx-swap="innerHTML"
+				hx-push-url="true"
+				href={ tabHref(vm, d.Mode) }
+				class={ "cursor-pointer", tabActiveClass(d.Mode == vm.SelectedMode) }>
+				{ d.Label }
+			</a>
+		}
+		<span class="ml-auto">
+			<a href={ historyHref(vm) } class="text-bk-muted hover:text-bk-fg">History →</a>
+		</span>
+	</div>
+}
+
+templ percentileForm(vm ViewModel) {
+	<form
+		hx-get={ string(contentBaseURL(vm)) }
+		hx-target="#boss-content"
+		hx-swap="innerHTML"
+		hx-push-url="true"
+		hx-trigger="input changed delay:250ms, submit"
+		class="mb-3 flex items-center gap-3 text-sm"
+	>
+		<input type="hidden" name="mode" value={ itoa(vm.SelectedMode) }/>
+		<label class="text-bk-muted">Show value at percentile</label>
+		<input type="number" name="p" min="1" max="99" value={ itoa(vm.SelectedPctile) } class="w-20 rounded border border-bk-accent bg-bk-bg p-1 text-bk-fg"/>
+		<span class="text-xs text-bk-muted">Exact, not bucketed</span>
+	</form>
+}
+
+templ percentileTable(vm ViewModel) {
+	if len(vm.AtPercentile) == 0 {
+		@components.EmptyState("No samples.")
+	} else {
+		@components.Table() {
+			<thead>
+				<tr>
+					<th>Spec</th>
+					<th>DPS @ p{ itoa(vm.SelectedPctile) }</th>
+					<th>HPS @ p{ itoa(vm.SelectedPctile) }</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, r := range vm.AtPercentile {
+					<tr>
+						<td>{ r.SpecLabel }</td>
+						<td>
+							if r.DPS > 0 {
+								{ format.Int64Ctx(ctx, r.DPS) }
+							} else {
+								<span class="text-bk-muted">—</span>
+							}
+						</td>
+						<td>
+							if r.HPS > 0 {
+								{ format.Int64Ctx(ctx, r.HPS) }
+							} else {
+								<span class="text-bk-muted">—</span>
+							}
+						</td>
+					</tr>
+				}
+			</tbody>
+		}
+	}
+}
+
+// filterRow renders two icon strips: one per class and one per spec that has
+// data for the current boss/mode. Clicking an icon toggles the corresponding
+// ?class=N / ?spec=N URL param and reloads via htmx.
+templ filterRow(vm ViewModel) {
+	if len(vm.AvailableClasses) > 0 || len(vm.AvailableSpecs) > 0 {
+		<div class="space-y-2 text-sm">
+			if len(vm.AvailableClasses) > 0 {
+				<div class="flex flex-wrap items-center gap-2">
+					<span class="text-bk-muted">Class:</span>
+					<a
+						hx-get={ filterHref(vm, vm.SelectedSpec, 0) }
+						hx-target="#boss-content"
+						hx-swap="innerHTML"
+						hx-push-url="true"
+						href={ templ.SafeURL(filterHref(vm, vm.SelectedSpec, 0)) }
+						class={ "px-2 py-1 rounded", filterCellClass(vm.SelectedClass == 0) }
+					>Reset</a>
+					for _, c := range vm.AvailableClasses {
+						<a
+							hx-get={ filterHref(vm, vm.SelectedSpec, c) }
+							hx-target="#boss-content"
+							hx-swap="innerHTML"
+							hx-push-url="true"
+							href={ templ.SafeURL(filterHref(vm, vm.SelectedSpec, c)) }
+							title={ wowClass(c) }
+							class={ "inline-flex items-center justify-center p-1", filterCellClass(vm.SelectedClass == c) }
+						>
+							<img src={ templ.SafeURL(links.ClassIcon(c)) } alt={ wowClass(c) } width="22" height="22" class="rounded"/>
+						</a>
+					}
+				</div>
+			}
+			if len(vm.AvailableSpecs) > 0 {
+				<div class="flex flex-wrap items-center gap-2">
+					<span class="text-bk-muted">Spec:</span>
+					<a
+						hx-get={ filterHref(vm, 0, vm.SelectedClass) }
+						hx-target="#boss-content"
+						hx-swap="innerHTML"
+						hx-push-url="true"
+						href={ templ.SafeURL(filterHref(vm, 0, vm.SelectedClass)) }
+						class={ "px-2 py-1 rounded", filterCellClass(vm.SelectedSpec == 0) }
+					>Reset</a>
+					for _, s := range vm.AvailableSpecs {
+						<a
+							hx-get={ filterHref(vm, s, vm.SelectedClass) }
+							hx-target="#boss-content"
+							hx-swap="innerHTML"
+							hx-push-url="true"
+							href={ templ.SafeURL(filterHref(vm, s, vm.SelectedClass)) }
+							title={ wowSpecLabel(s) }
+							class={ "inline-flex items-center justify-center p-1", filterCellClass(vm.SelectedSpec == s) }
+						>
+							<img src={ templ.SafeURL(links.TalentIcon(vm.Realm, s)) } alt={ wowSpecLabel(s) } width="22" height="22" class="rounded"/>
+						</a>
+					}
+				</div>
+			}
+		</div>
+	}
+}
+
+templ topTable(realmName string, rows []Ranking, metric string) {
+	if len(rows) == 0 {
+		@components.EmptyState("No data for this difficulty yet.")
+	} else {
+		@components.Table() {
+			<thead>
+				<tr>
+					<th>Character</th>
+					<th>Spec</th>
+					<th>{ metric } ↓</th>
+					if metric == "DPS" {
+						<th>Dmg Done</th>
+					} else {
+						<th>Healing Done</th>
+					}
+					<th>Fight Length</th>
+					<th>Killed</th>
+					<th>iLvl</th>
+					<th>Details</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, r := range rows {
+					<tr>
+						<td>
+							<a href={ templ.SafeURL(links.Character(realmName, r.Name)) }>{ r.Name }</a>
+							<span class="ml-1 text-bk-muted">#{ itoa(r.Rank) }</span>
+						</td>
+						<td>
+							<span class="inline-flex items-center gap-1">
+								if r.Class > 0 {
+									<img src={ templ.SafeURL(links.ClassIcon(r.Class)) } alt="" width="18" height="18" class="rounded"/>
+								}
+								if r.Spec > 0 {
+									<img src={ templ.SafeURL(links.TalentIcon(realmName, r.Spec)) } alt="" width="18" height="18" class="rounded"/>
+								}
+								<span>{ r.SpecLabel }</span>
+							</span>
+						</td>
+						<td>
+							if metric == "DPS" {
+								{ format.Int64Ctx(ctx, r.DPS) }
+							} else {
+								{ format.Int64Ctx(ctx, r.HPS) }
+							}
+						</td>
+						<td>
+							if metric == "DPS" {
+								{ format.Int64Ctx(ctx, r.DmgDone) }
+							} else {
+								{ format.Int64Ctx(ctx, r.HealDone) }
+							}
+						</td>
+						<td>{ longDuration(r.LengthSec) }</td>
+						<td>{ r.KilledAt }</td>
+						<td>{ formatFloat(r.ItemLevel, 0) }</td>
+						<td>
+							if r.RemoteID != "" {
+								<a href={ templ.SafeURL(links.BossKill(realmName, r.RemoteID)) }>Detail</a>
+							}
+						</td>
+					</tr>
+				}
+			</tbody>
+		}
+	}
+}
+
+templ emptyChart() {
+	<div class="flex h-72 items-center justify-center text-sm text-bk-muted">
+		No samples for this difficulty yet.
+	</div>
+}

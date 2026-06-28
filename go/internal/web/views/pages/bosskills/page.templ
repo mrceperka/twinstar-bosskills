@@ -1,0 +1,180 @@
+package bosskills
+
+import (
+	"github.com/mrceperka/twinstar-bosskills/go/internal/format"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/components"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+)
+
+type ViewModel struct {
+	Meta       layouts.PageMeta
+	Realm      string
+	Filter     FilterValues
+	BossOptions []Option
+	RaidOptions []Option
+	ModeOptions []Option
+	Rows       []KillRow
+	Page       int
+	PageSize   int
+	Total      int
+}
+
+type FilterValues struct {
+	Bosses        []uint32
+	Raids         []string
+	Difficulties  []int
+	// GuildOverride is set by the handler when on a private realm; it forces
+	// queries to filter by the user's guild from the cookie.
+	GuildOverride string
+}
+
+type Option struct {
+	Value    string
+	Label    string
+	Selected bool
+}
+
+type KillRow struct {
+	RemoteID   string
+	KillTime   string
+	BossName   string
+	BossID     uint32
+	RaidName   string
+	ModeLabel  string
+	Guild      string
+	LengthSec  int
+	Wipes      int
+	Deaths     int
+}
+
+templ Page(vm ViewModel) {
+	@layouts.Root(vm.Meta) {
+		<div class="space-y-6">
+			<header class="flex items-baseline justify-between">
+				<h1 class="text-2xl font-semibold">{ vm.Realm } / Boss kills</h1>
+				<div class="text-sm text-bk-muted">{ format.IntCtx(ctx, vm.Total) } total kills</div>
+			</header>
+			@components.Panel("Filters") {
+				@filterForm(vm)
+			}
+			<div id="kills-table">
+				@TableFragment(vm)
+			</div>
+		</div>
+	}
+}
+
+// TableFragment is rendered both as part of the full page and as an htmx
+// partial response when the user changes filters or pagination.
+templ TableFragment(vm ViewModel) {
+	if len(vm.Rows) == 0 {
+		<div class="rounded-md border border-bk-border bg-bk-panel p-6 text-center text-bk-muted">
+			No kills match your filters.
+		</div>
+	} else {
+		@components.Panel("Latest kills") {
+			@components.Table() {
+				<thead>
+					<tr>
+						<th>Boss</th>
+						<th>Raid</th>
+						<th>Difficulty</th>
+						<th>Guild</th>
+						<th>Fight length</th>
+						<th>Killed</th>
+						<th>Fight details</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, r := range vm.Rows {
+						<tr>
+							<td>
+								<a href={ templ.SafeURL(links.Boss(vm.Realm, r.BossID)) }>{ r.BossName }</a>
+							</td>
+							<td>{ r.RaidName }</td>
+							<td>{ r.ModeLabel }</td>
+							<td>{ r.Guild }</td>
+							<td>{ format.Duration(r.LengthSec) }</td>
+							<td>{ r.KillTime }</td>
+							<td>
+								<a href={ templ.SafeURL(links.BossKill(vm.Realm, r.RemoteID)) }>Detail</a>
+								<span class="mx-1 text-bk-muted">·</span>
+								<a href={ templ.SafeURL(links.TwinheadBossKill(vm.Realm, r.RemoteID)) } target="_blank" rel="noopener">Twinhead ↗</a>
+							</td>
+						</tr>
+					}
+				</tbody>
+			}
+			@pagination(vm)
+		}
+	}
+}
+
+templ filterForm(vm ViewModel) {
+	<form
+		hx-get={ string(bosskillsURL(vm.Realm)) }
+		hx-target="#kills-table"
+		hx-swap="innerHTML"
+		hx-push-url="true"
+		class="grid gap-3 sm:grid-cols-3"
+	>
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Raid</span>
+			<select name="raid" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-24">
+				for _, o := range vm.RaidOptions {
+					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
+				}
+			</select>
+		</label>
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Boss</span>
+			<select name="boss" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-24">
+				for _, o := range vm.BossOptions {
+					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
+				}
+			</select>
+		</label>
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Difficulty</span>
+			<select name="mode" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-24">
+				for _, o := range vm.ModeOptions {
+					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
+				}
+			</select>
+		</label>
+		<div class="sm:col-span-3 flex justify-end gap-2">
+			<a href={ bosskillsURL(vm.Realm) } class="rounded border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-text">Reset</a>
+			<button type="submit" class="rounded bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Apply</button>
+		</div>
+	</form>
+}
+
+templ pagination(vm ViewModel) {
+	<nav class="mt-4 flex items-center justify-between text-sm">
+		<div class="text-bk-muted">
+			Page { format.IntCtx(ctx, vm.Page + 1) }
+			if vm.PageSize > 0 {
+				· showing { format.IntCtx(ctx, len(vm.Rows)) } of { format.IntCtx(ctx, vm.Total) }
+			}
+		</div>
+		<div class="flex gap-1">
+			if vm.Page > 0 {
+				<a
+					hx-get={ pagedURL(vm, vm.Page - 1) }
+					hx-target="#kills-table"
+					hx-push-url="true"
+					class="rounded border border-bk-border px-2 py-1 hover:text-bk-accent cursor-pointer"
+				>Prev</a>
+			}
+			if (vm.Page + 1) * vm.PageSize < vm.Total {
+				<a
+					hx-get={ pagedURL(vm, vm.Page + 1) }
+					hx-target="#kills-table"
+					hx-push-url="true"
+					class="rounded border border-bk-border px-2 py-1 hover:text-bk-accent cursor-pointer"
+				>Next</a>
+			}
+		</div>
+	</nav>
+}
