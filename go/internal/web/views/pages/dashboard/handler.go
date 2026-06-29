@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/mrceperka/twinstar-bosskills/go/internal/domain"
@@ -235,22 +236,9 @@ func loadLockSummary(ctx context.Context, db *sql.DB, realmName string, win doma
 
 func leftPad2(n int) string {
 	if n < 10 {
-		return "0" + itoa(n)
+		return "0" + strconv.Itoa(n)
 	}
-	return itoa(n)
-}
-
-func itoa(n int) string {
-	// Avoid strconv import here; we only need 0..23.
-	if n == 0 {
-		return "0"
-	}
-	digits := []byte{}
-	for n > 0 {
-		digits = append([]byte{byte('0' + n%10)}, digits...)
-		n /= 10
-	}
-	return string(digits)
+	return strconv.Itoa(n)
 }
 
 // buildBarChartJSON renders a simple categorical bar chart (gold bars on
@@ -279,9 +267,9 @@ func buildBarChartJSON(categories []string, values []int) ([]byte, error) {
 		},
 		"series": []any{
 			map[string]any{
-				"type": "bar",
-				"data": values,
-				"itemStyle": map[string]any{"color": "#daa520"},
+				"type":           "bar",
+				"data":           values,
+				"itemStyle":      map[string]any{"color": "#daa520"},
 				"barCategoryGap": "20%",
 			},
 		},

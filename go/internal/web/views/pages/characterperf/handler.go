@@ -12,6 +12,7 @@ import (
 	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/router"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/sqlutil"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
 )
@@ -83,7 +84,12 @@ func Handler(deps Deps) http.HandlerFunc {
 			}
 		}
 
-		medians, err := loadMedianByBoss(ctx, deps.DB, realmName, keysU32(bossIDsSet), filter.Modes)
+		medians, err := loadMedianByBoss(ctx, deps.DB, realmName, keysU32(bossIDsSet), filter)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		bossPositions, err := loadBossPositions(ctx, deps.DB, realmName, keysU32(bossIDsSet))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -92,8 +98,8 @@ func Handler(deps Deps) http.HandlerFunc {
 		// Sort groups by encounter order, then mode.
 		sort.Slice(groupOrder, func(i, j int) bool {
 			a, b := groupOrder[i], groupOrder[j]
-			oa := wow.BossOrder(a.BossID)
-			ob := wow.BossOrder(b.BossID)
+			oa := bossPositions[a.BossID]
+			ob := bossPositions[b.BossID]
 			if oa != ob {
 				return oa < ob
 			}
@@ -130,6 +136,18 @@ func Handler(deps Deps) http.HandlerFunc {
 			return
 		}
 		markBossSelected(bossOpts, filter.Bosses)
+		raidOpts, err := loadRaidOptions(ctx, deps.DB, realmName, guid)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		markStringSelected(raidOpts, filter.Raids)
+		specOpts, err := loadSpecOptions(ctx, deps.DB, realmName, guid, expansion)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		markIntSelected(specOpts, filter.Specs)
 		modeOpts := buildModeOptions(filter.Modes, expansion)
 
 		vm := ViewModel{
@@ -150,6 +168,8 @@ func Handler(deps Deps) http.HandlerFunc {
 			},
 			Filter:      filter,
 			BossOptions: bossOpts,
+			RaidOptions: raidOpts,
+			SpecOptions: specOpts,
 			ModeOptions: modeOpts,
 			Charts:      charts,
 		}
@@ -167,14 +187,44 @@ func parseFilter(q map[string][]string) FilterValues {
 			}
 		}
 	}
-	for _, v := range q["mode"] {
+	for _, v := range q["raid"] {
+		for _, part := range strings.Split(v, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				f.Raids = append(f.Raids, part)
+			}
+		}
+	}
+	for _, v := range append(q["difficulty"], q["mode"]...) {
 		for _, part := range strings.Split(v, ",") {
 			if n, err := strconv.Atoi(strings.TrimSpace(part)); err == nil {
 				f.Modes = append(f.Modes, n)
 			}
 		}
 	}
+	for _, v := range q["spec"] {
+		for _, part := range strings.Split(v, ",") {
+			if n, err := strconv.Atoi(strings.TrimSpace(part)); err == nil {
+				f.Specs = append(f.Specs, n)
+			}
+		}
+	}
+	f.IlvlMin = atoiOr(qValue(q, "ilvl_min"), 0)
+	f.IlvlMax = atoiOr(qValue(q, "ilvl_max"), 0)
 	return f
+}
+
+func qValue(q map[string][]string, key string) string {
+	if values := q[key]; len(values) > 0 {
+		return values[0]
+	}
+	return ""
+}
+
+func atoiOr(s string, fallback int) int {
+	if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
+		return n
+	}
+	return fallback
 }
 
 func lookupCharacter(ctx context.Context, db *sql.DB, realmName, name string) (
@@ -209,18 +259,40 @@ func loadSamples(ctx context.Context, db *sql.DB, realmName string, guid uint64,
 	args = append(args, guid, realmName, guid)
 	whereParts = append(whereParts, "realm = ?", "has(players.guid, ?)")
 	if len(f.Bosses) > 0 {
-		ph := placeholders(len(f.Bosses))
+		ph := sqlutil.Placeholders(len(f.Bosses))
 		whereParts = append(whereParts, "boss_remote_id IN ("+ph+")")
 		for _, b := range f.Bosses {
 			args = append(args, b)
 		}
 	}
+	if len(f.Raids) > 0 {
+		ph := sqlutil.Placeholders(len(f.Raids))
+		whereParts = append(whereParts, "raid_name IN ("+ph+")")
+		for _, r := range f.Raids {
+			args = append(args, r)
+		}
+	}
 	if len(f.Modes) > 0 {
-		ph := placeholders(len(f.Modes))
+		ph := sqlutil.Placeholders(len(f.Modes))
 		whereParts = append(whereParts, "mode IN ("+ph+")")
 		for _, m := range f.Modes {
 			args = append(args, uint8(m))
 		}
+	}
+	if len(f.Specs) > 0 {
+		ph := sqlutil.Placeholders(len(f.Specs))
+		whereParts = append(whereParts, "players.talent_spec[idx] IN ("+ph+")")
+		for _, s := range f.Specs {
+			args = append(args, uint16(s))
+		}
+	}
+	if f.IlvlMin > 0 {
+		whereParts = append(whereParts, "toFloat32(players.avg_item_lvl[idx]) >= ?")
+		args = append(args, float32(f.IlvlMin))
+	}
+	if f.IlvlMax > 0 {
+		whereParts = append(whereParts, "toFloat32(players.avg_item_lvl[idx]) <= ?")
+		args = append(args, float32(f.IlvlMax))
 	}
 	args = append(args, sampleLimit)
 
@@ -268,17 +340,6 @@ func loadSamples(ctx context.Context, db *sql.DB, realmName string, guid uint64,
 	return out, rows.Err()
 }
 
-func placeholders(n int) string {
-	if n <= 0 {
-		return ""
-	}
-	parts := make([]string, n)
-	for i := range parts {
-		parts[i] = "?"
-	}
-	return strings.Join(parts, ",")
-}
-
 func loadBossOptions(ctx context.Context, db *sql.DB, realmName string, guid uint64) ([]Option, error) {
 	const q = `
 		SELECT boss_remote_id, any(boss_name) AS name
@@ -304,6 +365,88 @@ func loadBossOptions(ctx context.Context, db *sql.DB, realmName string, guid uin
 	return out, rows.Err()
 }
 
+func loadRaidOptions(ctx context.Context, db *sql.DB, realmName string, guid uint64) ([]Option, error) {
+	const q = `
+		SELECT raid_name
+		FROM boss_kill
+		WHERE realm = ? AND has(players.guid, ?)
+		GROUP BY raid_name
+		ORDER BY raid_name
+	`
+	rows, err := db.QueryContext(ctx, q, realmName, guid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Option
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, Option{Value: name, Label: name})
+	}
+	return out, rows.Err()
+}
+
+func loadSpecOptions(ctx context.Context, db *sql.DB, realmName string, guid uint64, expansion int) ([]Option, error) {
+	const q = `
+		WITH indexOf(players.guid, ?) AS idx
+		SELECT players.talent_spec[idx] AS spec
+		FROM boss_kill
+		WHERE realm = ?
+		  AND has(players.guid, ?)
+		  AND players.talent_spec[idx] > 0
+		GROUP BY spec
+		ORDER BY spec
+	`
+	rows, err := db.QueryContext(ctx, q, guid, realmName, guid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Option
+	for rows.Next() {
+		var spec uint16
+		if err := rows.Scan(&spec); err != nil {
+			return nil, err
+		}
+		out = append(out, Option{
+			Value: strconv.Itoa(int(spec)),
+			Label: wow.SpecForExpansion(expansion, int(spec)),
+		})
+	}
+	return out, rows.Err()
+}
+
+func loadBossPositions(ctx context.Context, db *sql.DB, realmName string, ids []uint32) (map[uint32]uint16, error) {
+	out := map[uint32]uint16{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, realmName)
+	ph := sqlutil.Placeholders(len(ids))
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	q := "SELECT remote_id, position FROM boss FINAL WHERE realm = ? AND remote_id IN (" + ph + ")"
+	rows, err := db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id uint32
+		var position uint16
+		if err := rows.Scan(&id, &position); err != nil {
+			return nil, err
+		}
+		out[id] = position
+	}
+	return out, rows.Err()
+}
+
 func markBossSelected(opts []Option, selected []uint32) {
 	set := map[string]bool{}
 	for _, b := range selected {
@@ -314,14 +457,28 @@ func markBossSelected(opts []Option, selected []uint32) {
 	}
 }
 
-func buildModeOptions(selectedModes []int, expansion int) []Option {
-	var modes []int
-	switch expansion {
-	case realm.ExpansionVanilla:
-		modes = []int{0, 3, 4, 9}
-	default:
-		modes = []int{3, 4, 5, 6, 7, 14}
+func markStringSelected(opts []Option, selected []string) {
+	set := map[string]bool{}
+	for _, s := range selected {
+		set[s] = true
 	}
+	for i := range opts {
+		opts[i].Selected = set[opts[i].Value]
+	}
+}
+
+func markIntSelected(opts []Option, selected []int) {
+	set := map[string]bool{}
+	for _, n := range selected {
+		set[strconv.Itoa(n)] = true
+	}
+	for i := range opts {
+		opts[i].Selected = set[opts[i].Value]
+	}
+}
+
+func buildModeOptions(selectedModes []int, expansion int) []Option {
+	modes := wow.RaidDifficulties(expansion)
 	sort.Ints(modes)
 	sel := map[int]bool{}
 	for _, m := range selectedModes {

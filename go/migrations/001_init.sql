@@ -18,6 +18,7 @@
 CREATE TABLE IF NOT EXISTS raid (
     realm   LowCardinality(String),
     name    String,
+    position UInt16 DEFAULT 1,
     version DateTime64(3) DEFAULT now64()
 )
 ENGINE = ReplacingMergeTree(version)
@@ -28,6 +29,7 @@ CREATE TABLE IF NOT EXISTS boss (
     raid_name   String,
     remote_id   UInt32,
     name        String,
+    position    UInt16 DEFAULT 1,
     version     DateTime64(3) DEFAULT now64()
 )
 ENGINE = ReplacingMergeTree(version)

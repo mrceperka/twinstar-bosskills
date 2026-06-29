@@ -16,6 +16,8 @@ type ViewModel struct {
 	Stats            HeaderStats
 	Difficulties     []DifficultyChoice
 	SelectedMode     int
+	LockLabel        string
+	LockOffset       int
 	SelectedSpec     int
 	SelectedClass    int
 	AvailableSpecs   []int
@@ -174,6 +176,7 @@ templ durations(vm ViewModel) {
 templ difficultyTabs(vm ViewModel) {
 	<div class="flex flex-wrap items-center gap-3 text-sm">
 		<a href={ templ.SafeURL(links.Boss(vm.Realm, vm.Boss.RemoteID)) } class="text-bk-muted hover:text-bk-fg">Reset</a>
+		<span class="text-xs text-bk-muted">{ vm.LockLabel }</span>
 		for _, d := range vm.Difficulties {
 			<a
 				hx-get={ string(tabHref(vm, d.Mode)) }
@@ -185,9 +188,6 @@ templ difficultyTabs(vm ViewModel) {
 				{ d.Label }
 			</a>
 		}
-		<span class="ml-auto">
-			<a href={ historyHref(vm) } class="text-bk-muted hover:text-bk-fg">History →</a>
-		</span>
 	</div>
 }
 
@@ -200,7 +200,14 @@ templ percentileForm(vm ViewModel) {
 		hx-trigger="input changed delay:250ms, submit"
 		class="mb-3 flex items-center gap-3 text-sm"
 	>
-		<input type="hidden" name="mode" value={ itoa(vm.SelectedMode) }/>
+		<input type="hidden" name="difficulty" value={ itoa(vm.SelectedMode) }/>
+		<input type="hidden" name="raidlock" value={ itoa(vm.LockOffset) }/>
+		if vm.SelectedSpec > 0 {
+			<input type="hidden" name="spec" value={ itoa(vm.SelectedSpec) }/>
+		}
+		if vm.SelectedClass > 0 {
+			<input type="hidden" name="class" value={ itoa(vm.SelectedClass) }/>
+		}
 		<label class="text-bk-muted">Show value at percentile</label>
 		<input type="number" name="p" min="1" max="99" value={ itoa(vm.SelectedPctile) } class="w-20 rounded border border-bk-accent bg-bk-bg p-1 text-bk-fg"/>
 		<span class="text-xs text-bk-muted">Exact, not bucketed</span>
@@ -294,10 +301,10 @@ templ filterRow(vm ViewModel) {
 							hx-swap="innerHTML"
 							hx-push-url="true"
 							href={ templ.SafeURL(filterHref(vm, s, vm.SelectedClass)) }
-							title={ wowSpecLabel(s) }
+							title={ wowSpecLabel(vm.Realm, s) }
 							class={ "inline-flex items-center justify-center p-1", filterCellClass(vm.SelectedSpec == s) }
 						>
-							<img src={ templ.SafeURL(links.TalentIcon(vm.Realm, s)) } alt={ wowSpecLabel(s) } width="22" height="22" class="rounded"/>
+							<img src={ templ.SafeURL(links.TalentIcon(vm.Realm, s)) } alt={ wowSpecLabel(vm.Realm, s) } width="22" height="22" class="rounded"/>
 						</a>
 					}
 				</div>

@@ -137,7 +137,7 @@ templ filterForm(vm ViewModel) {
 		</label>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Difficulty</span>
-			<select name="mode" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-24">
+			<select name="difficulty" multiple class={ selectFilterClass(len(vm.Filter.Difficulties) > 0), "min-h-24" }>
 				for _, o := range vm.ModeOptions {
 					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
 				}

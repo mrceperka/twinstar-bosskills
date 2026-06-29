@@ -46,10 +46,6 @@ func Boss(realmName string, id uint32) string {
 	return "/" + realmName + "/boss/" + strconv.FormatUint(uint64(id), 10)
 }
 
-func BossHistory(realmName string, id uint32) string {
-	return "/" + realmName + "/boss/" + strconv.FormatUint(uint64(id), 10) + "/history"
-}
-
 func Raids(realmName string) string { return "/" + realmName + "/raids" }
 
 func Ranks(realmName string) string { return "/" + realmName + "/ranks" }

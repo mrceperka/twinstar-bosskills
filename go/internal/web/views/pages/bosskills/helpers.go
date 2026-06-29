@@ -6,11 +6,8 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/viewhelpers"
 )
-
-func bossHref(realmName string, bossID uint32) templ.SafeURL {
-	return templ.SafeURL(links.Boss(realmName, bossID))
-}
 
 func bosskillsURL(realmName string) templ.SafeURL {
 	return templ.SafeURL(links.BossKills(realmName))
@@ -27,8 +24,13 @@ func pagedURL(vm ViewModel, page int) string {
 		v.Add("raid", r)
 	}
 	for _, m := range vm.Filter.Difficulties {
-		v.Add("mode", strconv.Itoa(m))
+		v.Add("difficulty", strconv.Itoa(m))
 	}
 	v.Set("page", strconv.Itoa(page))
 	return links.BossKills(vm.Realm) + "?" + v.Encode()
 }
+
+var (
+	bossHref          = viewhelpers.BossHref
+	selectFilterClass = viewhelpers.SelectFilterClass
+)

@@ -5,16 +5,16 @@ import (
 	"database/sql"
 	"net/http"
 	"sort"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/mrceperka/twinstar-bosskills/go/internal/domain"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/query"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/router"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/sqlutil"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
 )
 
 type Deps struct {
@@ -22,8 +22,6 @@ type Deps struct {
 	CSSHash string
 	JSHash  string
 }
-
-const topPerBoss = 10
 
 type rawRank struct {
 	BossID uint32
@@ -34,8 +32,10 @@ type rawRank struct {
 }
 
 type bossInfoRec struct {
-	Name     string
-	RaidName string
+	Name         string
+	RaidName     string
+	BossPosition uint16
+	RaidPosition uint16
 }
 
 type killDetailKey struct {
@@ -61,14 +61,17 @@ func Handler(deps Deps) http.HandlerFunc {
 		defer cancel()
 
 		expansion := realm.Expansion(realmName)
-		modeQ := r.URL.Query().Get("mode")
-		mode := pickDefaultMode(expansion)
-		if v, err := strconv.Atoi(modeQ); err == nil && v > 0 {
+		mode := wow.DefaultDifficulty(expansion)
+		if v, ok := query.Difficulty(r.URL.Query()); ok {
 			mode = v
+		}
+		offset := 0
+		if v, ok := query.RaidLock(r.URL.Query()); ok {
+			offset = v
 		}
 
 		now := time.Now().UTC()
-		win := domain.RaidLock(now, 0)
+		win := domain.RaidLock(now, offset)
 
 		allRows, err := loadAllRankRows(ctx, deps.DB, realmName, win.Start, mode)
 		if err != nil {
@@ -102,8 +105,8 @@ func Handler(deps Deps) http.HandlerFunc {
 			return
 		}
 
-		dpsRaids := buildRaidGroups(allRows, bossInfos, killDetails, names, "dps")
-		hpsRaids := buildRaidGroups(allRows, bossInfos, killDetails, names, "hps")
+		dpsRaids := buildRaidGroups(allRows, bossInfos, killDetails, names, "dps", expansion)
+		hpsRaids := buildRaidGroups(allRows, bossInfos, killDetails, names, "hps", expansion)
 
 		vm := ViewModel{
 			Meta: layouts.PageMeta{
@@ -113,7 +116,8 @@ func Handler(deps Deps) http.HandlerFunc {
 				JSHash:  deps.JSHash,
 			},
 			Realm:        realmName,
-			LockLabel:    win.Start.Format("Jan 2 06:00 UTC") + " → " + win.End.Format("Jan 2 06:00 UTC"),
+			LockLabel:    win.Start.Format("Jan 2 15:04 UTC") + " → " + win.End.Format("Jan 2 15:04 UTC"),
+			LockOffset:   offset,
 			Difficulties: buildDifficulties(expansion),
 			SelectedMode: mode,
 			ModeLabel:    wow.Difficulty(expansion, mode),
@@ -125,23 +129,8 @@ func Handler(deps Deps) http.HandlerFunc {
 	}
 }
 
-func pickDefaultMode(expansion int) int {
-	switch expansion {
-	case realm.ExpansionVanilla:
-		return 0
-	default:
-		return 5 // 10HC for MoP/Cata
-	}
-}
-
 func buildDifficulties(expansion int) []DifficultyChoice {
-	var modes []int
-	switch expansion {
-	case realm.ExpansionVanilla:
-		modes = []int{0, 3, 4, 9}
-	default:
-		modes = []int{3, 4, 5, 6, 7}
-	}
+	modes := wow.RaidDifficulties(expansion)
 	out := make([]DifficultyChoice, 0, len(modes))
 	for _, m := range modes {
 		out = append(out, DifficultyChoice{Mode: m, Label: wow.Difficulty(expansion, m)})
@@ -181,15 +170,26 @@ func loadBossInfos(ctx context.Context, db *sql.DB, realmName string, ids []uint
 	if len(ids) == 0 {
 		return out, nil
 	}
-	args := make([]any, 0, len(ids)+1)
+	args := make([]any, 0, len(ids)+2)
 	args = append(args, realmName)
-	ph := placeholders(len(ids))
+	ph := sqlutil.Placeholders(len(ids))
 	for _, id := range ids {
 		args = append(args, id)
 	}
-	q := "SELECT boss_remote_id, any(boss_name), any(raid_name) FROM boss_kill " +
-		"WHERE realm = ? AND boss_remote_id IN (" + ph + ") " +
-		"GROUP BY boss_remote_id"
+	args = append(args, realmName)
+	q := `
+		SELECT b.remote_id, b.name, b.raid_name, b.position, ifNull(r.position, 0)
+		FROM (
+			SELECT remote_id, name, raid_name, position
+			FROM boss FINAL
+			WHERE realm = ? AND remote_id IN (` + ph + `)
+		) AS b
+		LEFT ANY JOIN (
+			SELECT name, position
+			FROM raid FINAL
+			WHERE realm = ?
+		) AS r ON r.name = b.raid_name
+	`
 	rows, err := db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -198,10 +198,16 @@ func loadBossInfos(ctx context.Context, db *sql.DB, realmName string, ids []uint
 	for rows.Next() {
 		var id uint32
 		var name, raidName string
-		if err := rows.Scan(&id, &name, &raidName); err != nil {
+		var bossPos, raidPos uint16
+		if err := rows.Scan(&id, &name, &raidName, &bossPos, &raidPos); err != nil {
 			return nil, err
 		}
-		out[id] = bossInfoRec{Name: name, RaidName: raidName}
+		out[id] = bossInfoRec{
+			Name:         name,
+			RaidName:     raidName,
+			BossPosition: bossPos,
+			RaidPosition: raidPos,
+		}
 	}
 	return out, rows.Err()
 }
@@ -213,7 +219,7 @@ func loadNames(ctx context.Context, db *sql.DB, realmName string, guids []uint64
 	}
 	args := make([]any, 0, len(guids)+1)
 	args = append(args, realmName)
-	ph := placeholders(len(guids))
+	ph := sqlutil.Placeholders(len(guids))
 	for _, g := range guids {
 		args = append(args, g)
 	}
@@ -243,7 +249,7 @@ func loadKillDetails(ctx context.Context, db *sql.DB, realmName string, lockStar
 	if len(guids) == 0 {
 		return out, nil
 	}
-	ph := placeholders(len(guids))
+	ph := sqlutil.Placeholders(len(guids))
 	args := make([]any, 0, len(guids)+4)
 	args = append(args, realmName, lockStart, lockEnd, uint8(mode))
 	for _, g := range guids {
@@ -285,7 +291,7 @@ func loadKillDetails(ctx context.Context, db *sql.DB, realmName string, lockStar
 	return out, rows.Err()
 }
 
-func buildRaidGroups(allRows []rawRank, bossInfos map[uint32]bossInfoRec, killDetails map[killDetailKey]killDetail, names map[uint64]string, metric string) []RaidGroup {
+func buildRaidGroups(allRows []rawRank, bossInfos map[uint32]bossInfoRec, killDetails map[killDetailKey]killDetail, names map[uint64]string, metric string, expansion int) []RaidGroup {
 	// Group raw rows by boss.
 	type bossRows struct {
 		BossID  uint32
@@ -303,16 +309,20 @@ func buildRaidGroups(allRows []rawRank, bossInfos map[uint32]bossInfoRec, killDe
 
 	// Group bosses by raid name.
 	type raidBosses struct {
-		Name   string
-		Bosses []*bossRows
+		Name     string
+		Position uint16
+		Bosses   []*bossRows
 	}
 	raidMap := map[string]*raidBosses{}
 	for _, b := range bossByID {
 		info := bossInfos[b.BossID]
 		r, ok := raidMap[info.RaidName]
 		if !ok {
-			r = &raidBosses{Name: info.RaidName}
+			r = &raidBosses{Name: info.RaidName, Position: info.RaidPosition}
 			raidMap[info.RaidName] = r
+		}
+		if r.Position == 0 {
+			r.Position = info.RaidPosition
 		}
 		r.Bosses = append(r.Bosses, b)
 	}
@@ -321,8 +331,8 @@ func buildRaidGroups(allRows []rawRank, bossInfos map[uint32]bossInfoRec, killDe
 	for _, r := range raidMap {
 		// Sort bosses by encounter order.
 		sort.Slice(r.Bosses, func(i, j int) bool {
-			oi := wow.BossOrder(r.Bosses[i].BossID)
-			oj := wow.BossOrder(r.Bosses[j].BossID)
+			oi := bossInfos[r.Bosses[i].BossID].BossPosition
+			oj := bossInfos[r.Bosses[j].BossID].BossPosition
 			if oi != oj {
 				return oi < oj
 			}
@@ -332,7 +342,7 @@ func buildRaidGroups(allRows []rawRank, bossInfos map[uint32]bossInfoRec, killDe
 		bossList := make([]BossRankGroup, 0, len(r.Bosses))
 		for _, b := range r.Bosses {
 			info := bossInfos[b.BossID]
-			entries := buildRankEntries(b.Entries, killDetails, names, metric)
+			entries := buildRankEntries(b.Entries, killDetails, names, metric, expansion)
 			if len(entries) > 0 {
 				bossList = append(bossList, BossRankGroup{
 					BossID:   b.BossID,
@@ -348,8 +358,8 @@ func buildRaidGroups(allRows []rawRank, bossInfos map[uint32]bossInfoRec, killDe
 
 	// Sort raids: newest first.
 	sort.Slice(out, func(i, j int) bool {
-		pi := wow.RaidOrder(out[i].Name)
-		pj := wow.RaidOrder(out[j].Name)
+		pi := raidMap[out[i].Name].Position
+		pj := raidMap[out[j].Name].Position
 		if pi != pj {
 			return pi > pj
 		}
@@ -358,12 +368,12 @@ func buildRaidGroups(allRows []rawRank, bossInfos map[uint32]bossInfoRec, killDe
 	return out
 }
 
-func buildRankEntries(rows []rawRank, killDetails map[killDetailKey]killDetail, names map[uint64]string, metric string) []Rank {
+func buildRankEntries(rows []rawRank, killDetails map[killDetailKey]killDetail, names map[uint64]string, metric string, expansion int) []Rank {
 	type best struct {
 		rawRank
 		val uint64
 	}
-	byGUID := map[uint64]best{}
+	bySpec := map[uint16]best{}
 	for _, r := range rows {
 		var val uint64
 		if metric == "dps" {
@@ -374,19 +384,16 @@ func buildRankEntries(rows []rawRank, killDetails map[killDetailKey]killDetail, 
 		if val == 0 {
 			continue
 		}
-		if prev, ok := byGUID[r.GUID]; !ok || val > prev.val {
-			byGUID[r.GUID] = best{r, val}
+		if prev, ok := bySpec[r.Spec]; !ok || val > prev.val {
+			bySpec[r.Spec] = best{r, val}
 		}
 	}
 
-	sorted := make([]best, 0, len(byGUID))
-	for _, b := range byGUID {
+	sorted := make([]best, 0, len(bySpec))
+	for _, b := range bySpec {
 		sorted = append(sorted, b)
 	}
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].val > sorted[j].val })
-	if len(sorted) > topPerBoss {
-		sorted = sorted[:topPerBoss]
-	}
 
 	out := make([]Rank, 0, len(sorted))
 	for i, b := range sorted {
@@ -399,9 +406,9 @@ func buildRankEntries(rows []rawRank, killDetails map[killDetailKey]killDetail, 
 		out = append(out, Rank{
 			Rank:      i + 1,
 			Name:      name,
-			Class:     wow.ClassFromSpec(int(b.Spec)),
+			Class:     wow.ClassFromSpecForExpansion(expansion, int(b.Spec)),
 			Spec:      int(b.Spec),
-			SpecLabel: wow.Spec(int(b.Spec)),
+			SpecLabel: wow.SpecForExpansion(expansion, int(b.Spec)),
 			DPS:       int64(b.DPS),
 			HPS:       int64(b.HPS),
 			LengthSec: detail.LengthSec,
@@ -410,17 +417,6 @@ func buildRankEntries(rows []rawRank, killDetails map[killDetailKey]killDetail, 
 		})
 	}
 	return out
-}
-
-func placeholders(n int) string {
-	if n <= 0 {
-		return ""
-	}
-	parts := make([]string, n)
-	for i := range parts {
-		parts[i] = "?"
-	}
-	return strings.Join(parts, ",")
 }
 
 func setKeysU32(m map[uint32]bool) []uint32 {

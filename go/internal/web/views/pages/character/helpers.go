@@ -5,14 +5,11 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/viewhelpers"
 )
 
-func bossHref(realmName string, id uint32) templ.SafeURL {
-	return templ.SafeURL(links.Boss(realmName, id))
-}
-
 func bossWithFiltersHref(realmName string, id uint32, mode, class, spec int) templ.SafeURL {
-	q := "?mode=" + strconv.Itoa(mode)
+	q := "?difficulty=" + strconv.Itoa(mode)
 	if spec > 0 {
 		q += "&spec=" + strconv.Itoa(spec)
 	}
@@ -20,14 +17,6 @@ func bossWithFiltersHref(realmName string, id uint32, mode, class, spec int) tem
 		q += "&class=" + strconv.Itoa(class)
 	}
 	return templ.SafeURL(links.Boss(realmName, id) + q)
-}
-
-func bosskillHref(realmName, id string) templ.SafeURL {
-	return templ.SafeURL(links.BossKill(realmName, id))
-}
-
-func characterPerformanceHref(realmName, name string) templ.SafeURL {
-	return templ.SafeURL(links.CharacterPerformance(realmName, name))
 }
 
 // rankingsHref returns the URL for the lazy rankings fragment.
@@ -45,12 +34,12 @@ func pagedKillsURL(vm ViewModel, page int) string {
 }
 
 func rankLabel(rank int) string {
-	return "#" + strconv.Itoa(rank)
+	return viewhelpers.RankLabel(rank)
 }
 
-func fmtIlvl(v float32) string {
-	if v <= 0 {
-		return ""
-	}
-	return strconv.Itoa(int(v))
-}
+var (
+	bossHref                 = viewhelpers.BossHref
+	bosskillHref             = viewhelpers.BossKillHref
+	characterPerformanceHref = viewhelpers.CharacterPerformanceHref
+	fmtIlvl                  = viewhelpers.Ilvl
+)

@@ -17,6 +17,7 @@ type ViewModel struct {
 type LockLabel struct {
 	StartLabel string
 	EndLabel   string
+	Offset     int
 }
 
 type Raid struct {
@@ -39,6 +40,7 @@ templ Page(vm ViewModel) {
 				<h1 class="text-2xl font-semibold">{ vm.Realm } / Raids</h1>
 				<div class="text-xs text-bk-muted">
 					{ vm.Lock.StartLabel } → { vm.Lock.EndLabel }
+					<a href={ previousLockHref(vm.Realm, vm.Lock.Offset + 1) } class="ml-2 text-bk-accent">(see previous)</a>
 				</div>
 			</header>
 			for _, r := range vm.Raids {

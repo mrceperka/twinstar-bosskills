@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/mrceperka/twinstar-bosskills/go/internal/api"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
 )
 
 // upsertRaidsAndBosses writes raid + boss lookup rows for the given realm.
@@ -22,13 +23,17 @@ func upsertRaidsAndBosses(ctx context.Context, db *sql.DB, realmName string, rai
 		if err != nil {
 			return fmt.Errorf("begin raid: %w", err)
 		}
-		stmt, err := tx.PrepareContext(ctx, "INSERT INTO raid (realm, name)")
+		stmt, err := tx.PrepareContext(ctx, "INSERT INTO raid (realm, name, position)")
 		if err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("prepare raid: %w", err)
 		}
-		for _, r := range raids {
-			if _, err := stmt.ExecContext(ctx, realmName, r.Map); err != nil {
+		for i, r := range raids {
+			position := wow.RaidPosition(r.Map)
+			if position == 0 {
+				position = i + 1
+			}
+			if _, err := stmt.ExecContext(ctx, realmName, r.Map, uint16(position)); err != nil {
 				_ = tx.Rollback()
 				return fmt.Errorf("insert raid %s: %w", r.Map, err)
 			}
@@ -44,14 +49,19 @@ func upsertRaidsAndBosses(ctx context.Context, db *sql.DB, realmName string, rai
 		if err != nil {
 			return fmt.Errorf("begin boss: %w", err)
 		}
-		stmt, err := tx.PrepareContext(ctx, "INSERT INTO boss (realm, raid_name, remote_id, name)")
+		stmt, err := tx.PrepareContext(ctx, "INSERT INTO boss (realm, raid_name, remote_id, name, position)")
 		if err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("prepare boss: %w", err)
 		}
 		for _, raid := range raids {
-			for _, b := range raid.Bosses {
-				if _, err := stmt.ExecContext(ctx, realmName, raid.Map, uint32(b.Entry), b.Name); err != nil {
+			for i, b := range raid.Bosses {
+				remoteID := uint32(b.Entry)
+				position := wow.BossPosition(remoteID)
+				if position == 0 {
+					position = i + 1
+				}
+				if _, err := stmt.ExecContext(ctx, realmName, raid.Map, remoteID, b.Name, uint16(position)); err != nil {
 					_ = tx.Rollback()
 					return fmt.Errorf("insert boss %s/%d: %w", b.Name, b.Entry, err)
 				}

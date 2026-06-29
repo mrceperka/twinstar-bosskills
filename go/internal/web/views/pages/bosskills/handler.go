@@ -10,10 +10,11 @@ import (
 	"time"
 
 	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/router"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/sqlutil"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
 )
 
 type Deps struct {
@@ -105,7 +106,7 @@ func parseFilter(q map[string][]string) FilterValues {
 			f.Raids = append(f.Raids, v)
 		}
 	}
-	for _, v := range q["mode"] {
+	for _, v := range append(q["difficulty"], q["mode"]...) {
 		for _, part := range strings.Split(v, ",") {
 			if n, err := strconv.Atoi(strings.TrimSpace(part)); err == nil {
 				f.Difficulties = append(f.Difficulties, n)
@@ -129,21 +130,21 @@ func loadKills(ctx context.Context, db *sql.DB, realmName string, f FilterValues
 	whereParts = append(whereParts, "realm = ?")
 	args = append(args, realmName)
 	if len(f.Bosses) > 0 {
-		ph := placeholders(len(f.Bosses))
+		ph := sqlutil.Placeholders(len(f.Bosses))
 		whereParts = append(whereParts, "boss_remote_id IN ("+ph+")")
 		for _, b := range f.Bosses {
 			args = append(args, b)
 		}
 	}
 	if len(f.Raids) > 0 {
-		ph := placeholders(len(f.Raids))
+		ph := sqlutil.Placeholders(len(f.Raids))
 		whereParts = append(whereParts, "raid_name IN ("+ph+")")
 		for _, r := range f.Raids {
 			args = append(args, r)
 		}
 	}
 	if len(f.Difficulties) > 0 {
-		ph := placeholders(len(f.Difficulties))
+		ph := sqlutil.Placeholders(len(f.Difficulties))
 		whereParts = append(whereParts, "mode IN ("+ph+")")
 		for _, m := range f.Difficulties {
 			args = append(args, uint8(m))
@@ -198,17 +199,6 @@ func loadKills(ctx context.Context, db *sql.DB, realmName string, f FilterValues
 		return nil, 0, err
 	}
 	return out, int(total), nil
-}
-
-func placeholders(n int) string {
-	if n <= 0 {
-		return ""
-	}
-	parts := make([]string, n)
-	for i := range parts {
-		parts[i] = "?"
-	}
-	return strings.Join(parts, ",")
 }
 
 func loadFilterOptions(ctx context.Context, db *sql.DB, realmName string) ([]Option, []Option, error) {
@@ -284,13 +274,7 @@ func markSelected(bossOpts []Option, bosses []uint32, raidOpts []Option, raids [
 func buildModeOptions(rows []KillRow, selectedModes []int, expansion int) []Option {
 	// Just expose the common difficulties for this expansion. Skip "empty"
 	// selectors; we'd rather offer all options than only those with data.
-	var modes []int
-	switch expansion {
-	case realm.ExpansionVanilla:
-		modes = []int{0, 3, 4, 9}
-	case realm.ExpansionCata, realm.ExpansionMoP:
-		modes = []int{3, 4, 5, 6, 7, 14}
-	}
+	modes := wow.RaidDifficulties(expansion)
 	sort.Ints(modes)
 	sel := map[int]bool{}
 	for _, m := range selectedModes {

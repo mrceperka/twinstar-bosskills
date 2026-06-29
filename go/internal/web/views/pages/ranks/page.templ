@@ -10,6 +10,7 @@ type ViewModel struct {
 	Meta         layouts.PageMeta
 	Realm        string
 	LockLabel    string
+	LockOffset   int
 	Difficulties []DifficultyChoice
 	SelectedMode int
 	ModeLabel    string
@@ -83,9 +84,8 @@ templ Page(vm ViewModel) {
 templ difficultyTabs(vm ViewModel) {
 	<div class="flex gap-1 text-xs">
 		for _, d := range vm.Difficulties {
-			<a href={ tabHref(vm.Realm, d.Mode) }
-			   class={ "rounded px-2 py-1 border border-bk-border",
-					   tabActiveClass(d.Mode == vm.SelectedMode) }>
+			<a href={ tabHref(vm.Realm, d.Mode, vm.LockOffset) }
+			   class={ tabActiveClass(d.Mode == vm.SelectedMode) }>
 				{ d.Label }
 			</a>
 		}

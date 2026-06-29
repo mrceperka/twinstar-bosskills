@@ -8,8 +8,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/mrceperka/twinstar-bosskills/go/internal/domain"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/query"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/router"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
@@ -22,10 +24,7 @@ type Deps struct {
 }
 
 const (
-	defaultModeMoP     = 5 // 10HC
-	defaultModeCata    = 5
-	defaultModeVanilla = 0
-	topRowLimit        = 25
+	topRowLimit = 25
 )
 
 func Handler(deps Deps) http.HandlerFunc {
@@ -60,14 +59,20 @@ func Handler(deps Deps) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		mode := selectMode(r.URL.Query().Get("mode"), avail, expansion)
+		requestedMode, hasRequestedMode := query.Difficulty(r.URL.Query())
+		mode := selectMode(requestedMode, hasRequestedMode, avail, expansion)
+		lockOffset := 0
+		if v, ok := query.RaidLock(r.URL.Query()); ok {
+			lockOffset = v
+		}
+		lock := domain.RaidLock(time.Now().UTC(), lockOffset)
 
 		// Optional spec / class filters (?spec=N, ?class=N). Zero means
 		// "no filter".
 		spec, _ := strconv.Atoi(r.URL.Query().Get("spec"))
 		class, _ := strconv.Atoi(r.URL.Query().Get("class"))
 
-		stats, err := loadHeaderStats(ctx, deps.DB, realmName, bossID, mode, expansion)
+		stats, err := loadHeaderStats(ctx, deps.DB, realmName, bossID, mode, expansion, lock.Start, lock.End)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -79,7 +84,7 @@ func Handler(deps Deps) http.HandlerFunc {
 			return
 		}
 
-		dpsCurves, hpsCurves, err := loadSpecCurves(ctx, deps.DB, realmName, bossID, mode, spec, class)
+		dpsCurves, hpsCurves, err := loadSpecCurves(ctx, deps.DB, realmName, bossID, mode, spec, class, lock.Start, lock.End)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -94,7 +99,7 @@ func Handler(deps Deps) http.HandlerFunc {
 		hpsBoxJSON, _ := buildBoxPlotJSON("HPS", hpsCurves, realmName)
 		atP := extractAtPercentile(dpsCurves, hpsCurves, selectedP, expansion)
 
-		topDPS, topHPS, err := loadRankings(ctx, deps.DB, realmName, bossID, mode, spec, class)
+		topDPS, topHPS, err := loadRankings(ctx, deps.DB, realmName, bossID, mode, spec, class, expansion, lock.Start, lock.End)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -106,7 +111,7 @@ func Handler(deps Deps) http.HandlerFunc {
 		}
 
 		// Collect available spec / class IDs for the filter row.
-		availSpecs, availClasses, err := loadAvailableSpecsClasses(ctx, deps.DB, realmName, bossID, mode)
+		availSpecs, availClasses, err := loadAvailableSpecsClasses(ctx, deps.DB, realmName, bossID, mode, lock.Start, lock.End)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -120,24 +125,26 @@ func Handler(deps Deps) http.HandlerFunc {
 				JSHash:     deps.JSHash,
 				NeedsChart: true,
 			},
-			Realm:          realmName,
-			Boss:           bossInfo,
-			Siblings:       siblings,
-			Stats:          stats,
-			Difficulties:   diffChoices,
-			SelectedMode:   mode,
-			SelectedSpec:   spec,
-			SelectedClass:  class,
-			AvailableSpecs: availSpecs,
+			Realm:            realmName,
+			Boss:             bossInfo,
+			Siblings:         siblings,
+			Stats:            stats,
+			Difficulties:     diffChoices,
+			SelectedMode:     mode,
+			LockLabel:        lockLabel(lock.Start, lock.End, lockOffset),
+			LockOffset:       lockOffset,
+			SelectedSpec:     spec,
+			SelectedClass:    class,
+			AvailableSpecs:   availSpecs,
 			AvailableClasses: availClasses,
-			SelectedPctile: selectedP,
-			DPSCurveJSON:   dpsCurveJSON,
-			HPSCurveJSON:   hpsCurveJSON,
-			DPSBoxJSON:     dpsBoxJSON,
-			HPSBoxJSON:     hpsBoxJSON,
-			AtPercentile:   atP,
-			TopDPS:         topDPS,
-			TopHPS:         topHPS,
+			SelectedPctile:   selectedP,
+			DPSCurveJSON:     dpsCurveJSON,
+			HPSCurveJSON:     hpsCurveJSON,
+			DPSBoxJSON:       dpsBoxJSON,
+			HPSBoxJSON:       hpsBoxJSON,
+			AtPercentile:     atP,
+			TopDPS:           topDPS,
+			TopHPS:           topHPS,
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if middleware.IsHTMX(r) {
@@ -149,13 +156,25 @@ func Handler(deps Deps) http.HandlerFunc {
 }
 
 func loadBossInfo(ctx context.Context, db *sql.DB, realmName string, id uint32) (BossInfo, error) {
-	const q = `
+	const lookupQ = `
+		SELECT name, raid_name
+		FROM boss FINAL
+		WHERE realm = ? AND remote_id = ?
+		LIMIT 1
+	`
+	var name, raidName string
+	if err := db.QueryRowContext(ctx, lookupQ, realmName, id).Scan(&name, &raidName); err == nil {
+		return BossInfo{RemoteID: id, Name: name, RaidName: raidName}, nil
+	} else if err != sql.ErrNoRows {
+		return BossInfo{}, err
+	}
+
+	const eventQ = `
 		SELECT any(boss_name) AS boss_name, any(raid_name) AS raid_name
 		FROM boss_kill
 		WHERE realm = ? AND boss_remote_id = ?
 	`
-	var name, raidName string
-	if err := db.QueryRowContext(ctx, q, realmName, id).Scan(&name, &raidName); err != nil {
+	if err := db.QueryRowContext(ctx, eventQ, realmName, id).Scan(&name, &raidName); err != nil {
 		if err == sql.ErrNoRows {
 			return BossInfo{}, nil
 		}
@@ -186,21 +205,15 @@ func loadAvailableModes(ctx context.Context, db *sql.DB, realmName string, id ui
 	return out, rows.Err()
 }
 
-func selectMode(requested string, available []int, expansion int) int {
-	if v, err := strconv.Atoi(requested); err == nil {
+func selectMode(requested int, hasRequested bool, available []int, expansion int) int {
+	if hasRequested {
 		for _, m := range available {
-			if m == v {
-				return v
+			if m == requested {
+				return requested
 			}
 		}
 	}
-	def := defaultModeMoP
-	switch expansion {
-	case realm.ExpansionVanilla:
-		def = defaultModeVanilla
-	case realm.ExpansionCata:
-		def = defaultModeCata
-	}
+	def := wow.DefaultDifficulty(expansion)
 	for _, m := range available {
 		if m == def {
 			return def
@@ -212,16 +225,21 @@ func selectMode(requested string, available []int, expansion int) int {
 	return def
 }
 
+func lockLabel(start, end time.Time, _ int) string {
+	return start.Format("Jan 2 15:04 UTC") + " → " + end.Format("Jan 2 15:04 UTC")
+}
+
 // loadAvailableSpecsClasses returns the distinct spec / class IDs that have
 // data for the requested boss + mode, so the filter row can render only
 // icons that actually do something.
-func loadAvailableSpecsClasses(ctx context.Context, db *sql.DB, realmName string, id uint32, mode int) (specs, classes []int, err error) {
+func loadAvailableSpecsClasses(ctx context.Context, db *sql.DB, realmName string, id uint32, mode int, start, end time.Time) (specs, classes []int, err error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT DISTINCT players.talent_spec AS s, players.class AS c
 		FROM boss_kill ARRAY JOIN players
 		WHERE realm = ? AND boss_remote_id = ? AND mode = ?
+		  AND kill_time >= ? AND kill_time < ?
 		  AND players.talent_spec > 0
-	`, realmName, id, uint8(mode))
+	`, realmName, id, uint8(mode), start, end)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -252,7 +270,7 @@ func loadAvailableSpecsClasses(ctx context.Context, db *sql.DB, realmName string
 
 // loadHeaderStats computes the narrative numbers shown above the tabs:
 // total kills, wipes, kill/wipe chance, and fight length percentiles.
-func loadHeaderStats(ctx context.Context, db *sql.DB, realmName string, id uint32, mode, expansion int) (HeaderStats, error) {
+func loadHeaderStats(ctx context.Context, db *sql.DB, realmName string, id uint32, mode, expansion int, start, end time.Time) (HeaderStats, error) {
 	stats := HeaderStats{ModeLabel: wow.Difficulty(expansion, mode)}
 
 	const q = `
@@ -263,14 +281,15 @@ func loadHeaderStats(ctx context.Context, db *sql.DB, realmName string, id uint3
 		       max(length) AS max_len
 		FROM boss_kill
 		WHERE realm = ? AND boss_remote_id = ? AND mode = ?
+		  AND kill_time >= ? AND kill_time < ?
 	`
 	var (
-		kills, wipes               uint64
-		minLen                     uint64
-		avgLen                     float64
-		maxLen                     uint64
+		kills, wipes uint64
+		minLen       uint64
+		avgLen       float64
+		maxLen       uint64
 	)
-	if err := db.QueryRowContext(ctx, q, realmName, id, uint8(mode)).
+	if err := db.QueryRowContext(ctx, q, realmName, id, uint8(mode), start, end).
 		Scan(&kills, &wipes, &minLen, &avgLen, &maxLen); err != nil {
 		if err == sql.ErrNoRows {
 			return stats, nil
@@ -299,10 +318,10 @@ func loadSiblings(ctx context.Context, db *sql.DB, realmName, raidName string, c
 		return nil, nil
 	}
 	const q = `
-		SELECT boss_remote_id, any(boss_name)
-		FROM boss_kill
+		SELECT remote_id, name
+		FROM boss FINAL
 		WHERE realm = ? AND raid_name = ?
-		GROUP BY boss_remote_id
+		ORDER BY position ASC, remote_id ASC
 	`
 	rows, err := db.QueryContext(ctx, q, realmName, raidName)
 	if err != nil {
@@ -321,14 +340,6 @@ func loadSiblings(ctx context.Context, db *sql.DB, realmName, raidName string, c
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	sort.Slice(out, func(i, j int) bool {
-		oi := wow.BossOrder(out[i].RemoteID)
-		oj := wow.BossOrder(out[j].RemoteID)
-		if oi != oj {
-			return oi < oj
-		}
-		return out[i].RemoteID < out[j].RemoteID
-	})
 	return out, nil
 }
 
@@ -338,7 +349,7 @@ func loadSiblings(ctx context.Context, db *sql.DB, realmName, raidName string, c
 //
 // `specFilter` and `classFilter` are 0 for "no filter" — non-zero values
 // are applied as additional predicates on players.talent_spec / players.class.
-func loadRankings(ctx context.Context, db *sql.DB, realmName string, id uint32, mode, specFilter, classFilter int) (dps, hps []Ranking, err error) {
+func loadRankings(ctx context.Context, db *sql.DB, realmName string, id uint32, mode, specFilter, classFilter, expansion int, start, end time.Time) (dps, hps []Ranking, err error) {
 	q := `
 		SELECT
 			players.guid                                    AS guid,
@@ -355,8 +366,9 @@ func loadRankings(ctx context.Context, db *sql.DB, realmName string, id uint32, 
 			remote_id                                        AS remote_id
 		FROM boss_kill ARRAY JOIN players
 		WHERE realm = ? AND boss_remote_id = ? AND mode = ? AND length > 0
+		  AND kill_time >= ? AND kill_time < ?
 	`
-	args := []any{realmName, id, uint8(mode)}
+	args := []any{realmName, id, uint8(mode), start, end}
 	if specFilter > 0 {
 		q += " AND players.talent_spec = ?"
 		args = append(args, uint16(specFilter))
@@ -372,17 +384,17 @@ func loadRankings(ctx context.Context, db *sql.DB, realmName string, id uint32, 
 	defer rows.Close()
 
 	type sample struct {
-		Guid       uint64
-		Spec       uint16
-		Name       string
-		Class      uint8
-		DPS, HPS   uint64
-		DmgDone    uint64
-		HealDone   uint64
-		Length     uint32
-		KillTime   time.Time
-		ILvl       float32
-		RemoteID   string
+		Guid     uint64
+		Spec     uint16
+		Name     string
+		Class    uint8
+		DPS, HPS uint64
+		DmgDone  uint64
+		HealDone uint64
+		Length   uint32
+		KillTime time.Time
+		ILvl     float32
+		RemoteID string
 	}
 	var all []sample
 	for rows.Next() {
@@ -420,7 +432,7 @@ func loadRankings(ctx context.Context, db *sql.DB, realmName string, id uint32, 
 			Name:       s.Name,
 			RemoteID:   s.RemoteID,
 			Spec:       int(s.Spec),
-			SpecLabel:  wow.Spec(int(s.Spec)),
+			SpecLabel:  wow.SpecForExpansion(expansion, int(s.Spec)),
 			Class:      int(s.Class),
 			ClassLabel: wow.Class(int(s.Class)),
 			DPS:        int64(s.DPS),
@@ -504,5 +516,6 @@ func Mount(mux *http.ServeMux, deps Deps) {
 	h := middleware.RequireRealm(Handler(deps))
 	router.ForEachRealmPrefix(func(prefix string) {
 		mux.Handle("GET "+prefix+"/boss/{id}", h)
+		mux.Handle("GET "+prefix+"/boss/{id}/history", h)
 	})
 }

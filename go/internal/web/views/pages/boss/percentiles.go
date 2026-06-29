@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
 )
@@ -35,15 +36,16 @@ var curveLevelsCSV = func() string {
 // in a single round trip. Reads from boss_kill directly (no MV) so values
 // are always exact — this is feasible because the per-realm/boss/mode cell
 // rarely exceeds a few thousand rows. See migration 003 for the rationale.
-func loadSpecCurves(ctx context.Context, db *sql.DB, realmName string, id uint32, mode, specFilter, classFilter int) (dps, hps []SpecCurve, err error) {
+func loadSpecCurves(ctx context.Context, db *sql.DB, realmName string, id uint32, mode, specFilter, classFilter int, start, end time.Time) (dps, hps []SpecCurve, err error) {
 	q := `
 		SELECT
 			players.talent_spec AS spec,
 			quantilesExact(` + curveLevelsCSV + `)(toFloat64(players.dmg_done) * 1000 / greatest(length, 1)) AS dps_curve,
 			quantilesExact(` + curveLevelsCSV + `)(toFloat64(players.healing_done + players.absorb_done) * 1000 / greatest(length, 1)) AS hps_curve
 		FROM boss_kill ARRAY JOIN players
-		WHERE realm = ? AND boss_remote_id = ? AND mode = ? AND length > 0`
-	args := []any{realmName, id, uint8(mode)}
+		WHERE realm = ? AND boss_remote_id = ? AND mode = ? AND length > 0
+		  AND kill_time >= ? AND kill_time < ?`
+	args := []any{realmName, id, uint8(mode), start, end}
 	if specFilter > 0 {
 		q += " AND players.talent_spec = ?"
 		args = append(args, uint16(specFilter))
@@ -113,7 +115,7 @@ func extractAtPercentile(dps, hps []SpecCurve, p int, expansion int) []SpecAtPer
 	for _, c := range dps {
 		row := byKey[c.Spec]
 		if row == nil {
-			row = &SpecAtPercentile{Spec: c.Spec, SpecLabel: wow.Spec(c.Spec)}
+			row = &SpecAtPercentile{Spec: c.Spec, SpecLabel: wow.SpecForExpansion(expansion, c.Spec)}
 			byKey[c.Spec] = row
 		}
 		row.DPS = int64(c.Values[idx])
@@ -121,7 +123,7 @@ func extractAtPercentile(dps, hps []SpecCurve, p int, expansion int) []SpecAtPer
 	for _, c := range hps {
 		row := byKey[c.Spec]
 		if row == nil {
-			row = &SpecAtPercentile{Spec: c.Spec, SpecLabel: wow.Spec(c.Spec)}
+			row = &SpecAtPercentile{Spec: c.Spec, SpecLabel: wow.SpecForExpansion(expansion, c.Spec)}
 			byKey[c.Spec] = row
 		}
 		row.HPS = int64(c.Values[idx])
@@ -155,7 +157,7 @@ func buildCurveJSON(title string, expansion int, curves []SpecCurve, selectedP i
 	series := make([]any, 0, len(curves))
 	legend := make([]string, 0, len(curves))
 	for _, c := range curves {
-		label := wow.Spec(c.Spec)
+		label := wow.SpecForExpansion(expansion, c.Spec)
 		if label == "" {
 			label = "Spec " + strconv.Itoa(c.Spec)
 		}
@@ -206,14 +208,14 @@ func buildCurveJSON(title string, expansion int, curves []SpecCurve, selectedP i
 			"containLabel": true,
 		},
 		"xAxis": map[string]any{
-			"type":      "value",
-			"name":      "Percentile",
+			"type":         "value",
+			"name":         "Percentile",
 			"nameLocation": "middle",
-			"nameGap":   24,
-			"min":       1,
-			"max":       99,
-			"axisLabel": map[string]any{"color": "#7a8294", "formatter": "p{value}"},
-			"splitLine": map[string]any{"lineStyle": map[string]any{"color": "#232936"}},
+			"nameGap":      24,
+			"min":          1,
+			"max":          99,
+			"axisLabel":    map[string]any{"color": "#7a8294", "formatter": "p{value}"},
+			"splitLine":    map[string]any{"lineStyle": map[string]any{"color": "#232936"}},
 		},
 		"yAxis": map[string]any{
 			"type":      "value",

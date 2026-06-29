@@ -2,11 +2,11 @@ package wow
 
 import "strings"
 
-// RaidOrder returns the chronological release position for a raid name.
+// RaidPosition returns the chronological release position for a raid name.
 // Higher value = more recent raid. Returns 0 for unknown raid names.
 // Falls back to a normalized (lowercase, apostrophe-stripped) lookup so that
 // minor API variants (e.g. curly vs straight apostrophe) still match.
-func RaidOrder(name string) int {
+func RaidPosition(name string) int {
 	if pos, ok := raidPositions[name]; ok {
 		return pos
 	}
@@ -17,7 +17,7 @@ func normalizeRaidName(s string) string {
 	s = strings.ToLower(s)
 	s = strings.ReplaceAll(s, "’", "") // right single quotation mark '
 	s = strings.ReplaceAll(s, "‘", "") // left single quotation mark '
-	s = strings.ReplaceAll(s, "'", "")      // ASCII apostrophe
+	s = strings.ReplaceAll(s, "'", "") // ASCII apostrophe
 	return strings.Join(strings.Fields(s), " ")
 }
 
@@ -30,15 +30,24 @@ var raidPositionsNorm = func() map[string]int {
 	return m
 }()
 
-// BossOrder returns a global sort key for a boss by its remote_id (NPC ID).
+// BossSortKey returns a global sort key for a boss by its remote_id (NPC ID).
 // Key encodes both the raid release position and the encounter order within
 // the raid: (raidPosition * 100 + bossPositionWithinRaid).
 // Returns (100_000 + remoteID) for unknown bosses so they sort stably at the end.
-func BossOrder(remoteID uint32) int {
+func BossSortKey(remoteID uint32) int {
 	if pos, ok := bossPositions[remoteID]; ok {
 		return pos
 	}
 	return 100_000 + int(remoteID)
+}
+
+// BossPosition returns the encounter order within the boss's raid.
+// Returns 0 for unknown bosses.
+func BossPosition(remoteID uint32) int {
+	if pos, ok := bossPositions[remoteID]; ok {
+		return pos % 100
+	}
+	return 0
 }
 
 // raidPositions maps raid name → chronological release position (higher = newer).
@@ -59,13 +68,13 @@ var raidPositions = map[string]int{
 	"Dragon Soul":              11,
 
 	// Vanilla (Kronos)
-	"Molten Core":          12,
-	"Onyxia's Lair":        13,
-	"Blackwing Lair":       14,
-	"Zul'Gurub":            15,
-	"Ruins of Ahn'Qiraj":   16,
-	"Ahn'Qiraj Temple":     17,
-	"Naxxramas":            18,
+	"Molten Core":        12,
+	"Onyxia's Lair":      13,
+	"Blackwing Lair":     14,
+	"Zul'Gurub":          15,
+	"Ruins of Ahn'Qiraj": 16,
+	"Ahn'Qiraj Temple":   17,
+	"Naxxramas":          18,
 }
 
 // bossPositions maps boss NPC ID → global sort key (raidPosition*100 + encounterIndex).

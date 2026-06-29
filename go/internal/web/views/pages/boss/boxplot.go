@@ -57,7 +57,7 @@ func buildBoxPlotJSON(title string, curves []SpecCurve, realmName string) ([]byt
 		mx := c.Values[98] // p99
 		boxes = append(boxes, [5]float64{mn, q1, med, q3, mx})
 
-		class := wow.ClassFromSpec(c.Spec)
+		class := wow.ClassFromSpecForRealm(realmName, c.Spec)
 		specKey := "s" + strconv.Itoa(c.Spec)
 		classKey := "c" + strconv.Itoa(class)
 
@@ -70,7 +70,7 @@ func buildBoxPlotJSON(title string, curves []SpecCurve, realmName string) ([]byt
 
 		// "{classKey|}{specKey|} Spec Name" — ECharts parses rich-text tokens
 		// after substituting {value} so the icons render inline with the label.
-		label := "{" + classKey + "|}{" + specKey + "|} " + wow.Spec(c.Spec)
+		label := "{" + classKey + "|}{" + specKey + "|} " + wow.SpecForRealm(realmName, c.Spec)
 		categories = append(categories, label)
 	}
 

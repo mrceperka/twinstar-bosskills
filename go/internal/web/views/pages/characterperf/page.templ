@@ -13,6 +13,8 @@ type ViewModel struct {
 	Char        CharacterInfo
 	Filter      FilterValues
 	BossOptions []Option
+	RaidOptions []Option
+	SpecOptions []Option
 	ModeOptions []Option
 	Charts      []BossChart
 }
@@ -25,8 +27,12 @@ type CharacterInfo struct {
 }
 
 type FilterValues struct {
-	Bosses []uint32
-	Modes  []int
+	Bosses  []uint32
+	Raids   []string
+	Modes   []int
+	Specs   []int
+	IlvlMin int
+	IlvlMax int
 }
 
 type Option struct {
@@ -82,7 +88,15 @@ templ Page(vm ViewModel) {
 }
 
 templ filterForm(vm ViewModel) {
-	<form method="GET" class="grid gap-3 sm:grid-cols-2">
+	<form method="GET" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Raid</span>
+			<select name="raid" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-32">
+				for _, o := range vm.RaidOptions {
+					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
+				}
+			</select>
+		</label>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Boss</span>
 			<select name="boss" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-32">
@@ -92,14 +106,30 @@ templ filterForm(vm ViewModel) {
 			</select>
 		</label>
 		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Spec</span>
+			<select name="spec" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-32">
+				for _, o := range vm.SpecOptions {
+					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
+				}
+			</select>
+		</label>
+		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Difficulty</span>
-			<select name="mode" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-32">
+			<select name="difficulty" multiple class={ selectFilterClass(len(vm.Filter.Modes) > 0), "min-h-32" }>
 				for _, o := range vm.ModeOptions {
 					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
 				}
 			</select>
 		</label>
-		<div class="sm:col-span-2 flex justify-end gap-2">
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Min iLvl</span>
+			<input name="ilvl_min" type="number" min="0" value={ itoa(vm.Filter.IlvlMin) } class="rounded border border-bk-border bg-bk-bg p-2"/>
+		</label>
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Max iLvl</span>
+			<input name="ilvl_max" type="number" min="0" value={ itoa(vm.Filter.IlvlMax) } class="rounded border border-bk-border bg-bk-bg p-2"/>
+		</label>
+		<div class="sm:col-span-2 lg:col-span-4 flex justify-end gap-2">
 			<a href={ resetHref(vm.Realm, vm.CharName) } class="rounded border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-text">Reset</a>
 			<button type="submit" class="rounded bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Apply</button>
 		</div>

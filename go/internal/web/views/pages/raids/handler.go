@@ -5,15 +5,15 @@ import (
 	"database/sql"
 	"net/http"
 	"sort"
-	"strconv"
 	"time"
 
 	"github.com/mrceperka/twinstar-bosskills/go/internal/domain"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/query"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/router"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
 )
 
 type Deps struct {
@@ -29,12 +29,11 @@ func Handler(deps Deps) http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 
-		// Default to current raid lock; allow ?offset=N for previous locks.
+		// Default to current raid lock; accept Node's ?raidlock=N and the
+		// older Go ?offset=N alias for previous locks.
 		offset := 0
-		if v := r.URL.Query().Get("offset"); v != "" {
-			if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-				offset = n
-			}
+		if n, ok := query.RaidLock(r.URL.Query()); ok {
+			offset = n
 		}
 		win := domain.RaidLock(time.Now().UTC(), offset)
 
@@ -55,6 +54,7 @@ func Handler(deps Deps) http.HandlerFunc {
 			Lock: LockLabel{
 				StartLabel: win.Start.Format("Jan 2 06:00 UTC"),
 				EndLabel:   win.End.Format("Jan 2 06:00 UTC"),
+				Offset:     offset,
 			},
 			Raids:        raidList,
 			Difficulties: difficulties,
@@ -64,10 +64,65 @@ func Handler(deps Deps) http.HandlerFunc {
 	}
 }
 
-// loadRaids returns one row per (raid_name, boss_remote_id) with a kill count
-// per difficulty (mode). One round trip into CH.
+// loadRaids returns every known boss with a kill count per difficulty for
+// the selected lock. Bosses with no kills are kept visible.
 func loadRaids(ctx context.Context, db *sql.DB, realmName string, win domain.RaidLockWindow) ([]Raid, []string, error) {
-	const q = `
+	const bossQ = `
+		SELECT b.raid_name, b.remote_id, b.name, b.position, ifNull(r.position, 0)
+		FROM (
+			SELECT raid_name, remote_id, name, position
+			FROM boss FINAL
+			WHERE realm = ?
+		) AS b
+		LEFT ANY JOIN (
+			SELECT name, position
+			FROM raid FINAL
+			WHERE realm = ?
+		) AS r ON r.name = b.raid_name
+	`
+	bossRows, err := db.QueryContext(ctx, bossQ, realmName, realmName)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer bossRows.Close()
+
+	type bossKey struct {
+		Raid     string
+		RemoteID uint32
+	}
+	type bossAgg struct {
+		Name         string
+		BossPosition uint16
+		RaidPosition uint16
+		KillsByMode  map[int]int
+	}
+
+	bosses := map[bossKey]*bossAgg{}
+
+	for bossRows.Next() {
+		var (
+			raidName string
+			remoteID uint32
+			bossName string
+			bossPos  uint16
+			raidPos  uint16
+		)
+		if err := bossRows.Scan(&raidName, &remoteID, &bossName, &bossPos, &raidPos); err != nil {
+			return nil, nil, err
+		}
+		k := bossKey{Raid: raidName, RemoteID: remoteID}
+		bosses[k] = &bossAgg{
+			Name:         bossName,
+			BossPosition: bossPos,
+			RaidPosition: raidPos,
+			KillsByMode:  map[int]int{},
+		}
+	}
+	if err := bossRows.Err(); err != nil {
+		return nil, nil, err
+	}
+
+	const killQ = `
 		SELECT raid_name,
 		       boss_remote_id,
 		       any(boss_name) AS boss_name,
@@ -77,24 +132,11 @@ func loadRaids(ctx context.Context, db *sql.DB, realmName string, win domain.Rai
 		WHERE realm = ? AND kill_time >= ? AND kill_time < ?
 		GROUP BY raid_name, boss_remote_id, mode
 	`
-	rows, err := db.QueryContext(ctx, q, realmName, win.Start, win.End)
+	rows, err := db.QueryContext(ctx, killQ, realmName, win.Start, win.End)
 	if err != nil {
 		return nil, nil, err
 	}
 	defer rows.Close()
-
-	type bossKey struct {
-		Raid     string
-		RemoteID uint32
-	}
-	type bossAgg struct {
-		Name        string
-		KillsByMode map[int]int
-	}
-
-	bosses := map[bossKey]*bossAgg{}
-	modeSet := map[int]struct{}{}
-
 	for rows.Next() {
 		var (
 			raidName string
@@ -113,18 +155,14 @@ func loadRaids(ctx context.Context, db *sql.DB, realmName string, win domain.Rai
 			bosses[k] = agg
 		}
 		agg.KillsByMode[int(mode)] = int(kills)
-		modeSet[int(mode)] = struct{}{}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, nil, err
 	}
 
-	modes := make([]int, 0, len(modeSet))
-	for m := range modeSet {
-		modes = append(modes, m)
-	}
-	sort.Ints(modes)
 	exp := realm.Expansion(realmName)
+	modes := wow.RaidDifficulties(exp)
+	sort.Ints(modes)
 	difficulties := make([]string, len(modes))
 	for i, m := range modes {
 		difficulties[i] = wow.Difficulty(exp, m)
@@ -133,6 +171,7 @@ func loadRaids(ctx context.Context, db *sql.DB, realmName string, win domain.Rai
 	// Group bosses by raid; sort raids by total kills desc; bosses by remote_id.
 	type raidAgg struct {
 		Name       string
+		Position   uint16
 		Bosses     []BossRow
 		TotalKills int
 	}
@@ -140,8 +179,11 @@ func loadRaids(ctx context.Context, db *sql.DB, realmName string, win domain.Rai
 	for k, agg := range bosses {
 		ra, ok := raidMap[k.Raid]
 		if !ok {
-			ra = &raidAgg{Name: k.Raid}
+			ra = &raidAgg{Name: k.Raid, Position: agg.RaidPosition}
 			raidMap[k.Raid] = ra
+		}
+		if ra.Position == 0 {
+			ra.Position = agg.RaidPosition
 		}
 		row := BossRow{
 			Name:              agg.Name,
@@ -160,8 +202,8 @@ func loadRaids(ctx context.Context, db *sql.DB, realmName string, win domain.Rai
 	out := make([]Raid, 0, len(raidMap))
 	for _, ra := range raidMap {
 		sort.Slice(ra.Bosses, func(i, j int) bool {
-			oi := wow.BossOrder(ra.Bosses[i].RemoteID)
-			oj := wow.BossOrder(ra.Bosses[j].RemoteID)
+			oi := bosses[bossKey{Raid: ra.Name, RemoteID: ra.Bosses[i].RemoteID}].BossPosition
+			oj := bosses[bossKey{Raid: ra.Name, RemoteID: ra.Bosses[j].RemoteID}].BossPosition
 			if oi != oj {
 				return oi < oj
 			}
@@ -170,8 +212,8 @@ func loadRaids(ctx context.Context, db *sql.DB, realmName string, win domain.Rai
 		out = append(out, Raid{Name: ra.Name, Bosses: ra.Bosses})
 	}
 	sort.Slice(out, func(i, j int) bool {
-		pi := wow.RaidOrder(out[i].Name)
-		pj := wow.RaidOrder(out[j].Name)
+		pi := raidMap[out[i].Name].Position
+		pj := raidMap[out[j].Name].Position
 		// Unknowns (position=0) sort after all known raids.
 		if pi == 0 && pj == 0 {
 			return out[i].Name < out[j].Name

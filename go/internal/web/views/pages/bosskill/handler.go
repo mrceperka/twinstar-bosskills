@@ -13,6 +13,7 @@ import (
 	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/router"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/sqlutil"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
 )
@@ -227,7 +228,7 @@ func loadKill(ctx context.Context, db *sql.DB, realmName, remoteID string, expan
 			ClassLabel:    wow.Class(int(pClass[i])),
 			Race:          int(pRace[i]),
 			Spec:          int(pSpec[i]),
-			SpecLabel:     wow.Spec(int(pSpec[i])),
+			SpecLabel:     wow.SpecForExpansion(expansion, int(pSpec[i])),
 			ItemLvl:       float64(pIlvl[i]),
 			DPS:           dps,
 			HPS:           hps,
@@ -266,19 +267,22 @@ func loadKill(ctx context.Context, db *sql.DB, realmName, remoteID string, expan
 		return KillInfo{}, nil, nil, nil, nil, false, err
 	}
 
-	// Loot. "1 of N ~ X%" drop-chance label per item.
-	lootCountTotal := 0
-	for _, c := range lootCount {
-		lootCountTotal += int(c)
+	itemIDs := make([]uint32, 0, len(lootItemID))
+	for _, id := range lootItemID {
+		itemIDs = append(itemIDs, id)
 	}
+	lootChances, err := loadLootChances(ctx, db, realmName, bossID, mode, itemIDs)
+	if err != nil {
+		return KillInfo{}, nil, nil, nil, nil, false, err
+	}
+
 	loot = make([]LootRow, 0, len(lootItemID))
 	for i, id := range lootItemID {
-		row := LootRow{ItemID: id, Count: int(lootCount[i])}
-		if lootCountTotal > 0 {
-			pct := 100.0 / float64(lootCountTotal)
-			row.DropChanceLabel = "1 of " + strconv.Itoa(lootCountTotal) +
-				" ~ " + strconv.FormatFloat(pct, 'f', 2, 64) + "%"
+		count := 1
+		if i < len(lootCount) && lootCount[i] > 0 {
+			count = int(lootCount[i])
 		}
+		row := LootRow{ItemID: id, Count: count, DropChanceLabel: lootChances[id]}
 		loot = append(loot, row)
 	}
 
@@ -303,6 +307,72 @@ func loadKill(ctx context.Context, db *sql.DB, realmName, remoteID string, expan
 	// Fight timeline echarts JSON.
 	timelineJSON, _ = buildTimelineJSON(tlTime, tlEncDmg, tlEncHeal, tlRaidDmg, tlRaidHeal, deaths)
 	return info, players, loot, deaths, timelineJSON, true, nil
+}
+
+func loadLootChances(ctx context.Context, db *sql.DB, realmName string, bossID uint32, mode uint8, itemIDs []uint32) (map[uint32]string, error) {
+	out := map[uint32]string{}
+	if len(itemIDs) == 0 {
+		return out, nil
+	}
+
+	const totalQ = `
+		SELECT count()
+		FROM boss_kill
+		ARRAY JOIN loot
+		WHERE realm = ?
+		  AND boss_remote_id = ?
+		  AND mode = ?
+	`
+	var total uint64
+	if err := db.QueryRowContext(ctx, totalQ, realmName, bossID, mode).Scan(&total); err != nil {
+		return nil, err
+	}
+	if total == 0 {
+		return out, nil
+	}
+
+	seen := map[uint32]bool{}
+	unique := make([]uint32, 0, len(itemIDs))
+	for _, id := range itemIDs {
+		if !seen[id] {
+			seen[id] = true
+			unique = append(unique, id)
+		}
+	}
+
+	ph := sqlutil.Placeholders(len(unique))
+	args := make([]any, 0, len(unique)+3)
+	args = append(args, realmName, bossID, mode)
+	for _, id := range unique {
+		args = append(args, id)
+	}
+	q := `
+		SELECT loot.item_id, count()
+		FROM boss_kill
+		ARRAY JOIN loot
+		WHERE realm = ?
+		  AND boss_remote_id = ?
+		  AND mode = ?
+		  AND loot.item_id IN (` + ph + `)
+		GROUP BY loot.item_id
+	`
+	rows, err := db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var itemID uint32
+		var count uint64
+		if err := rows.Scan(&itemID, &count); err != nil {
+			return nil, err
+		}
+		pct := float64(count) * 100.0 / float64(total)
+		out[itemID] = strconv.FormatUint(count, 10) + " of " +
+			strconv.FormatUint(total, 10) + " ~ " +
+			strconv.FormatFloat(pct, 'f', 2, 64) + "%"
+	}
+	return out, rows.Err()
 }
 
 // fillPercentiles fills players[i].DPSPercentile / HPSPercentile with the
@@ -410,19 +480,44 @@ func percentileRank(sorted []uint64, v uint64) float64 {
 //   - Deaths          (markers from the deaths slice)
 //   - Ressurects      (markers from the deaths slice, time < 0)
 //
-// X axis: seconds since pull start. Y axis: per-second damage / healing.
+// X axis: timeline categories in seconds since pull start. Y axis: per-second damage / healing.
 func buildTimelineJSON(tlTime []int32, encDmg, encHeal, raidDmg, raidHeal []uint64, deaths []DeathRow) ([]byte, error) {
-	if len(tlTime) == 0 {
+	n := min(len(tlTime), len(encDmg), len(encHeal), len(raidDmg), len(raidHeal))
+	if n == 0 {
 		return []byte("{}"), nil
 	}
 
-	// timeline.time is already in seconds; do not divide further.
-	mk := func(vals []uint64) [][2]any {
-		out := make([][2]any, len(vals))
-		for i, v := range vals {
-			out[i] = [2]any{int(tlTime[i]), v}
+	type timelineSample struct {
+		time     int
+		encDmg   uint64
+		encHeal  uint64
+		raidDmg  uint64
+		raidHeal uint64
+	}
+
+	samples := make([]timelineSample, n)
+	for i := 0; i < n; i++ {
+		samples[i] = timelineSample{
+			time:     int(tlTime[i]),
+			encDmg:   encDmg[i],
+			encHeal:  encHeal[i],
+			raidDmg:  raidDmg[i],
+			raidHeal: raidHeal[i],
 		}
-		return out
+	}
+	sort.Slice(samples, func(i, j int) bool { return samples[i].time < samples[j].time })
+
+	xAxisData := make([]int, n)
+	encDmgData := make([]uint64, n)
+	encHealData := make([]uint64, n)
+	raidDmgData := make([]uint64, n)
+	raidHealData := make([]uint64, n)
+	for i, sample := range samples {
+		xAxisData[i] = sample.time
+		encDmgData[i] = sample.encDmg
+		encHealData[i] = sample.encHeal
+		raidDmgData[i] = sample.raidDmg
+		raidHealData[i] = sample.raidHeal
 	}
 
 	// Deaths/ress scatter on secondary (hidden) y-axes so they appear at the
@@ -479,12 +574,13 @@ func buildTimelineJSON(tlTime []int32, encDmg, encHeal, raidDmg, raidHeal []uint
 			"containLabel": true,
 		},
 		"xAxis": map[string]any{
-			"type":      "value",
-			"name":      "Seconds",
-			"axisLabel": map[string]any{"color": "#c5c5c5"},
-			"axisLine":  map[string]any{"lineStyle": map[string]any{"color": "#c5c5c5"}},
-			"axisTick":  map[string]any{"lineStyle": map[string]any{"color": "#c5c5c5"}},
-			"splitLine": map[string]any{"lineStyle": map[string]any{"color": "rgba(255,255,255,0.07)"}},
+			"type":        "category",
+			"boundaryGap": false,
+			"data":        xAxisData,
+			"axisLabel":   map[string]any{"color": "#c5c5c5"},
+			"axisLine":    map[string]any{"lineStyle": map[string]any{"color": "#c5c5c5"}},
+			"axisTick":    map[string]any{"lineStyle": map[string]any{"color": "#c5c5c5"}},
+			"splitLine":   map[string]any{"lineStyle": map[string]any{"color": "rgba(255,255,255,0.07)"}},
 		},
 		// Three y-axes: [0] main data, [1] deaths (hidden 0–1), [2] ress (hidden 0–1)
 		"yAxis": []any{
@@ -499,10 +595,10 @@ func buildTimelineJSON(tlTime []int32, encDmg, encHeal, raidDmg, raidHeal []uint
 			map[string]any{"type": "value", "show": false, "min": 0, "max": 1},
 		},
 		"series": []any{
-			map[string]any{"name": "Enemy Healing", "type": "line", "data": mk(encHeal), "smooth": true, "showSymbol": false, "lineStyle": map[string]any{"color": "#68ccef"}, "color": "#68ccef"},
-			map[string]any{"name": "Enemy Damage", "type": "line", "data": mk(encDmg), "smooth": true, "showSymbol": false, "lineStyle": map[string]any{"color": "#ff4040"}, "color": "#ff4040"},
-			map[string]any{"name": "Raid Damage", "type": "line", "data": mk(raidDmg), "smooth": true, "showSymbol": false, "lineStyle": map[string]any{"color": "#ffd100"}, "color": "#ffd100"},
-			map[string]any{"name": "Raid Healing", "type": "line", "data": mk(raidHeal), "smooth": true, "showSymbol": false, "lineStyle": map[string]any{"color": "#1eff00"}, "color": "#1eff00"},
+			map[string]any{"name": "Enemy Healing", "type": "line", "data": encHealData, "smooth": true, "showSymbol": false, "lineStyle": map[string]any{"color": "#68ccef"}, "color": "#68ccef"},
+			map[string]any{"name": "Enemy Damage", "type": "line", "data": encDmgData, "smooth": true, "showSymbol": false, "lineStyle": map[string]any{"color": "#ff4040"}, "color": "#ff4040"},
+			map[string]any{"name": "Raid Damage", "type": "line", "data": raidDmgData, "smooth": true, "showSymbol": false, "lineStyle": map[string]any{"color": "#ffd100"}, "color": "#ffd100"},
+			map[string]any{"name": "Raid Healing", "type": "line", "data": raidHealData, "smooth": true, "showSymbol": false, "lineStyle": map[string]any{"color": "#1eff00"}, "color": "#1eff00"},
 			map[string]any{
 				"name": "Deaths", "type": "scatter", "yAxisIndex": 1,
 				"data": deathPts, "symbolSize": 10,

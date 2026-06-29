@@ -14,15 +14,15 @@ type MedianPair struct {
 
 // loadMedianByBoss returns p50 DPS and p50 HPS per (boss_remote_id, mode),
 // optionally filtered by modes. Computes exact percentiles directly from boss_kill.
-func loadMedianByBoss(ctx context.Context, db *sql.DB, realmName string, bossIDs []uint32, modes []int) (
+func loadMedianByBoss(ctx context.Context, db *sql.DB, realmName string, bossIDs []uint32, filter FilterValues) (
 	map[uint32]map[int]MedianPair, error,
 ) {
 	out := map[uint32]map[int]MedianPair{}
-	if len(bossIDs) == 0 {
+	if len(bossIDs) == 0 || len(filter.Specs) != 1 {
 		return out, nil
 	}
 
-	args := make([]any, 0, len(bossIDs)+len(modes)+1)
+	args := make([]any, 0, len(bossIDs)+len(filter.Modes)+4)
 	args = append(args, realmName)
 	bossPH := make([]string, len(bossIDs))
 	for i, id := range bossIDs {
@@ -33,15 +33,24 @@ func loadMedianByBoss(ctx context.Context, db *sql.DB, realmName string, bossIDs
 		"quantileExact(0.5)(toFloat64(players.dmg_done) * 1000 / greatest(length, 1)) AS p50_dps, " +
 		"quantileExact(0.5)(toFloat64(players.healing_done + players.absorb_done) * 1000 / greatest(length, 1)) AS p50_hps " +
 		"FROM boss_kill ARRAY JOIN players " +
-		"WHERE realm = ? AND boss_remote_id IN (" + strings.Join(bossPH, ",") + ") AND length > 0"
+		"WHERE realm = ? AND boss_remote_id IN (" + strings.Join(bossPH, ",") + ") AND length > 0 AND players.talent_spec = ?"
+	args = append(args, uint16(filter.Specs[0]))
 
-	if len(modes) > 0 {
-		modePH := make([]string, len(modes))
-		for i, m := range modes {
+	if len(filter.Modes) > 0 {
+		modePH := make([]string, len(filter.Modes))
+		for i, m := range filter.Modes {
 			modePH[i] = "?"
 			args = append(args, uint8(m))
 		}
 		q += " AND mode IN (" + strings.Join(modePH, ",") + ")"
+	}
+	if filter.IlvlMin > 0 {
+		q += " AND toFloat32(players.avg_item_lvl) >= ?"
+		args = append(args, float32(filter.IlvlMin))
+	}
+	if filter.IlvlMax > 0 {
+		q += " AND toFloat32(players.avg_item_lvl) <= ?"
+		args = append(args, float32(filter.IlvlMax))
 	}
 	q += " GROUP BY boss_remote_id, mode"
 

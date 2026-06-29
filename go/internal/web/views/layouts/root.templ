@@ -1,6 +1,10 @@
 package layouts
 
-import "github.com/mrceperka/twinstar-bosskills/go/internal/realm"
+import (
+	"strings"
+
+	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
+)
 
 // Root is the base HTML layout. Pages compose it with `@layouts.Root(...) { ... }`.
 // Subnav, page title and meta come in via PageMeta.
@@ -45,19 +49,7 @@ templ topbar(meta PageMeta) {
 		<div class="flex items-center gap-3">
 			<a href="/" class="font-semibold tracking-wide">Twinstar Bosskills</a>
 			if meta.Realm != "" {
-				<select
-					data-navigate
-					aria-label="Realm"
-					class="ml-2 rounded border border-bk-accent bg-bk-bg px-2 py-1 text-bk-fg"
-				>
-					for _, r := range realm.All() {
-						if r == meta.Realm {
-							<option value={ "/" + r + "/" } selected>{ r }</option>
-						} else {
-							<option value={ "/" + r + "/" }>{ r }</option>
-						}
-					}
-				</select>
+				@realmPicker(meta.Realm)
 			}
 		</div>
 		<nav>
@@ -65,7 +57,7 @@ templ topbar(meta PageMeta) {
 				<ul>
 					<li><a href={ realmHref(meta.Realm, "/boss-kills") }>Latest</a></li>
 					<li><a href={ realmHref(meta.Realm, "/raids") }>Raids</a></li>
-					if realm.IsPublic(meta.Realm) {
+					if realm.IsPublic(meta.Realm) && !realm.IsVanilla(realm.Expansion(meta.Realm)) {
 						<li><a href={ realmHref(meta.Realm, "/ranks") }>Ranks</a></li>
 					}
 					<li><a href={ realmHref(meta.Realm, "/characters") }>Characters</a></li>
@@ -74,6 +66,21 @@ templ topbar(meta PageMeta) {
 		</nav>
 		<div></div>
 	</header>
+}
+
+templ realmPicker(activeRealm string) {
+	<div class="bk-realm-picker" role="list" aria-label="Realm">
+		for _, r := range realmPickerRealms() {
+			<a
+				href={ realmHref(r, "/") }
+				class={ realmPickerClass(r, activeRealm) }
+				aria-label={ "Realm " + r }
+				role="listitem"
+			>
+				<img src={ realmLogoURL(r) } width="32" height="32" alt={ "Realm " + r + " icon" }/>
+			</a>
+		}
+	</div>
 }
 
 templ footer() {
@@ -111,4 +118,25 @@ func jsURL(m PageMeta, name string) string {
 
 func realmHref(realmName, suffix string) templ.SafeURL {
 	return templ.SafeURL("/" + realmName + suffix)
+}
+
+func realmPickerRealms() []string {
+	out := make([]string, 0, len(realm.All()))
+	for _, r := range realm.All() {
+		if realm.IsPublic(r) && realm.MergedTo(r) == "" {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func realmPickerClass(realmName, activeRealm string) string {
+	if realm.Normalize(realmName) == realm.Normalize(activeRealm) {
+		return "bk-realm-link active"
+	}
+	return "bk-realm-link"
+}
+
+func realmLogoURL(realmName string) templ.SafeURL {
+	return templ.SafeURL("/static/logos/32x32/" + strings.ToLower(realm.Normalize(realmName)) + ".png")
 }

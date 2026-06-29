@@ -1,20 +1,18 @@
 package characterperf
 
 import (
-	"strconv"
-
 	"github.com/a-h/templ"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/viewhelpers"
 )
-
-func profileHref(realmName, name string) templ.SafeURL {
-	return templ.SafeURL(links.Character(realmName, name))
-}
 
 func resetHref(realmName, name string) templ.SafeURL {
 	return templ.SafeURL(links.CharacterPerformance(realmName, name))
 }
 
-func bossHref(realmName string, bossID uint32, mode int) templ.SafeURL {
-	return templ.SafeURL(links.Boss(realmName, bossID) + "?mode=" + strconv.Itoa(mode))
-}
+var (
+	profileHref       = viewhelpers.CharacterHref
+	bossHref          = viewhelpers.BossWithDifficultyHref
+	itoa              = viewhelpers.EmptyItoa
+	selectFilterClass = viewhelpers.SelectFilterClass
+)

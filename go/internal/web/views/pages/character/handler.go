@@ -125,7 +125,7 @@ func RankingsHandler(deps Deps) http.HandlerFunc {
 			return
 		}
 
-		rankRows, err := loadRankings(ctx, deps.DB, realmName, guid)
+		rankRows, err := loadRankings(ctx, deps.DB, realmName, guid, expansion)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -141,13 +141,13 @@ func RankingsHandler(deps Deps) http.HandlerFunc {
 		for _, rr := range rankRows {
 			bossIDsSet[rr.BossID] = true
 		}
-		bossNames, err := loadBossNames(ctx, deps.DB, realmName, mapKeysU32(bossIDsSet))
+		bossMeta, err := loadBossMeta(ctx, deps.DB, realmName, mapKeysU32(bossIDsSet))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		dpsGroups, hpsGroups := buildBossGroups(rankRows, killDetails, bossNames, expansion, currentSpec)
+		dpsGroups, hpsGroups := buildBossGroups(rankRows, killDetails, bossMeta, expansion, currentSpec)
 		specButtons := buildSpecButtons(rankRows, currentSpec, realmName, name)
 
 		vm := RankingsViewModel{
@@ -190,7 +190,7 @@ type killDetail struct {
 	HPSilvl   float32
 }
 
-func loadRankings(ctx context.Context, db *sql.DB, realmName string, guid uint64) ([]rankRow, error) {
+func loadRankings(ctx context.Context, db *sql.DB, realmName string, guid uint64, expansion int) ([]rankRow, error) {
 	// my_bests: character's best DPS/HPS per (boss, mode, spec)
 	// peers: all players' best on the same (boss, mode, spec) combos
 	// Final: count peers with higher value to compute rank (1-indexed)
@@ -249,8 +249,8 @@ func loadRankings(ctx context.Context, db *sql.DB, realmName string, guid uint64
 			BossID:    bossID,
 			Mode:      int(mode),
 			Spec:      s,
-			SpecLabel: wow.Spec(s),
-			Class:     wow.ClassFromSpec(s),
+			SpecLabel: wow.SpecForExpansion(expansion, s),
+			Class:     wow.ClassFromSpecForExpansion(expansion, s),
 			DPS:       int64(dps),
 			HPS:       int64(hps),
 			DPSRank:   int(dpsRank),
@@ -305,7 +305,12 @@ func loadBestKillDetails(ctx context.Context, db *sql.DB, realmName string, guid
 	return out, rows.Err()
 }
 
-func buildBossGroups(rows []rankRow, details map[bossKey]killDetail, names map[uint32]string, expansion int, specFilter int) (dpsGroups, hpsGroups []BossGroup) {
+type bossMeta struct {
+	Name     string
+	Position uint16
+}
+
+func buildBossGroups(rows []rankRow, details map[bossKey]killDetail, meta map[uint32]bossMeta, expansion int, specFilter int) (dpsGroups, hpsGroups []BossGroup) {
 	type bossMode struct {
 		BossID uint32
 		Mode   int
@@ -328,10 +333,13 @@ func buildBossGroups(rows []rankRow, details map[bossKey]killDetail, names map[u
 	}
 
 	bossName := func(id uint32) string {
-		if n := names[id]; n != "" {
-			return n
+		if m := meta[id]; m.Name != "" {
+			return m.Name
 		}
-		return uitoa(uint64(id))
+		return strconv.FormatUint(uint64(id), 10)
+	}
+	bossPosition := func(id uint32) uint16 {
+		return meta[id].Position
 	}
 
 	dpsByBoss := map[uint32][]RankingEntry{}
@@ -356,8 +364,8 @@ func buildBossGroups(rows []rankRow, details map[bossKey]killDetail, names map[u
 		dpsGroups = append(dpsGroups, BossGroup{BossID: bossID, Name: bossName(bossID), Entries: entries})
 	}
 	sort.Slice(dpsGroups, func(i, j int) bool {
-		oi := wow.BossOrder(dpsGroups[i].BossID)
-		oj := wow.BossOrder(dpsGroups[j].BossID)
+		oi := bossPosition(dpsGroups[i].BossID)
+		oj := bossPosition(dpsGroups[j].BossID)
 		if oi != oj {
 			return oi < oj
 		}
@@ -386,8 +394,8 @@ func buildBossGroups(rows []rankRow, details map[bossKey]killDetail, names map[u
 		hpsGroups = append(hpsGroups, BossGroup{BossID: bossID, Name: bossName(bossID), Entries: entries})
 	}
 	sort.Slice(hpsGroups, func(i, j int) bool {
-		oi := wow.BossOrder(hpsGroups[i].BossID)
-		oj := wow.BossOrder(hpsGroups[j].BossID)
+		oi := bossPosition(hpsGroups[i].BossID)
+		oj := bossPosition(hpsGroups[j].BossID)
 		if oi != oj {
 			return oi < oj
 		}
@@ -500,9 +508,9 @@ func loadRecentKills(ctx context.Context, db *sql.DB, realmName string, guid uin
 			BossID:     bossID,
 			Mode:       int(mode),
 			ModeLabel:  wow.Difficulty(expansion, int(mode)),
-			Class:      wow.ClassFromSpec(s),
+			Class:      wow.ClassFromSpecForExpansion(expansion, s),
 			Spec:       s,
-			SpecLabel:  wow.Spec(s),
+			SpecLabel:  wow.SpecForExpansion(expansion, s),
 			DPS:        int64(dps),
 			HPS:        int64(hps),
 			LengthSec:  int(length) / 1000,
@@ -523,8 +531,8 @@ func loadRecentKills(ctx context.Context, db *sql.DB, realmName string, guid uin
 	return out, int(total), nil
 }
 
-func loadBossNames(ctx context.Context, db *sql.DB, realmName string, ids []uint32) (map[uint32]string, error) {
-	out := map[uint32]string{}
+func loadBossMeta(ctx context.Context, db *sql.DB, realmName string, ids []uint32) (map[uint32]bossMeta, error) {
+	out := map[uint32]bossMeta{}
 	if len(ids) == 0 {
 		return out, nil
 	}
@@ -538,9 +546,8 @@ func loadBossNames(ctx context.Context, db *sql.DB, realmName string, ids []uint
 		ph = append(ph, '?')
 		args = append(args, id)
 	}
-	q := "SELECT boss_remote_id, any(boss_name) FROM boss_kill " +
-		"WHERE realm = ? AND boss_remote_id IN (" + string(ph) + ") " +
-		"GROUP BY boss_remote_id"
+	q := "SELECT remote_id, name, position FROM boss FINAL " +
+		"WHERE realm = ? AND remote_id IN (" + string(ph) + ")"
 	rows, err := db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -549,10 +556,11 @@ func loadBossNames(ctx context.Context, db *sql.DB, realmName string, ids []uint
 	for rows.Next() {
 		var id uint32
 		var name string
-		if err := rows.Scan(&id, &name); err != nil {
+		var position uint16
+		if err := rows.Scan(&id, &name, &position); err != nil {
 			return nil, err
 		}
-		out[id] = name
+		out[id] = bossMeta{Name: name, Position: position}
 	}
 	return out, rows.Err()
 }
@@ -563,20 +571,6 @@ func mapKeysU32(m map[uint32]bool) []uint32 {
 		out = append(out, k)
 	}
 	return out
-}
-
-func uitoa(v uint64) string {
-	if v == 0 {
-		return "0"
-	}
-	var b [20]byte
-	i := len(b)
-	for v > 0 {
-		i--
-		b[i] = byte('0' + v%10)
-		v /= 10
-	}
-	return string(b[i:])
 }
 
 func Mount(mux *http.ServeMux, deps Deps) {
