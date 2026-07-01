@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+
+	"github.com/mrceperka/twinstar-bosskills/go/internal/metric"
 )
 
 // MedianPair holds p50 DPS and p50 HPS for a (boss, mode) combination.
@@ -30,8 +32,8 @@ func loadMedianByBoss(ctx context.Context, db *sql.DB, realmName string, bossIDs
 		args = append(args, id)
 	}
 	q := "SELECT boss_remote_id, mode, " +
-		"quantileExact(0.5)(toFloat64(players.dmg_done) * 1000 / greatest(length, 1)) AS p50_dps, " +
-		"quantileExact(0.5)(toFloat64(players.healing_done + players.absorb_done) * 1000 / greatest(length, 1)) AS p50_hps " +
+		"quantileExact(0.5)(" + metric.SQLFloat64(metric.DmgDoneArrayJoin) + ") AS p50_dps, " +
+		"quantileExact(0.5)(" + metric.SQLFloat64(metric.HealAbsorbArrayJoin) + ") AS p50_hps " +
 		"FROM boss_kill ARRAY JOIN players " +
 		"WHERE realm = ? AND boss_remote_id IN (" + strings.Join(bossPH, ",") + ") AND length > 0 AND players.talent_spec = ?"
 	args = append(args, uint16(filter.Specs[0]))

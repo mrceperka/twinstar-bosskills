@@ -30,6 +30,21 @@ func tabHref(vm ViewModel, mode int) templ.SafeURL {
 	return templ.SafeURL(links.Boss(vm.Realm, vm.Boss.RemoteID) + "?" + q)
 }
 
+// previousLockHref builds a Boss URL for the previous raid lockout while
+// preserving the current mode/spec/class/percentile filters.
+func previousLockHref(vm ViewModel) templ.SafeURL {
+	q := "difficulty=" + strconv.Itoa(vm.SelectedMode) +
+		"&raidlock=" + strconv.Itoa(vm.LockOffset+1) +
+		"&p=" + strconv.Itoa(vm.SelectedPctile)
+	if vm.SelectedSpec > 0 {
+		q += "&spec=" + strconv.Itoa(vm.SelectedSpec)
+	}
+	if vm.SelectedClass > 0 {
+		q += "&class=" + strconv.Itoa(vm.SelectedClass)
+	}
+	return templ.SafeURL(links.Boss(vm.Realm, vm.Boss.RemoteID) + "?" + q)
+}
+
 // siblingHref links to a sibling boss while preserving the current mode/spec/class.
 func siblingHref(vm ViewModel, remoteID uint32) templ.SafeURL {
 	q := "difficulty=" + strconv.Itoa(vm.SelectedMode) +

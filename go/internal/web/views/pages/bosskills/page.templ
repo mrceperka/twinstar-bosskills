@@ -24,6 +24,8 @@ type FilterValues struct {
 	Bosses        []uint32
 	Raids         []string
 	Difficulties  []int
+	SortBy        string // kill_time (default), length, wipes, deaths
+	SortDir       string // asc, desc
 	// GuildOverride is set by the handler when on a private realm; it forces
 	// queries to filter by the user's guild from the cookie.
 	GuildOverride string
@@ -81,8 +83,8 @@ templ TableFragment(vm ViewModel) {
 						<th>Raid</th>
 						<th>Difficulty</th>
 						<th>Guild</th>
-						<th>Fight length</th>
-						<th>Killed</th>
+						<th>@bkSortHeader(vm, "length", "Fight length")</th>
+						<th>@bkSortHeader(vm, "kill_time", "Killed")</th>
 						<th>Fight details</th>
 					</tr>
 				</thead>
@@ -111,6 +113,25 @@ templ TableFragment(vm ViewModel) {
 	}
 }
 
+templ bkSortHeader(vm ViewModel, col string, label string) {
+	<a
+		hx-get={ sortHref(vm, col) }
+		hx-target="#kills-table"
+		hx-push-url="true"
+		href={ templ.SafeURL(sortHref(vm, col)) }
+		class="-m-2 flex items-center gap-1 p-2 cursor-pointer hover:text-bk-accent"
+	>
+		{ label }
+		if vm.Filter.SortBy == col {
+			if vm.Filter.SortDir == "asc" {
+				<span class="text-bk-accent">↑</span>
+			} else {
+				<span class="text-bk-accent">↓</span>
+			}
+		}
+	</a>
+}
+
 templ filterForm(vm ViewModel) {
 	<form
 		hx-get={ string(bosskillsURL(vm.Realm)) }
@@ -119,6 +140,8 @@ templ filterForm(vm ViewModel) {
 		hx-push-url="true"
 		class="grid gap-3 sm:grid-cols-3"
 	>
+		<input type="hidden" name="sort" value={ vm.Filter.SortBy }/>
+		<input type="hidden" name="dir" value={ vm.Filter.SortDir }/>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Raid</span>
 			<select name="raid" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-24">

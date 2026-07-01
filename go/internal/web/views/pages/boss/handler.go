@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mrceperka/twinstar-bosskills/go/internal/domain"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/metric"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/query"
@@ -356,8 +357,8 @@ func loadRankings(ctx context.Context, db *sql.DB, realmName string, id uint32, 
 			players.talent_spec                             AS spec,
 			players.name                                    AS name,
 			players.class                                   AS class,
-			toUInt64(players.dmg_done * 1000 / greatest(length, 1)) AS dps,
-			toUInt64((players.healing_done + players.absorb_done) * 1000 / greatest(length, 1)) AS hps,
+			` + metric.SQLUInt64(metric.DmgDoneArrayJoin) + ` AS dps,
+			` + metric.SQLUInt64(metric.HealAbsorbArrayJoin) + ` AS hps,
 			toUInt64(players.dmg_done)                       AS dmg_done,
 			toUInt64(players.healing_done + players.absorb_done) AS heal_done,
 			length                                           AS len,

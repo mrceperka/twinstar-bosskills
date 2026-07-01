@@ -15,4 +15,5 @@ var (
 	bossHref          = viewhelpers.BossWithDifficultyHref
 	itoa              = viewhelpers.EmptyItoa
 	selectFilterClass = viewhelpers.SelectFilterClass
+	armoryHref        = links.TwinstarArmory
 )

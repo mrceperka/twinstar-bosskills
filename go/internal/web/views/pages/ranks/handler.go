@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mrceperka/twinstar-bosskills/go/internal/domain"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/metric"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/query"
@@ -258,9 +259,9 @@ func loadKillDetails(ctx context.Context, db *sql.DB, realmName string, lockStar
 	q := `SELECT
 		boss_remote_id,
 		players.guid,
-		argMax(remote_id, toUInt64(players.dmg_done * 1000 / greatest(length, 1))) AS best_kill_id,
-		argMax(length, toUInt64(players.dmg_done * 1000 / greatest(length, 1))) AS best_length,
-		argMax(toFloat32(players.avg_item_lvl), toUInt64(players.dmg_done * 1000 / greatest(length, 1))) AS best_ilvl
+		argMax(remote_id, ` + metric.SQLUInt64(metric.DmgDoneArrayJoin) + `) AS best_kill_id,
+		argMax(length, ` + metric.SQLUInt64(metric.DmgDoneArrayJoin) + `) AS best_length,
+		argMax(toFloat32(players.avg_item_lvl), ` + metric.SQLUInt64(metric.DmgDoneArrayJoin) + `) AS best_ilvl
 	FROM boss_kill
 	ARRAY JOIN players
 	WHERE realm = ?

@@ -7,15 +7,22 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/mrceperka/twinstar-bosskills/go/internal/cache"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/metric"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/router"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/sqlutil"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
+)
+
+const (
+	defaultStatsSort = "dps"
+	defaultStatsDir  = "desc"
 )
 
 type Deps struct {
@@ -68,6 +75,9 @@ func Handler(deps Deps) http.HandlerFunc {
 			}
 		}
 
+		sortBy, sortDir := parseStatsSort(r.URL.Query())
+		sortPlayers(players, sortBy, sortDir)
+
 		vm := ViewModel{
 			Meta: layouts.PageMeta{
 				Title:      info.BossName + " kill — " + realmName,
@@ -82,9 +92,65 @@ func Handler(deps Deps) http.HandlerFunc {
 			Loot:         loot,
 			Deaths:       deaths,
 			TimelineJSON: timelineJSON,
+			SortBy:       sortBy,
+			SortDir:      sortDir,
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if middleware.IsHTMX(r) {
+			_ = StatsTableFragment(vm).Render(r.Context(), w)
+			return
+		}
 		_ = Page(vm).Render(r.Context(), w)
+	}
+}
+
+// parseStatsSort extracts ?sort= and ?dir= for the stats table.
+func parseStatsSort(q map[string][]string) (string, string) {
+	sortBy := defaultStatsSort
+	if v, ok := q["sort"]; ok && len(v) > 0 {
+		if _, valid := statsSortAccessors[v[0]]; valid {
+			sortBy = v[0]
+		}
+	}
+	dir := defaultStatsDir
+	if v, ok := q["dir"]; ok && len(v) > 0 {
+		if d := strings.ToLower(v[0]); d == "asc" || d == "desc" {
+			dir = d
+		}
+	}
+	return sortBy, dir
+}
+
+// statsSortAccessors maps a URL sort key to a comparator on PlayerRow.
+// Returns the "greater" ordering for two rows (DESC direction). Callers
+// invert for ASC.
+var statsSortAccessors = map[string]func(a, b PlayerRow) bool{
+	"name":         func(a, b PlayerRow) bool { return a.Name > b.Name },
+	"dps":          func(a, b PlayerRow) bool { return a.DPS > b.DPS },
+	"hps":          func(a, b PlayerRow) bool { return a.HPS > b.HPS },
+	"dmg_done":     func(a, b PlayerRow) bool { return a.DmgDone > b.DmgDone },
+	"dmg_taken":    func(a, b PlayerRow) bool { return a.DmgTaken > b.DmgTaken },
+	"dmg_absorbed": func(a, b PlayerRow) bool { return a.DmgAbsorbed > b.DmgAbsorbed },
+	"heal_done":    func(a, b PlayerRow) bool { return a.HealDone > b.HealDone },
+	"abs_done":     func(a, b PlayerRow) bool { return a.AbsDone > b.AbsDone },
+	"heal_taken":   func(a, b PlayerRow) bool { return a.HealTaken > b.HealTaken },
+	"interrupts":   func(a, b PlayerRow) bool { return a.Interrupts > b.Interrupts },
+	"dispels":      func(a, b PlayerRow) bool { return a.Dispels > b.Dispels },
+	"ilvl":         func(a, b PlayerRow) bool { return a.ItemLvl > b.ItemLvl },
+}
+
+// sortPlayers reorders players in place. Rank stays tied to DPS (the "#"
+// column already prints the DPS rank), so we don't renumber here.
+func sortPlayers(players []PlayerRow, sortBy, dir string) {
+	cmp := statsSortAccessors[sortBy]
+	if cmp == nil {
+		return
+	}
+	if dir == "asc" {
+		less := cmp
+		sort.SliceStable(players, func(i, j int) bool { return less(players[j], players[i]) })
+	} else {
+		sort.SliceStable(players, func(i, j int) bool { return cmp(players[i], players[j]) })
 	}
 }
 
@@ -173,9 +239,19 @@ func loadKill(ctx context.Context, db *sql.DB, realmName, remoteID string, expan
 		avgIlvl = sum / float64(len(pIlvl))
 	}
 
-	var totalDmg int64
+	var totalDmg, totalHeal, totalDmgTaken int64
 	for _, v := range pDmgDone {
 		totalDmg += int64(v)
+	}
+	var totalAbs int64
+	for _, v := range pHealDone {
+		totalHeal += int64(v)
+	}
+	for _, v := range pAbsDone {
+		totalAbs += int64(v)
+	}
+	for _, v := range pDmgTaken {
+		totalDmgTaken += int64(v)
 	}
 
 	// Count actual ressurects (time < 0 in deaths_detail.time) vs deaths
@@ -201,8 +277,12 @@ func loadKill(ctx context.Context, db *sql.DB, realmName, remoteID string, expan
 		Deaths:       actualDeaths,
 		Ressurects:   ressCount,
 		RessUsed:     int(ressUsed),
-		AvgIlvl:      avgIlvl,
-		TotalDmgDone: totalDmg,
+		AvgIlvl:       avgIlvl,
+		TotalDmgDone:  totalDmg,
+		TotalHealDone: totalHeal + totalAbs,
+		TotalDmgTaken: totalDmgTaken,
+		RaidDPS:       metric.DPS(totalDmg, int64(length)),
+		RaidHPS:       metric.HPS(totalHeal, totalAbs, int64(length)),
 	}
 	_ = nDeaths // upstream's `deaths` field may include ress; we use the more accurate split
 
@@ -216,11 +296,8 @@ func loadKill(ctx context.Context, db *sql.DB, realmName, remoteID string, expan
 
 	players = make([]PlayerRow, 0, len(pGuid))
 	for i := range pGuid {
-		var dps, hps int64
-		if length > 0 {
-			dps = int64(pDmgDone[i]) * 1000 / int64(length)
-			hps = int64(pHealDone[i]+pAbsDone[i]) * 1000 / int64(length)
-		}
+		dps := metric.DPS(int64(pDmgDone[i]), int64(length))
+		hps := metric.HPS(int64(pHealDone[i]), int64(pAbsDone[i]), int64(length))
 		players = append(players, PlayerRow{
 			Name:          pName[i],
 			Guid:          pGuid[i],
@@ -410,8 +487,8 @@ func fillPercentiles(ctx context.Context, db *sql.DB, realmName string, bossID u
 	q := `
 		SELECT
 			players.talent_spec AS spec,
-			toUInt64(players.dmg_done * 1000 / greatest(length, 1)) AS dps,
-			toUInt64((players.healing_done + players.absorb_done) * 1000 / greatest(length, 1)) AS hps
+			` + metric.SQLUInt64(metric.DmgDoneArrayJoin) + ` AS dps,
+			` + metric.SQLUInt64(metric.HealAbsorbArrayJoin) + ` AS hps
 		FROM boss_kill ARRAY JOIN players
 		WHERE realm = ? AND boss_remote_id = ? AND mode = ? AND length > 0
 		  AND players.talent_spec IN (` + placeholders + `)

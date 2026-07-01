@@ -176,7 +176,17 @@ templ durations(vm ViewModel) {
 templ difficultyTabs(vm ViewModel) {
 	<div class="flex flex-wrap items-center gap-3 text-sm">
 		<a href={ templ.SafeURL(links.Boss(vm.Realm, vm.Boss.RemoteID)) } class="text-bk-muted hover:text-bk-fg">Reset</a>
-		<span class="text-xs text-bk-muted">{ vm.LockLabel }</span>
+		<span class="text-xs text-bk-muted">
+			{ vm.LockLabel }
+			<a
+				hx-get={ string(previousLockHref(vm)) }
+				hx-target="#boss-content"
+				hx-swap="innerHTML"
+				hx-push-url="true"
+				href={ previousLockHref(vm) }
+				class="ml-2 text-bk-accent"
+			>(see previous)</a>
+		</span>
 		for _, d := range vm.Difficulties {
 			<a
 				hx-get={ string(tabHref(vm, d.Mode)) }

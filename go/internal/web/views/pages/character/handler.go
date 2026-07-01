@@ -6,14 +6,32 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/mrceperka/twinstar-bosskills/go/internal/metric"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/router"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/sqlutil"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
 )
+
+const (
+	defaultSortBy  = "kill_time"
+	defaultSortDir = "desc"
+)
+
+// validSortCols keeps the sort column safe against injection since it is
+// concatenated into the ORDER BY clause.
+var validSortCols = map[string]string{
+	"kill_time": "kill_time",
+	"dps":       "dps",
+	"hps":       "hps",
+	"length":    "length",
+	"ilvl":      "avg_item_lvl",
+}
 
 type Deps struct {
 	DB      *sql.DB
@@ -56,7 +74,15 @@ func Handler(deps Deps) http.HandlerFunc {
 			killsPage = 0
 		}
 
-		recent, killsTotal, err := loadRecentKills(ctx, deps.DB, realmName, guid, expansion, killsPage, killsPageSize)
+		filter := parseKillsFilter(r.URL.Query())
+
+		recent, killsTotal, err := loadRecentKills(ctx, deps.DB, realmName, guid, expansion, filter, killsPage, killsPageSize)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		bossOpts, raidOpts, modeOpts, specOpts, err := loadKillsFilterOptions(ctx, deps.DB, realmName, guid, expansion, filter)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -82,6 +108,11 @@ func Handler(deps Deps) http.HandlerFunc {
 			KillsPageSize: killsPageSize,
 			KillsTotal:    killsTotal,
 			RecentKills:   recent,
+			Filter:        filter,
+			BossOptions:   bossOpts,
+			RaidOptions:   raidOpts,
+			ModeOptions:   modeOpts,
+			SpecOptions:   specOpts,
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -261,16 +292,16 @@ func loadRankings(ctx context.Context, db *sql.DB, realmName string, guid uint64
 }
 
 func loadBestKillDetails(ctx context.Context, db *sql.DB, realmName string, guid uint64) (map[bossKey]killDetail, error) {
-	const q = `
+	q := `
 	WITH indexOf(players.guid, ?) AS idx
 	SELECT
 	  boss_remote_id,
 	  mode,
 	  players.talent_spec[idx] AS spec,
-	  argMax(remote_id, toUInt64(players.dmg_done[idx] * 1000 / greatest(length, 1))) AS dps_kill_id,
-	  toFloat32(argMax(players.avg_item_lvl[idx], toUInt64(players.dmg_done[idx] * 1000 / greatest(length, 1)))) AS dps_ilvl,
-	  argMax(remote_id, toUInt64((players.healing_done[idx] + players.absorb_done[idx]) * 1000 / greatest(length, 1))) AS hps_kill_id,
-	  toFloat32(argMax(players.avg_item_lvl[idx], toUInt64((players.healing_done[idx] + players.absorb_done[idx]) * 1000 / greatest(length, 1)))) AS hps_ilvl
+	  argMax(remote_id, ` + metric.SQLUInt64(metric.DmgDoneIndexed) + `) AS dps_kill_id,
+	  toFloat32(argMax(players.avg_item_lvl[idx], ` + metric.SQLUInt64(metric.DmgDoneIndexed) + `)) AS dps_ilvl,
+	  argMax(remote_id, ` + metric.SQLUInt64(metric.HealAbsorbIndexed) + `) AS hps_kill_id,
+	  toFloat32(argMax(players.avg_item_lvl[idx], ` + metric.SQLUInt64(metric.HealAbsorbIndexed) + `)) AS hps_ilvl
 	FROM boss_kill
 	WHERE realm = ? AND has(players.guid, ?)
 	GROUP BY boss_remote_id, mode, spec
@@ -464,20 +495,61 @@ func lookupCharacter(ctx context.Context, db *sql.DB, realmName, name string) (
 	return guid, int(cls), firstSeen, lastSeen, int(kc), nil
 }
 
-func loadRecentKills(ctx context.Context, db *sql.DB, realmName string, guid uint64, expansion int, page, pageSize int) ([]KillRow, int, error) {
-	const rowsQ = `
+func loadRecentKills(ctx context.Context, db *sql.DB, realmName string, guid uint64, expansion int, f KillsFilter, page, pageSize int) ([]KillRow, int, error) {
+	whereParts := []string{"realm = ?", "has(players.guid, ?)"}
+	whereArgs := []any{realmName, guid}
+
+	if len(f.Bosses) > 0 {
+		whereParts = append(whereParts, "boss_remote_id IN ("+sqlutil.Placeholders(len(f.Bosses))+")")
+		for _, b := range f.Bosses {
+			whereArgs = append(whereArgs, b)
+		}
+	}
+	if len(f.Raids) > 0 {
+		whereParts = append(whereParts, "raid_name IN ("+sqlutil.Placeholders(len(f.Raids))+")")
+		for _, r := range f.Raids {
+			whereArgs = append(whereArgs, r)
+		}
+	}
+	if len(f.Difficulties) > 0 {
+		whereParts = append(whereParts, "mode IN ("+sqlutil.Placeholders(len(f.Difficulties))+")")
+		for _, m := range f.Difficulties {
+			whereArgs = append(whereArgs, uint8(m))
+		}
+	}
+	if len(f.Specs) > 0 {
+		whereParts = append(whereParts, "players.talent_spec[indexOf(players.guid, ?)] IN ("+sqlutil.Placeholders(len(f.Specs))+")")
+		whereArgs = append(whereArgs, guid)
+		for _, s := range f.Specs {
+			whereArgs = append(whereArgs, uint16(s))
+		}
+	}
+	where := strings.Join(whereParts, " AND ")
+
+	sortCol := validSortCols[f.SortBy]
+	if sortCol == "" {
+		sortCol = "kill_time"
+	}
+	dir := "DESC"
+	if strings.EqualFold(f.SortDir, "asc") {
+		dir = "ASC"
+	}
+
+	rowsQ := `
 	WITH indexOf(players.guid, ?) AS idx
 	SELECT remote_id, kill_time, boss_name, boss_remote_id, mode, length,
-	       toUInt64(players.dmg_done[idx] * 1000 / greatest(length, 1)) AS dps,
-	       toUInt64((players.healing_done[idx] + players.absorb_done[idx]) * 1000 / greatest(length, 1)) AS hps,
+	       ` + metric.SQLUInt64(metric.DmgDoneIndexed) + ` AS dps,
+	       ` + metric.SQLUInt64(metric.HealAbsorbIndexed) + ` AS hps,
 	       players.talent_spec[idx] AS spec,
 	       toFloat32(players.avg_item_lvl[idx]) AS avg_item_lvl
 	FROM boss_kill
-	WHERE realm = ? AND has(players.guid, ?)
-	ORDER BY kill_time DESC
+	WHERE ` + where + `
+	ORDER BY ` + sortCol + ` ` + dir + `, kill_time DESC
 	LIMIT ? OFFSET ?
 	`
-	rows, err := db.QueryContext(ctx, rowsQ, guid, realmName, guid, pageSize, page*pageSize)
+	rowsArgs := append([]any{guid}, whereArgs...)
+	rowsArgs = append(rowsArgs, pageSize, page*pageSize)
+	rows, err := db.QueryContext(ctx, rowsQ, rowsArgs...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -522,13 +594,174 @@ func loadRecentKills(ctx context.Context, db *sql.DB, realmName string, guid uin
 	}
 
 	var total uint64
-	if err := db.QueryRowContext(ctx,
-		"SELECT count() FROM boss_kill WHERE realm = ? AND has(players.guid, ?)",
-		realmName, guid,
-	).Scan(&total); err != nil {
+	countQ := "SELECT count() FROM boss_kill WHERE " + where
+	if err := db.QueryRowContext(ctx, countQ, whereArgs...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	return out, int(total), nil
+}
+
+// parseKillsFilter reads the URL params for the kills table.
+func parseKillsFilter(q map[string][]string) KillsFilter {
+	f := KillsFilter{SortBy: defaultSortBy, SortDir: defaultSortDir}
+	for _, v := range q["boss"] {
+		for _, part := range strings.Split(v, ",") {
+			if n, err := strconv.ParseUint(strings.TrimSpace(part), 10, 32); err == nil {
+				f.Bosses = append(f.Bosses, uint32(n))
+			}
+		}
+	}
+	for _, v := range q["raid"] {
+		if v = strings.TrimSpace(v); v != "" {
+			f.Raids = append(f.Raids, v)
+		}
+	}
+	for _, v := range append(q["difficulty"], q["mode"]...) {
+		for _, part := range strings.Split(v, ",") {
+			if n, err := strconv.Atoi(strings.TrimSpace(part)); err == nil {
+				f.Difficulties = append(f.Difficulties, n)
+			}
+		}
+	}
+	for _, v := range q["spec"] {
+		for _, part := range strings.Split(v, ",") {
+			if n, err := strconv.Atoi(strings.TrimSpace(part)); err == nil && n > 0 {
+				f.Specs = append(f.Specs, n)
+			}
+		}
+	}
+	if sortRaw := getFirst(q, "sort"); sortRaw != "" {
+		if _, ok := validSortCols[sortRaw]; ok {
+			f.SortBy = sortRaw
+		}
+	}
+	if dirRaw := strings.ToLower(getFirst(q, "dir")); dirRaw == "asc" || dirRaw == "desc" {
+		f.SortDir = dirRaw
+	}
+	return f
+}
+
+func getFirst(q map[string][]string, name string) string {
+	if v, ok := q[name]; ok && len(v) > 0 {
+		return v[0]
+	}
+	return ""
+}
+
+// loadKillsFilterOptions returns the filter dropdown options limited to
+// combinations that actually exist for this character.
+func loadKillsFilterOptions(ctx context.Context, db *sql.DB, realmName string, guid uint64, expansion int, f KillsFilter) (bossOpts, raidOpts, modeOpts, specOpts []Option, err error) {
+	// Bosses played by this character.
+	const bossQ = `
+		SELECT boss_remote_id, any(boss_name) AS name
+		FROM boss_kill
+		WHERE realm = ? AND has(players.guid, ?)
+		GROUP BY boss_remote_id
+		ORDER BY name
+	`
+	brows, err := db.QueryContext(ctx, bossQ, realmName, guid)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	bossSel := map[uint32]bool{}
+	for _, b := range f.Bosses {
+		bossSel[b] = true
+	}
+	for brows.Next() {
+		var id uint32
+		var name string
+		if err := brows.Scan(&id, &name); err != nil {
+			brows.Close()
+			return nil, nil, nil, nil, err
+		}
+		bossOpts = append(bossOpts, Option{
+			Value:    strconv.FormatUint(uint64(id), 10),
+			Label:    name,
+			Selected: bossSel[id],
+		})
+	}
+	brows.Close()
+
+	// Raids + modes + specs the character has appeared in.
+	const rmsQ = `
+		SELECT DISTINCT raid_name, mode, players.talent_spec[indexOf(players.guid, ?)] AS spec
+		FROM boss_kill
+		WHERE realm = ? AND has(players.guid, ?)
+	`
+	rmrows, err := db.QueryContext(ctx, rmsQ, guid, realmName, guid)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	defer rmrows.Close()
+	raidSet := map[string]bool{}
+	modeSet := map[int]bool{}
+	specSet := map[int]bool{}
+	for rmrows.Next() {
+		var raid string
+		var mode uint8
+		var spec uint16
+		if err := rmrows.Scan(&raid, &mode, &spec); err != nil {
+			return nil, nil, nil, nil, err
+		}
+		if raid != "" {
+			raidSet[raid] = true
+		}
+		modeSet[int(mode)] = true
+		if spec > 0 {
+			specSet[int(spec)] = true
+		}
+	}
+	if err := rmrows.Err(); err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	raidSel := map[string]bool{}
+	for _, r := range f.Raids {
+		raidSel[r] = true
+	}
+	raids := make([]string, 0, len(raidSet))
+	for r := range raidSet {
+		raids = append(raids, r)
+	}
+	sort.Strings(raids)
+	for _, r := range raids {
+		raidOpts = append(raidOpts, Option{Value: r, Label: r, Selected: raidSel[r]})
+	}
+
+	modeSel := map[int]bool{}
+	for _, m := range f.Difficulties {
+		modeSel[m] = true
+	}
+	modes := make([]int, 0, len(modeSet))
+	for m := range modeSet {
+		modes = append(modes, m)
+	}
+	sort.Ints(modes)
+	for _, m := range modes {
+		modeOpts = append(modeOpts, Option{
+			Value:    strconv.Itoa(m),
+			Label:    wow.Difficulty(expansion, m),
+			Selected: modeSel[m],
+		})
+	}
+
+	specSel := map[int]bool{}
+	for _, s := range f.Specs {
+		specSel[s] = true
+	}
+	specs := make([]int, 0, len(specSet))
+	for s := range specSet {
+		specs = append(specs, s)
+	}
+	sort.Ints(specs)
+	for _, s := range specs {
+		specOpts = append(specOpts, Option{
+			Value:    strconv.Itoa(s),
+			Label:    wow.SpecForExpansion(expansion, s),
+			Selected: specSel[s],
+		})
+	}
+	return bossOpts, raidOpts, modeOpts, specOpts, nil
 }
 
 func loadBossMeta(ctx context.Context, db *sql.DB, realmName string, ids []uint32) (map[uint32]bossMeta, error) {

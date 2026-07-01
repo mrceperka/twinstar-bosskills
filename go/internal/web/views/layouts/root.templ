@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/static"
 )
 
 // Root is the base HTML layout. Pages compose it with `@layouts.Root(...) { ... }`.
@@ -47,7 +48,7 @@ templ Root(meta PageMeta) {
 templ topbar(meta PageMeta) {
 	<header class="bk-topbar">
 		<div class="flex items-center gap-3">
-			<a href="/" class="font-semibold tracking-wide">Twinstar Bosskills</a>
+			// <a href="/" class="font-semibold tracking-wide">Twinstar Bosskills</a>
 			if meta.Realm != "" {
 				@realmPicker(meta.Realm)
 			}
@@ -87,9 +88,9 @@ templ footer() {
 	<footer class="bk-footer">
 		<a href="/changelog">🗒️ Changelog</a>
 		<div>
-			Made by hop and others.
+			Made by hop and hopefully some others, maybe you?
 			<a href="https://github.com/twinstar-bosskills/twinstar-bosskills" target="_blank" rel="noopener">
-				Open source
+				We are open source ↗
 			</a>
 		</div>
 	</footer>
@@ -110,6 +111,9 @@ func cssURL(m PageMeta) string {
 }
 
 func jsURL(m PageMeta, name string) string {
+	if h := static.Hash(name); h != "" {
+		return "/static/" + name + "?v=" + h
+	}
 	if m.JSHash == "" {
 		return "/static/" + name
 	}

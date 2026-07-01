@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mrceperka/twinstar-bosskills/go/internal/metric"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/router"
@@ -120,7 +121,7 @@ func Handler(deps Deps) http.HandlerFunc {
 				dpsMedian = mp.DPS
 				hpsMedian = mp.HPS
 			}
-			chartJSON, _ := buildBossChart(samps, dpsMedian, hpsMedian)
+			chartJSON, _ := buildBossChart(realmName, samps, dpsMedian, hpsMedian)
 			charts = append(charts, BossChart{
 				BossID:    k.BossID,
 				BossName:  samps[0].BossName,
@@ -297,11 +298,11 @@ func loadSamples(ctx context.Context, db *sql.DB, realmName string, guid uint64,
 	args = append(args, sampleLimit)
 
 	q := "WITH indexOf(players.guid, ?) AS idx " +
-		"SELECT kill_time, boss_remote_id, boss_name, mode, " +
+		"SELECT kill_time, remote_id, boss_remote_id, boss_name, mode, " +
 		"players.talent_spec[idx] AS spec, " +
 		"toFloat32(players.avg_item_lvl[idx]) AS avg_item_lvl, " +
-		"toUInt64(players.dmg_done[idx] * 1000 / greatest(length, 1)) AS dps, " +
-		"toUInt64((players.healing_done[idx] + players.absorb_done[idx]) * 1000 / greatest(length, 1)) AS hps " +
+		metric.SQLUInt64(metric.DmgDoneIndexed) + " AS dps, " +
+		metric.SQLUInt64(metric.HealAbsorbIndexed) + " AS hps " +
 		"FROM boss_kill " +
 		"WHERE " + strings.Join(whereParts, " AND ") + " " +
 		"ORDER BY kill_time ASC " +
@@ -315,6 +316,7 @@ func loadSamples(ctx context.Context, db *sql.DB, realmName string, guid uint64,
 	for rows.Next() {
 		var (
 			t          time.Time
+			remoteID   string
 			bossID     uint32
 			bossName   string
 			mode       uint8
@@ -323,11 +325,12 @@ func loadSamples(ctx context.Context, db *sql.DB, realmName string, guid uint64,
 			dps        uint64
 			hps        uint64
 		)
-		if err := rows.Scan(&t, &bossID, &bossName, &mode, &spec, &avgItemLvl, &dps, &hps); err != nil {
+		if err := rows.Scan(&t, &remoteID, &bossID, &bossName, &mode, &spec, &avgItemLvl, &dps, &hps); err != nil {
 			return nil, err
 		}
 		out = append(out, Sample{
 			Time:       t,
+			RemoteID:   remoteID,
 			BossID:     bossID,
 			BossName:   bossName,
 			Mode:       int(mode),

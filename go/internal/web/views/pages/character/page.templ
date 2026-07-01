@@ -14,6 +14,28 @@ type ViewModel struct {
 	KillsPage     int
 	KillsPageSize int
 	KillsTotal    int
+	// Filters + sort applied to the kills table.
+	Filter        KillsFilter
+	BossOptions   []Option
+	RaidOptions   []Option
+	ModeOptions   []Option
+	SpecOptions   []Option
+}
+
+// KillsFilter is the parsed URL state for the kills table.
+type KillsFilter struct {
+	Bosses       []uint32
+	Raids        []string
+	Difficulties []int
+	Specs        []int
+	SortBy       string // kill_time (default), dps, hps, length, ilvl
+	SortDir      string // asc, desc
+}
+
+type Option struct {
+	Value    string
+	Label    string
+	Selected bool
 }
 
 type CharacterInfo struct {
@@ -85,7 +107,10 @@ templ Page(vm ViewModel) {
 						<span>{ vm.Char.ClassLabel }</span>
 					</div>
 					<h1 class="text-2xl font-semibold">{ vm.Char.Name }</h1>
-					<a href={ characterPerformanceHref(vm.Realm, vm.Char.Name) } class="text-xs text-bk-muted hover:text-bk-accent">Performance →</a>
+					<div class="flex items-center gap-3">
+						<a href={ characterPerformanceHref(vm.Realm, vm.Char.Name) } class="text-xs text-bk-muted hover:text-bk-accent">Performance →</a>
+						<a href={ templ.SafeURL(armoryHref(vm.Realm, vm.Char.Name)) } target="_blank" rel="noopener" class="text-xs text-bk-muted hover:text-bk-accent">Armory ↗</a>
+					</div>
 				</div>
 				<dl class="grid grid-cols-3 gap-x-6 gap-y-1 text-sm">
 					<dt class="text-bk-muted">Kills tracked</dt>
@@ -108,11 +133,63 @@ templ Page(vm ViewModel) {
 					<span class="text-bk-muted text-sm">Loading…</span>
 				</div>
 			</details>
+			@components.Panel("Filters") {
+				@killsFilterForm(vm)
+			}
 			<div id="kills-table">
 				@KillsTableFragment(vm)
 			</div>
 		</div>
 	}
+}
+
+templ killsFilterForm(vm ViewModel) {
+	<form
+		hx-get={ killsBaseURL(vm) }
+		hx-target="#kills-table"
+		hx-swap="innerHTML"
+		hx-push-url="true"
+		class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+	>
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Raid</span>
+			<select name="raid" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-24">
+				for _, o := range vm.RaidOptions {
+					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
+				}
+			</select>
+		</label>
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Boss</span>
+			<select name="boss" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-24">
+				for _, o := range vm.BossOptions {
+					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
+				}
+			</select>
+		</label>
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Difficulty</span>
+			<select name="difficulty" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-24">
+				for _, o := range vm.ModeOptions {
+					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
+				}
+			</select>
+		</label>
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Spec</span>
+			<select name="spec" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-24">
+				for _, o := range vm.SpecOptions {
+					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
+				}
+			</select>
+		</label>
+		<input type="hidden" name="sort" value={ vm.Filter.SortBy }/>
+		<input type="hidden" name="dir" value={ vm.Filter.SortDir }/>
+		<div class="sm:col-span-2 lg:col-span-4 flex justify-end gap-2">
+			<a href={ templ.SafeURL(killsBaseURL(vm)) } class="rounded border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-text">Reset</a>
+			<button type="submit" class="rounded bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Apply</button>
+		</div>
+	</form>
 }
 
 // RankingsFragment is the lazy-loaded inner content of the rankings <details>.
@@ -236,11 +313,11 @@ templ KillsTableFragment(vm ViewModel) {
 						<th>Boss</th>
 						<th>Diff</th>
 						<th>Spec</th>
-						<th class="text-right">DPS</th>
-						<th class="text-right">HPS</th>
-						<th class="text-right">Length</th>
-						<th class="text-right">iLvl</th>
-						<th>Time</th>
+						<th class="text-right">@sortHeader(vm, "dps", "DPS")</th>
+						<th class="text-right">@sortHeader(vm, "hps", "HPS")</th>
+						<th class="text-right">@sortHeader(vm, "length", "Length")</th>
+						<th class="text-right">@sortHeader(vm, "ilvl", "iLvl")</th>
+						<th>@sortHeader(vm, "kill_time", "Time")</th>
 						<th></th>
 					</tr>
 				</thead>
@@ -292,6 +369,29 @@ templ KillsTableFragment(vm ViewModel) {
 		}
 		@killsPagination(vm)
 	}
+}
+
+// sortHeader renders a column header as a clickable link that toggles sort
+// direction and swaps the kills table via htmx. The `<a>` uses flex + negative
+// margins so the whole `<th>` cell (including its padding) is clickable, not
+// just the label text.
+templ sortHeader(vm ViewModel, col string, label string) {
+	<a
+		hx-get={ sortURL(vm, col) }
+		hx-target="#kills-table"
+		hx-push-url="true"
+		href={ templ.SafeURL(sortURL(vm, col)) }
+		class="-m-2 flex items-center gap-1 p-2 cursor-pointer hover:text-bk-accent"
+	>
+		{ label }
+		if vm.Filter.SortBy == col {
+			if vm.Filter.SortDir == "asc" {
+				<span class="text-bk-accent">↑</span>
+			} else {
+				<span class="text-bk-accent">↓</span>
+			}
+		}
+	</a>
 }
 
 templ killsPagination(vm ViewModel) {

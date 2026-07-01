@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mrceperka/twinstar-bosskills/go/internal/metric"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
 )
 
@@ -40,8 +41,8 @@ func loadSpecCurves(ctx context.Context, db *sql.DB, realmName string, id uint32
 	q := `
 		SELECT
 			players.talent_spec AS spec,
-			quantilesExact(` + curveLevelsCSV + `)(toFloat64(players.dmg_done) * 1000 / greatest(length, 1)) AS dps_curve,
-			quantilesExact(` + curveLevelsCSV + `)(toFloat64(players.healing_done + players.absorb_done) * 1000 / greatest(length, 1)) AS hps_curve
+			quantilesExact(` + curveLevelsCSV + `)(` + metric.SQLFloat64(metric.DmgDoneArrayJoin) + `) AS dps_curve,
+			quantilesExact(` + curveLevelsCSV + `)(` + metric.SQLFloat64(metric.HealAbsorbArrayJoin) + `) AS hps_curve
 		FROM boss_kill ARRAY JOIN players
 		WHERE realm = ? AND boss_remote_id = ? AND mode = ? AND length > 0
 		  AND kill_time >= ? AND kill_time < ?`

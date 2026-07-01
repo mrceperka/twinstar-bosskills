@@ -23,7 +23,20 @@ type Deps struct {
 	JSHash  string
 }
 
-const defaultPageSize = 20
+const (
+	defaultPageSize = 20
+	defaultBKSort   = "kill_time"
+	defaultBKDir    = "desc"
+)
+
+// validBKSortCols is used both to whitelist ?sort= values and to translate
+// them into safe ORDER BY column names.
+var validBKSortCols = map[string]string{
+	"kill_time": "kill_time",
+	"length":    "length",
+	"wipes":     "wipes",
+	"deaths":    "deaths",
+}
 
 func Handler(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +106,7 @@ func Handler(deps Deps) http.HandlerFunc {
 }
 
 func parseFilter(q map[string][]string) FilterValues {
-	f := FilterValues{}
+	f := FilterValues{SortBy: defaultBKSort, SortDir: defaultBKDir}
 	for _, v := range q["boss"] {
 		for _, part := range strings.Split(v, ",") {
 			if n, err := strconv.ParseUint(strings.TrimSpace(part), 10, 32); err == nil {
@@ -111,6 +124,16 @@ func parseFilter(q map[string][]string) FilterValues {
 			if n, err := strconv.Atoi(strings.TrimSpace(part)); err == nil {
 				f.Difficulties = append(f.Difficulties, n)
 			}
+		}
+	}
+	if v, ok := q["sort"]; ok && len(v) > 0 {
+		if _, valid := validBKSortCols[v[0]]; valid {
+			f.SortBy = v[0]
+		}
+	}
+	if v, ok := q["dir"]; ok && len(v) > 0 {
+		if d := strings.ToLower(v[0]); d == "asc" || d == "desc" {
+			f.SortDir = d
 		}
 	}
 	return f
@@ -156,8 +179,17 @@ func loadKills(ctx context.Context, db *sql.DB, realmName string, f FilterValues
 	}
 	where := strings.Join(whereParts, " AND ")
 
+	sortCol := validBKSortCols[f.SortBy]
+	if sortCol == "" {
+		sortCol = "kill_time"
+	}
+	dir := "DESC"
+	if strings.EqualFold(f.SortDir, "asc") {
+		dir = "ASC"
+	}
+
 	rowsQ := "SELECT remote_id, kill_time, boss_name, boss_remote_id, raid_name, mode, guild, length, wipes, deaths " +
-		"FROM boss_kill WHERE " + where + " ORDER BY kill_time DESC LIMIT ? OFFSET ?"
+		"FROM boss_kill WHERE " + where + " ORDER BY " + sortCol + " " + dir + ", kill_time DESC LIMIT ? OFFSET ?"
 	rowsArgs := append(append([]any{}, args...), pageSize, page*pageSize)
 	rows, err := db.QueryContext(ctx, rowsQ, rowsArgs...)
 	if err != nil {

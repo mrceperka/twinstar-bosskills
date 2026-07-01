@@ -10,6 +10,15 @@
  * looks like the existing app (https://bosskills.twinstar-wow.com).
  * --------------------------------------------------------------------*/
 @theme {
+  /* Fonts — Tailwind v4's preflight applies `font-family: var(--default-font-family)`
+   * to <html> and the default resolves via --font-sans. Overriding --font-sans
+   * here unifies the whole app on Helvetica/Arial to match the SvelteKit app.
+   * Tables get monospace via .bk-table-wrap tbody below (kept as an override). */
+  --font-sans: 'Helvetica', 'Arial', sans-serif;
+  --font-mono: monospace;
+  --default-font-family: 'Helvetica', 'Arial', sans-serif;
+  --default-mono-font-family: monospace;
+
   --color-bk-bg: #1b1b1b;          /* page background — rgb(27,27,27) */
   --color-bk-row: #000000bf;        /* zebra-stripe row (75% black) */
   --color-bk-fg: #f5f5f5;           /* whitesmoke */
@@ -110,7 +119,10 @@ a:hover {
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--color-bk-border);
 }
-.bk-table-wrap tbody {
+/* Whole-table monospace (headers included) so a single table doesn't mix
+ * fonts between thead and tbody. The rest of the app uses Helvetica via
+ * --default-font-family in @theme above. */
+.bk-table-wrap table {
   font-family: monospace;
 }
 .bk-table-wrap tbody tr:nth-child(even) {
