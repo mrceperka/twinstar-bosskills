@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/mrceperka/twinstar-bosskills/go/internal/api"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/cache"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/static"
@@ -68,7 +69,7 @@ func New(cfg Config) http.Handler {
 	bosskills.Mount(mux, bosskills.Deps{DB: cfg.DB, CSSHash: cssHash, JSHash: jsHash})
 	bosskill.Mount(mux, bosskill.Deps{DB: cfg.DB, Items: cfg.Items, CSSHash: cssHash, JSHash: jsHash})
 	ranks.Mount(mux, ranks.Deps{DB: cfg.DB, CSSHash: cssHash, JSHash: jsHash})
-	character.Mount(mux, character.Deps{DB: cfg.DB, CSSHash: cssHash, JSHash: jsHash})
+	character.Mount(mux, character.Deps{DB: cfg.DB, API: api.NewClient(cfg.APIBase), CSSHash: cssHash, JSHash: jsHash})
 	characterperf.Mount(mux, characterperf.Deps{DB: cfg.DB, CSSHash: cssHash, JSHash: jsHash})
 	characters.Mount(mux, characters.Deps{DB: cfg.DB, CSSHash: cssHash, JSHash: jsHash})
 	if cfg.Icons != nil {

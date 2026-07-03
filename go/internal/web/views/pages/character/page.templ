@@ -14,6 +14,7 @@ type ViewModel struct {
 	KillsPage     int
 	KillsPageSize int
 	KillsTotal    int
+	SpecSummary   []SpecSummary
 	// Filters + sort applied to the kills table.
 	Filter        KillsFilter
 	BossOptions   []Option
@@ -45,6 +46,14 @@ type CharacterInfo struct {
 	FirstSeen  string
 	LastSeen   string
 	KillCount  int
+}
+
+type SpecSummary struct {
+	Spec         int
+	Class        int
+	SpecLabel   string
+	KillCount   int
+	IsMostPlayed bool
 }
 
 type KillRow struct {
@@ -119,8 +128,25 @@ templ Page(vm ViewModel) {
 					<dd class="col-span-2 font-mono">{ vm.Char.FirstSeen }</dd>
 					<dt class="text-bk-muted">Last seen</dt>
 					<dd class="col-span-2 font-mono">{ vm.Char.LastSeen }</dd>
+					if len(vm.SpecSummary) > 0 {
+						<dt class="text-bk-muted">Specs</dt>
+						<dd class="col-span-2 flex flex-wrap justify-end gap-1.5">
+							for _, spec := range vm.SpecSummary {
+								<span class={ "inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs", specSummaryClass(spec.IsMostPlayed) }>
+									@components.ClassSpecIcons(vm.Realm, spec.Class, spec.Spec)
+									<span>{ spec.SpecLabel }</span>
+									<span class="font-mono">{ format.IntCtx(ctx, spec.KillCount) }</span>
+									if spec.IsMostPlayed {
+										<span class="sr-only">Most played</span>
+									}
+								</span>
+							}
+						</dd>
+					}
 				</dl>
 			</header>
+			@StatsPanelShell(vm)
+			@ActivityPanelShell(vm)
 			<details
 				class="rounded border border-bk-border"
 				hx-get={ rankingsHref(vm.Realm, vm.Char.Name, 0) }
@@ -190,6 +216,146 @@ templ killsFilterForm(vm ViewModel) {
 			<button type="submit" class="rounded bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Apply</button>
 		</div>
 	</form>
+}
+
+templ ActivityPanelShell(vm ViewModel) {
+	<div
+		id="activity-feed"
+		hx-get={ activityHref(vm.Realm, vm.Char.Name) }
+		hx-trigger="load"
+		hx-swap="outerHTML"
+	>
+		@components.Panel("Activity") {
+			<div class="text-sm text-bk-muted">Loading activity…</div>
+		}
+	</div>
+}
+
+templ StatsPanelShell(vm ViewModel) {
+	<div
+		id="character-stats"
+		hx-get={ statsHref(vm.Realm, vm.Char.Name) }
+		hx-trigger="load"
+		hx-swap="outerHTML"
+	>
+		@components.Panel("Stats") {
+			<div class="text-sm text-bk-muted">Loading stats…</div>
+		}
+	</div>
+}
+
+templ StatsFragment(vm StatsViewModel) {
+	<div id="character-stats">
+		@components.Panel("Stats") {
+			<div class="mb-3 space-y-1 text-xs text-bk-muted">
+				<p>{ vm.Notice }</p>
+				if vm.LastSuccessAt != "" {
+					<p>Last refreshed { vm.LastSuccessAt }</p>
+				}
+				if vm.Warning != "" {
+					<p class="text-yellow-300">{ vm.Warning }</p>
+				}
+				if vm.Error != "" {
+					<p class="text-red-300">{ vm.Error }</p>
+				}
+			</div>
+			if len(vm.Groups) == 0 {
+				@components.EmptyState("No stats found.")
+			} else {
+				<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+					for _, group := range vm.Groups {
+						<div>
+							<div class="mb-1.5 text-[11px] font-semibold uppercase text-bk-muted">{ group.Title }</div>
+							<dl class="space-y-0.5 text-xs">
+								for _, metric := range group.Metrics {
+									<div class="flex items-baseline justify-between gap-2">
+										<dt class="text-bk-muted">{ metric.Label }</dt>
+										<dd class="flex items-baseline justify-end gap-1.5 text-right font-mono">
+											<span class={ metric.ValueClass }>{ metric.Value }</span>
+											if metric.PosDelta != "" {
+												<span class="text-emerald-300">{ metric.PosDelta }</span>
+											}
+											if metric.NegDelta != "" {
+												<span class="text-red-300">{ metric.NegDelta }</span>
+											}
+										</dd>
+									</div>
+								}
+							</dl>
+						</div>
+					}
+				</div>
+			}
+		}
+	</div>
+}
+
+templ ActivityFragment(vm ActivityViewModel) {
+	<div id="activity-feed">
+		@components.Panel("Activity") {
+			<div class="mb-3 space-y-1 text-xs text-bk-muted">
+				<p>{ vm.Notice }</p>
+				if vm.LastSuccessAt != "" {
+					<p>Last refreshed { vm.LastSuccessAt }</p>
+				}
+				if vm.Warning != "" {
+					<p class="text-yellow-300">{ vm.Warning }</p>
+				}
+				if vm.Error != "" {
+					<p class="text-red-300">{ vm.Error }</p>
+				}
+			</div>
+			if len(vm.Rows) == 0 {
+				@components.EmptyState("No activity found.")
+			} else {
+				<div class="divide-y divide-bk-border">
+					for _, row := range vm.Rows {
+						if row.ItemID > 0 {
+							<div class="bk-tip-row py-2 flex items-start gap-3 text-sm" data-tooltip-url={ itemTooltipURL(vm.Realm, row.ItemID) }>
+								<div class="w-28 shrink-0 font-mono text-xs text-bk-muted">{ row.EventTime }</div>
+								<img src={ itemIconHref(row.ItemID) } alt="" loading="lazy" width="24" height="24" class="rounded border border-bk-border"/>
+								<div class="min-w-0 flex-1">
+									<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+										<span class="text-xs uppercase tracking-wide text-bk-muted">{ row.EventKind }</span>
+									</div>
+									<a href={ templ.SafeURL(itemHref(vm.Realm, row.ItemID)) } target="_blank" rel="noopener" class="font-medium" style={ "color: " + row.ItemQualityColor }>{ row.Title }</a>
+								</div>
+								<span class="bk-tip"></span>
+							</div>
+						} else {
+							<div class="py-2 flex items-start gap-3 text-sm">
+							<div class="w-28 shrink-0 font-mono text-xs text-bk-muted">{ row.EventTime }</div>
+							<div class="min-w-0 flex-1">
+								<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+									<span class="text-xs uppercase tracking-wide text-bk-muted">{ row.EventKind }</span>
+									if row.DifficultyLabel != "" {
+										<span class="text-xs text-bk-muted">{ row.DifficultyLabel }</span>
+									}
+								</div>
+								if row.BossKillRemoteID != "" {
+									<a href={ bosskillHref(vm.Realm, row.BossKillRemoteID) } class="hover:text-bk-accent">{ row.Title }</a>
+								} else {
+									<span>{ row.Title }</span>
+								}
+							</div>
+						</div>
+						}
+					}
+				</div>
+				if vm.HasMore {
+					<div class="mt-3">
+						<button
+							type="button"
+							hx-get={ vm.NextHref }
+							hx-target="#activity-feed"
+							hx-swap="outerHTML"
+							class="rounded border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-accent"
+						>Load more</button>
+					</div>
+				}
+			}
+		}
+	</div>
 }
 
 // RankingsFragment is the lazy-loaded inner content of the rankings <details>.

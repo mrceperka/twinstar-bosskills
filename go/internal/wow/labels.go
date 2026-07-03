@@ -102,31 +102,46 @@ func PerformanceDifficulties(expansion int) []int {
 	}
 }
 
+// Class constants are the numeric WoW player class IDs used by upstream data.
+const (
+	ClassWarrior     = 1
+	ClassPaladin     = 2
+	ClassHunter      = 3
+	ClassRogue       = 4
+	ClassPriest      = 5
+	ClassDeathKnight = 6
+	ClassShaman      = 7
+	ClassMage        = 8
+	ClassWarlock     = 9
+	ClassMonk        = 10
+	ClassDruid       = 11
+)
+
 // Class returns the WoW player class name for the given numeric class ID.
 // Returns empty string for unknown.
 func Class(c int) string {
 	switch c {
-	case 1:
+	case ClassWarrior:
 		return "Warrior"
-	case 2:
+	case ClassPaladin:
 		return "Paladin"
-	case 3:
+	case ClassHunter:
 		return "Hunter"
-	case 4:
+	case ClassRogue:
 		return "Rogue"
-	case 5:
+	case ClassPriest:
 		return "Priest"
-	case 6:
+	case ClassDeathKnight:
 		return "Death Knight"
-	case 7:
+	case ClassShaman:
 		return "Shaman"
-	case 8:
+	case ClassMage:
 		return "Mage"
-	case 9:
+	case ClassWarlock:
 		return "Warlock"
-	case 10:
+	case ClassMonk:
 		return "Monk"
-	case 11:
+	case ClassDruid:
 		return "Druid"
 	}
 	return ""

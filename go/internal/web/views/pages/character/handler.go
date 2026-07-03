@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mrceperka/twinstar-bosskills/go/internal/api"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/metric"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
@@ -35,6 +36,7 @@ var validSortCols = map[string]string{
 
 type Deps struct {
 	DB      *sql.DB
+	API     *api.Client
 	CSSHash string
 	JSHash  string
 }
@@ -82,6 +84,12 @@ func Handler(deps Deps) http.HandlerFunc {
 			return
 		}
 
+		specSummary, err := loadSpecSummary(ctx, deps.DB, realmName, guid, expansion)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 		bossOpts, raidOpts, modeOpts, specOpts, err := loadKillsFilterOptions(ctx, deps.DB, realmName, guid, expansion, filter)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -107,6 +115,7 @@ func Handler(deps Deps) http.HandlerFunc {
 			KillsPage:     killsPage,
 			KillsPageSize: killsPageSize,
 			KillsTotal:    killsTotal,
+			SpecSummary:   specSummary,
 			RecentKills:   recent,
 			Filter:        filter,
 			BossOptions:   bossOpts,
@@ -192,6 +201,120 @@ func RankingsHandler(deps Deps) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = RankingsFragment(vm).Render(r.Context(), w)
+	}
+}
+
+func ActivityHandler(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		realmName := middleware.Realm(r.Context())
+		if middleware.GatePrivateRealm(w, r) {
+			return
+		}
+		name := r.PathValue("name")
+		if name == "" {
+			http.NotFound(w, r)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+
+		guid, _, _, _, _, err := lookupCharacter(ctx, deps.DB, realmName, name)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if guid == 0 {
+			http.NotFound(w, r)
+			return
+		}
+		page := atoiOr(r.URL.Query().Get("page"), 0)
+		if page < 0 {
+			page = 0
+		}
+
+		cli := deps.API
+		if cli == nil {
+			cli = api.NewClient("")
+		}
+
+		now := time.Now().UTC()
+		meta, refreshErr := refreshActivityIfStale(ctx, deps.DB, cli, realmName, name, now)
+
+		visibleLimit := (page + 1) * activityDisplayPageSize
+		rows, err := loadActivityRows(ctx, deps.DB, realmName, name, realm.Expansion(realmName), visibleLimit+1)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		hasMore := len(rows) > visibleLimit
+		if hasMore {
+			rows = rows[:visibleLimit]
+		}
+
+		vm := ActivityViewModel{
+			Realm:    realmName,
+			CharName: name,
+			Rows:     rows,
+			Notice:   "Activity feed is cached and may be up to 1 hour stale.",
+			Page:     page,
+			HasMore:  hasMore,
+		}
+		if hasMore {
+			vm.NextHref = activityPagedHref(realmName, name, page+1)
+		}
+		if !meta.LastSuccessAt.IsZero() && meta.LastSuccessAt.After(time.Unix(0, 0)) {
+			vm.LastSuccessAt = meta.LastSuccessAt.Format("2006-01-02 15:04")
+		}
+		if refreshErr != nil {
+			if len(rows) > 0 {
+				vm.Warning = "Latest refresh failed; showing cached activity."
+			} else {
+				vm.Error = "Activity is unavailable right now."
+			}
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_ = ActivityFragment(vm).Render(r.Context(), w)
+	}
+}
+
+func StatsHandler(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		realmName := middleware.Realm(r.Context())
+		if middleware.GatePrivateRealm(w, r) {
+			return
+		}
+		name := r.PathValue("name")
+		if name == "" {
+			http.NotFound(w, r)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+
+		guid, class, _, _, _, err := lookupCharacter(ctx, deps.DB, realmName, name)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if guid == 0 {
+			http.NotFound(w, r)
+			return
+		}
+
+		cli := deps.API
+		if cli == nil {
+			cli = api.NewClient("")
+		}
+
+		row, refreshErr := refreshStatsIfStale(ctx, deps.DB, cli, realmName, name, time.Now().UTC())
+		row.CharacterClass = class
+		vm := buildStatsViewModel(r.Context(), row, refreshErr)
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_ = StatsFragment(vm).Render(r.Context(), w)
 	}
 }
 
@@ -493,6 +616,62 @@ func lookupCharacter(ctx context.Context, db *sql.DB, realmName, name string) (
 		return 0, 0, time.Time{}, time.Time{}, 0, err
 	}
 	return guid, int(cls), firstSeen, lastSeen, int(kc), nil
+}
+
+func loadSpecSummary(ctx context.Context, db *sql.DB, realmName string, guid uint64, expansion int) ([]SpecSummary, error) {
+	const q = `
+		WITH indexOf(players.guid, ?) AS idx
+		SELECT players.talent_spec[idx] AS spec, count() AS kills
+		FROM boss_kill
+		WHERE realm = ? AND has(players.guid, ?) AND players.talent_spec[idx] > 0
+		GROUP BY spec
+	`
+	rows, err := db.QueryContext(ctx, q, guid, realmName, guid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := map[int]uint64{}
+	for rows.Next() {
+		var (
+			spec  uint16
+			kills uint64
+		)
+		if err := rows.Scan(&spec, &kills); err != nil {
+			return nil, err
+		}
+		counts[int(spec)] = kills
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return buildSpecSummaryRows(expansion, counts), nil
+}
+
+func buildSpecSummaryRows(expansion int, counts map[int]uint64) []SpecSummary {
+	rows := make([]SpecSummary, 0, len(counts))
+	for spec, kills := range counts {
+		if spec <= 0 || kills == 0 {
+			continue
+		}
+		rows = append(rows, SpecSummary{
+			Spec:      spec,
+			Class:     wow.ClassFromSpecForExpansion(expansion, spec),
+			SpecLabel: wow.SpecForExpansion(expansion, spec),
+			KillCount: int(kills),
+		})
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].KillCount != rows[j].KillCount {
+			return rows[i].KillCount > rows[j].KillCount
+		}
+		return rows[i].Spec < rows[j].Spec
+	})
+	if len(rows) > 0 {
+		rows[0].IsMostPlayed = true
+	}
+	return rows
 }
 
 func loadRecentKills(ctx context.Context, db *sql.DB, realmName string, guid uint64, expansion int, f KillsFilter, page, pageSize int) ([]KillRow, int, error) {
@@ -809,8 +988,12 @@ func mapKeysU32(m map[uint32]bool) []uint32 {
 func Mount(mux *http.ServeMux, deps Deps) {
 	h := middleware.RequireRealm(Handler(deps))
 	rh := middleware.RequireRealm(RankingsHandler(deps))
+	ah := middleware.RequireRealm(ActivityHandler(deps))
+	sh := middleware.RequireRealm(StatsHandler(deps))
 	router.ForEachRealmPrefix(func(prefix string) {
 		mux.Handle("GET "+prefix+"/character/{name}", h)
 		mux.Handle("GET "+prefix+"/character/{name}/rankings", rh)
+		mux.Handle("GET "+prefix+"/character/{name}/activity", ah)
+		mux.Handle("GET "+prefix+"/character/{name}/stats", sh)
 	})
 }

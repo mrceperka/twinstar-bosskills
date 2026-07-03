@@ -55,6 +55,30 @@ func (c *Client) getJSON(ctx context.Context, path string, query string, out any
 	return dec.Decode(out)
 }
 
+func (c *Client) getRawJSON(ctx context.Context, path string, query string) ([]byte, error) {
+	u := c.BaseURL + path
+	if query != "" {
+		u += "?" + query
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "twinstar-bosskills-go/0.1")
+
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("GET %s: %w", u, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return nil, fmt.Errorf("GET %s: status %d: %s", u, resp.StatusCode, string(body))
+	}
+	return io.ReadAll(resp.Body)
+}
+
 // GetRaids ports packages/api/src/raid.ts:getRaids, including the boss
 // filter/rename fixups for MoP, ToT, ToES, SoO, and Cata raids.
 func (c *Client) GetRaids(ctx context.Context, realmName string, expansion int) ([]Raid, error) {
@@ -164,4 +188,32 @@ func (c *Client) GetBossKillDetail(ctx context.Context, realmName, id string) (*
 		return nil, nil
 	}
 	return &out, nil
+}
+
+func (c *Client) GetCharacterActivityFeed(ctx context.Context, realmName, characterName string, page, pageSize int) (PaginatedCharacterActivityFeed, error) {
+	q := url.Values{}
+	q.Set("realm", realmName)
+	q.Set("name", characterName)
+	q.Set("page", fmt.Sprintf("%d", page))
+	q.Set("pageSize", fmt.Sprintf("%d", pageSize))
+	var out PaginatedCharacterActivityFeed
+	if err := c.getJSON(ctx, "/character/activity-feed", q.Encode(), &out); err != nil {
+		return PaginatedCharacterActivityFeed{}, err
+	}
+	return out, nil
+}
+
+func (c *Client) GetCharacterStats(ctx context.Context, realmName, characterName string) (CharacterStatsPayload, error) {
+	q := url.Values{}
+	q.Set("realm", realmName)
+	q.Set("name", characterName)
+	raw, err := c.getRawJSON(ctx, "/character/stats", q.Encode())
+	if err != nil {
+		return CharacterStatsPayload{}, err
+	}
+	var stats CharacterStats
+	if err := json.Unmarshal(raw, &stats); err != nil {
+		return CharacterStatsPayload{}, err
+	}
+	return CharacterStatsPayload{Raw: raw, Stats: stats}, nil
 }

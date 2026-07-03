@@ -47,10 +47,10 @@ func TestSpecAndClassByExpansion(t *testing.T) {
 		wantSpec  string
 		wantClass int
 	}{
-		{"mop elemental", realm.ExpansionMoP, 262, "Elemental", 7},
-		{"cata elemental collision", realm.ExpansionCata, 261, "Elemental", 7},
-		{"cata restoration shaman collision", realm.ExpansionCata, 262, "Restoration (Shaman)", 7},
-		{"vanilla fire", realm.ExpansionVanilla, 41, "Fire", 8},
+		{"mop elemental", realm.ExpansionMoP, 262, "Elemental", ClassShaman},
+		{"cata elemental collision", realm.ExpansionCata, 261, "Elemental", ClassShaman},
+		{"cata restoration shaman collision", realm.ExpansionCata, 262, "Restoration (Shaman)", ClassShaman},
+		{"vanilla fire", realm.ExpansionVanilla, 41, "Fire", ClassMage},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

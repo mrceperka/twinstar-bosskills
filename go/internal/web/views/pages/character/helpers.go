@@ -30,6 +30,28 @@ func rankingsHref(realmName, charName string, spec int) string {
 	return base
 }
 
+func activityHref(realmName, charName string) string {
+	return links.Character(realmName, charName) + "/activity"
+}
+
+func activityPagedHref(realmName, charName string, page int) string {
+	if page <= 0 {
+		return activityHref(realmName, charName)
+	}
+	return activityHref(realmName, charName) + "?page=" + strconv.Itoa(page)
+}
+
+func statsHref(realmName, charName string) string {
+	return links.Character(realmName, charName) + "/stats"
+}
+
+func specSummaryClass(mostPlayed bool) string {
+	if mostPlayed {
+		return "border-bk-accent bg-bk-accent/10 text-bk-accent"
+	}
+	return "border-bk-border text-bk-muted"
+}
+
 // killsBaseURL is the character page URL used as the hx-get target for the
 // filter form and Reset link. It has no query params; the form submits its
 // own values.
@@ -108,4 +130,7 @@ var (
 	characterPerformanceHref = viewhelpers.CharacterPerformanceHref
 	fmtIlvl                  = viewhelpers.Ilvl
 	armoryHref               = links.TwinstarArmory
+	itemHref                 = links.TwinheadItem
+	itemIconHref             = viewhelpers.ItemIconHref
+	itemTooltipURL           = viewhelpers.ItemTooltipURL
 )

@@ -86,23 +86,23 @@ type BossKill struct {
 
 // BossKillPlayer matches boss_kills_players[*] in /bosskills/:id.
 type BossKillPlayer struct {
-	GUID            int64    `json:"guid"`
-	TalentSpec      int      `json:"talent_spec"`
-	AvgItemLvl      float64  `json:"avg_item_lvl"`
-	DmgDone         FlexInt  `json:"dmgDone"`
-	HealingDone     FlexInt  `json:"healingDone"`
-	OverhealingDone FlexInt  `json:"overhealingDone"`
-	AbsorbDone      FlexInt  `json:"absorbDone"`
-	DmgTaken        FlexInt  `json:"dmgTaken"`
-	DmgAbsorbed     FlexInt  `json:"dmgAbsorbed"`
-	HealingTaken    FlexInt  `json:"healingTaken"`
-	Dispels         FlexInt  `json:"dispels"`
-	Interrupts      FlexInt  `json:"interrupts"`
-	Name            string   `json:"name"`
-	Race            int      `json:"race"`
-	Class           int      `json:"class"`
-	Gender          int      `json:"gender"`
-	Level           int      `json:"level"`
+	GUID            int64   `json:"guid"`
+	TalentSpec      int     `json:"talent_spec"`
+	AvgItemLvl      float64 `json:"avg_item_lvl"`
+	DmgDone         FlexInt `json:"dmgDone"`
+	HealingDone     FlexInt `json:"healingDone"`
+	OverhealingDone FlexInt `json:"overhealingDone"`
+	AbsorbDone      FlexInt `json:"absorbDone"`
+	DmgTaken        FlexInt `json:"dmgTaken"`
+	DmgAbsorbed     FlexInt `json:"dmgAbsorbed"`
+	HealingTaken    FlexInt `json:"healingTaken"`
+	Dispels         FlexInt `json:"dispels"`
+	Interrupts      FlexInt `json:"interrupts"`
+	Name            string  `json:"name"`
+	Race            int     `json:"race"`
+	Class           int     `json:"class"`
+	Gender          int     `json:"gender"`
+	Level           int     `json:"level"`
 }
 
 type BossKillLoot struct {
@@ -137,4 +137,127 @@ type BossKillDetail struct {
 type PaginatedBossKills struct {
 	Data  []BossKill `json:"data"`
 	Total int        `json:"total"`
+}
+
+type CharacterActivityAchievement struct {
+	Name       string `json:"name"`
+	Points     int    `json:"points"`
+	RealmFirst bool   `json:"realmFirst"`
+}
+
+type CharacterActivityLoot struct {
+	Name string `json:"name"`
+}
+
+type CharacterActivityBoss struct {
+	Name string `json:"name"`
+}
+
+type CharacterActivityEvent struct {
+	ID          int                           `json:"id"`
+	Type        int                           `json:"type"`
+	Data        uint32                        `json:"data"`
+	Data2       uint64                        `json:"data2"`
+	Date        int64                         `json:"date"`
+	Difficulty  int                           `json:"difficulty"`
+	ItemGUID    uint64                        `json:"item_guid"`
+	ItemQuality int                           `json:"item_quality"`
+	Icon        string                        `json:"icon"`
+	Achievement *CharacterActivityAchievement `json:"achievement,omitempty"`
+	Loot        *CharacterActivityLoot        `json:"loot,omitempty"`
+	Boss        *CharacterActivityBoss        `json:"boss,omitempty"`
+}
+
+type PaginatedCharacterActivityFeed struct {
+	Data  []CharacterActivityEvent `json:"data"`
+	Total int                      `json:"total"`
+}
+
+type CharacterStatsPayload struct {
+	Raw   json.RawMessage
+	Stats CharacterStats
+}
+
+type CharacterStats struct {
+	Attributes CharacterStatsAttributes `json:"attributes"`
+	Melee      CharacterStatsMelee      `json:"melee"`
+	Ranged     CharacterStatsRanged     `json:"ranged"`
+	Spell      CharacterStatsSpell      `json:"spell"`
+	Defense    CharacterStatsDefense    `json:"defense"`
+}
+
+type CharacterStatsAttributes struct {
+	Stamina   CharacterAttributeStat `json:"stamina"`
+	Strength  CharacterAttributeStat `json:"strength"`
+	Agility   CharacterAttributeStat `json:"agility"`
+	Intellect CharacterAttributeStat `json:"intellect"`
+	Spirit    CharacterAttributeStat `json:"spirit"`
+}
+
+type CharacterAttributeStat struct {
+	Effective      uint32  `json:"effective"`
+	Base           uint32  `json:"base"`
+	Health         uint32  `json:"health"`
+	Mana           int32   `json:"mana"`
+	Attack         int32   `json:"attack"`
+	Armor          uint32  `json:"armor"`
+	SpellPower     int32   `json:"spellPower"`
+	HealthRegen    float64 `json:"healthRegen"`
+	ManaRegen      float64 `json:"manaRegen"`
+	CritHitPercent float64 `json:"critHitPercent"`
+	PosBuf         uint32  `json:"posBuf"`
+	NegBuf         uint32  `json:"negBuf"`
+}
+
+type CharacterStatsMelee struct {
+	AttackPower CharacterPowerStat  `json:"attackPower"`
+	Haste       CharacterRatingStat `json:"haste"`
+	HitChance   CharacterRatingStat `json:"hitChance"`
+	CritChance  CharacterRatingStat `json:"critChance"`
+	Mastery     CharacterRatingStat `json:"mastery"`
+	PVPPower    CharacterRatingStat `json:"pvpPower"`
+	EnergyRegen float64             `json:"energyRegen"`
+}
+
+type CharacterStatsRanged struct {
+	AttackPower CharacterPowerStat  `json:"attackPower"`
+	Haste       CharacterRatingStat `json:"haste"`
+	HitChance   CharacterRatingStat `json:"hitChance"`
+	CritChance  CharacterRatingStat `json:"critChance"`
+	Mastery     CharacterRatingStat `json:"mastery"`
+	PVPPower    CharacterRatingStat `json:"pvpPower"`
+}
+
+type CharacterStatsSpell struct {
+	SpellPower  uint32              `json:"spellPower"`
+	Haste       CharacterRatingStat `json:"haste"`
+	HitChance   CharacterRatingStat `json:"hitChance"`
+	ManaRegen   float64             `json:"manaRegen"`
+	CombatRegen float64             `json:"combatRegen"`
+	CritChance  CharacterRatingStat `json:"critChance"`
+	Mastery     CharacterRatingStat `json:"mastery"`
+	PVPPower    CharacterRatingStat `json:"pvpPower"`
+}
+
+type CharacterStatsDefense struct {
+	Armor         CharacterRatingStat `json:"armor"`
+	Dodge         CharacterRatingStat `json:"dodge"`
+	Parry         CharacterRatingStat `json:"parry"`
+	Block         CharacterRatingStat `json:"block"`
+	PVPResilience CharacterRatingStat `json:"pvpResilience"`
+	PVPPower      CharacterRatingStat `json:"pvpPower"`
+}
+
+type CharacterPowerStat struct {
+	Base      uint32  `json:"base"`
+	DPS       float64 `json:"dps"`
+	PosBuf    uint32  `json:"posBuf"`
+	NegBuf    uint32  `json:"negBuf"`
+	Effective float64 `json:"effective"`
+}
+
+type CharacterRatingStat struct {
+	Base    uint32  `json:"base"`
+	Percent float64 `json:"percent"`
+	Rating  float64 `json:"rating"`
 }
