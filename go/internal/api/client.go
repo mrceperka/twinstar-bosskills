@@ -144,15 +144,16 @@ func (c *Client) ListAllLatestBossKills(ctx context.Context, q Query, concurrenc
 	}
 	jobs := make(chan int)
 	results := make(chan job)
+	pendingPages := totalPages - 1
 	go func() {
-		for p := 1; p <= totalPages; p++ {
+		for p := 1; p < totalPages; p++ {
 			jobs <- p
 		}
 		close(jobs)
 	}()
 	workers := concurrency
-	if workers > totalPages {
-		workers = totalPages
+	if workers > pendingPages {
+		workers = pendingPages
 	}
 	for w := 0; w < workers; w++ {
 		go func() {
@@ -165,7 +166,7 @@ func (c *Client) ListAllLatestBossKills(ctx context.Context, q Query, concurrenc
 			}
 		}()
 	}
-	for i := 0; i < totalPages; i++ {
+	for i := 0; i < pendingPages; i++ {
 		r := <-results
 		if r.err != nil {
 			return nil, fmt.Errorf("page %d: %w", r.page, r.err)

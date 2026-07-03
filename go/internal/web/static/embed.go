@@ -9,7 +9,7 @@ import (
 	"net/http"
 )
 
-//go:embed app.css htmx.min.js echarts.min.js bk-chart.js bk-ui.js logos/32x32/*.png
+//go:embed app.css favicon.ico htmx.min.js echarts.min.js bk-chart.js bk-ui.js logos/32x32/*.png
 var assetsFS embed.FS
 
 // FS exposes the embedded files for http.FileServer.

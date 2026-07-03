@@ -27,6 +27,7 @@ templ Root(meta PageMeta) {
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>{ pageTitle(meta) }</title>
+			<link rel="icon" href={ faviconURL() } sizes="any"/>
 			<link rel="stylesheet" href={ cssURL(meta) }/>
 			<script src={ jsURL(meta, "htmx.min.js") } defer></script>
 			<script src={ jsURL(meta, "bk-ui.js") } defer></script>
@@ -101,6 +102,13 @@ func pageTitle(m PageMeta) string {
 		return "Twinstar Bosskills"
 	}
 	return m.Title + " — Twinstar Bosskills"
+}
+
+func faviconURL() templ.SafeURL {
+	if h := static.Hash("favicon.ico"); h != "" {
+		return templ.SafeURL("/favicon.ico?v=" + h)
+	}
+	return "/favicon.ico"
 }
 
 func cssURL(m PageMeta) string {

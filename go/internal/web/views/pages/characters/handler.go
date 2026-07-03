@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/router"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
 )
 
 type Deps struct {
@@ -24,6 +24,10 @@ const searchLimit = 25
 func Handler(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		realmName := middleware.Realm(r.Context())
+		if middleware.GatePrivateRealm(w, r) {
+			return
+		}
+		guildFilter := middleware.PrivateRealmGuildFilter(r)
 		q := strings.TrimSpace(r.URL.Query().Get("q"))
 
 		ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
@@ -32,7 +36,7 @@ func Handler(deps Deps) http.HandlerFunc {
 		var matches []Match
 		var err error
 		if q != "" && len(q) >= 2 {
-			matches, err = search(ctx, deps.DB, realmName, q)
+			matches, err = search(ctx, deps.DB, realmName, guildFilter, q)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -65,8 +69,21 @@ func Handler(deps Deps) http.HandlerFunc {
 // Prefix search uses startsWith because we want "Sk" -> "Skrassham", not
 // substring matches across the whole identity. If you want broader matches,
 // swap for positionCaseInsensitive(name, q) > 0.
-func search(ctx context.Context, db *sql.DB, realmName, q string) ([]Match, error) {
-	const sqlText = `
+func search(ctx context.Context, db *sql.DB, realmName, guildFilter, q string) ([]Match, error) {
+	args := []any{realmName}
+	guildFilterSQL := ""
+	if guildFilter != "" {
+		guildFilterSQL = `
+		  AND guid IN (
+			  SELECT players.guid
+			  FROM boss_kill ARRAY JOIN players
+			  WHERE realm = ? AND guild = ?
+			  GROUP BY players.guid
+		  )`
+		args = append(args, realmName, guildFilter)
+	}
+	args = append(args, q, searchLimit)
+	sqlText := `
 		SELECT guid,
 		       argMaxMerge(name_state)   AS name,
 		       argMaxMerge(class_state)  AS class,
@@ -74,13 +91,13 @@ func search(ctx context.Context, db *sql.DB, realmName, q string) ([]Match, erro
 		       sumMerge(kill_count_state) AS kills,
 		       maxMerge(last_seen_state)  AS last_seen
 		FROM character
-		WHERE realm = ?
+		WHERE realm = ?` + guildFilterSQL + `
 		GROUP BY realm, guid
 		HAVING startsWith(lower(name), lower(?))
 		ORDER BY kills DESC
 		LIMIT ?
 	`
-	rows, err := db.QueryContext(ctx, sqlText, realmName, q, searchLimit)
+	rows, err := db.QueryContext(ctx, sqlText, args...)
 	if err != nil {
 		return nil, err
 	}

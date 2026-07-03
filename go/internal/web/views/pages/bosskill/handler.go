@@ -264,19 +264,19 @@ func loadKill(ctx context.Context, db *sql.DB, realmName, remoteID string, expan
 	actualDeaths := len(deathTime) - ressCount
 
 	info = KillInfo{
-		RemoteID:     remoteID,
-		BossID:       bossID,
-		BossName:     bossName,
-		RaidName:     raidName,
-		Mode:         int(mode),
-		ModeLabel:    wow.Difficulty(expansion, int(mode)),
-		Guild:        guild,
-		KillTime:     killTime.Format("01/02/2006, 3:04 PM"),
-		LengthSec:    int(length) / 1000,
-		Wipes:        int(wipes),
-		Deaths:       actualDeaths,
-		Ressurects:   ressCount,
-		RessUsed:     int(ressUsed),
+		RemoteID:      remoteID,
+		BossID:        bossID,
+		BossName:      bossName,
+		RaidName:      raidName,
+		Mode:          int(mode),
+		ModeLabel:     wow.Difficulty(expansion, int(mode)),
+		Guild:         guild,
+		KillTime:      killTime.Format("01/02/2006, 3:04 PM"),
+		LengthSec:     int(length) / 1000,
+		Wipes:         int(wipes),
+		Deaths:        actualDeaths,
+		Ressurects:    ressCount,
+		RessUsed:      int(ressUsed),
 		AvgIlvl:       avgIlvl,
 		TotalDmgDone:  totalDmg,
 		TotalHealDone: totalHeal + totalAbs,
@@ -395,7 +395,6 @@ func loadLootChances(ctx context.Context, db *sql.DB, realmName string, bossID u
 	const totalQ = `
 		SELECT count()
 		FROM boss_kill
-		ARRAY JOIN loot
 		WHERE realm = ?
 		  AND boss_remote_id = ?
 		  AND mode = ?
@@ -424,7 +423,7 @@ func loadLootChances(ctx context.Context, db *sql.DB, realmName string, bossID u
 		args = append(args, id)
 	}
 	q := `
-		SELECT loot.item_id, count()
+		SELECT loot.item_id, uniqExact(remote_id)
 		FROM boss_kill
 		ARRAY JOIN loot
 		WHERE realm = ?

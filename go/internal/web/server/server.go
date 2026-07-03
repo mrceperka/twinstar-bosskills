@@ -50,6 +50,9 @@ func New(cfg Config) http.Handler {
 
 	// Static assets — content-hashed in URLs, cached aggressively.
 	mux.Handle("GET /static/", cacheStatic(http.StripPrefix("/static", static.Handler())))
+	mux.Handle("GET /favicon.ico", cacheStatic(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, static.FS(), "favicon.ico")
+	})))
 
 	// Health endpoint (cheap, no DB).
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {

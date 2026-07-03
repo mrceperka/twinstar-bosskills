@@ -149,6 +149,45 @@ a:hover {
 .bk-table-wrap tbody tr:nth-child(even) td:first-child {
   background-color: #1f1f1f; /* zebra-tinted, still solid for sticky */
 }
+.bk-table-wrap tbody td:first-child,
+.bk-table-wrap thead th:first-child {
+  max-width: 20vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bk-table-wrap tbody td:first-child > *,
+.bk-table-wrap thead th:first-child > * {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+.bk-table-wrap tbody td:first-child > a,
+.bk-table-wrap thead th:first-child > a,
+.bk-table-wrap tbody td:first-child > span,
+.bk-table-wrap thead th:first-child > span {
+  display: inline-block;
+}
+.bk-table-wrap .bk-table-truncated {
+  cursor: help;
+}
+.bk-table-fulltext-tip {
+  position: fixed;
+  z-index: 1000;
+  max-width: min(36rem, calc(100vw - 1rem));
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--color-bk-border);
+  background: var(--color-bk-bg);
+  color: var(--color-bk-text);
+  box-shadow: 0 0.5rem 1.25rem rgba(0, 0, 0, 0.45);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-family: monospace;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  pointer-events: none;
+}
 @media (max-width: 360px) {
   .bk-table-wrap thead th,
   .bk-table-wrap tbody td:first-child,

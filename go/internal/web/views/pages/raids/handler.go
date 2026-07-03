@@ -25,6 +25,10 @@ type Deps struct {
 func Handler(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		realmName := middleware.Realm(r.Context())
+		if middleware.GatePrivateRealm(w, r) {
+			return
+		}
+		guildFilter := middleware.PrivateRealmGuildFilter(r)
 
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
@@ -37,7 +41,7 @@ func Handler(deps Deps) http.HandlerFunc {
 		}
 		win := domain.RaidLock(time.Now().UTC(), offset)
 
-		raidList, difficulties, err := loadRaids(ctx, deps.DB, realmName, win)
+		raidList, difficulties, err := loadRaids(ctx, deps.DB, realmName, guildFilter, win)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -66,7 +70,7 @@ func Handler(deps Deps) http.HandlerFunc {
 
 // loadRaids returns every known boss with a kill count per difficulty for
 // the selected lock. Bosses with no kills are kept visible.
-func loadRaids(ctx context.Context, db *sql.DB, realmName string, win domain.RaidLockWindow) ([]Raid, []string, error) {
+func loadRaids(ctx context.Context, db *sql.DB, realmName, guildFilter string, win domain.RaidLockWindow) ([]Raid, []string, error) {
 	const bossQ = `
 		SELECT b.raid_name, b.remote_id, b.name, b.position, ifNull(r.position, 0)
 		FROM (
@@ -122,17 +126,19 @@ func loadRaids(ctx context.Context, db *sql.DB, realmName string, win domain.Rai
 		return nil, nil, err
 	}
 
-	const killQ = `
+	guildWhere, guildArgs := privateGuildWhere(guildFilter)
+	killQ := `
 		SELECT raid_name,
 		       boss_remote_id,
 		       any(boss_name) AS boss_name,
 		       mode,
 		       count() AS kills
 		FROM boss_kill
-		WHERE realm = ? AND kill_time >= ? AND kill_time < ?
+		WHERE realm = ? AND kill_time >= ? AND kill_time < ?` + guildWhere + `
 		GROUP BY raid_name, boss_remote_id, mode
 	`
-	rows, err := db.QueryContext(ctx, killQ, realmName, win.Start, win.End)
+	killArgs := append([]any{realmName, win.Start, win.End}, guildArgs...)
+	rows, err := db.QueryContext(ctx, killQ, killArgs...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -231,6 +237,13 @@ func loadRaids(ctx context.Context, db *sql.DB, realmName string, win domain.Rai
 	})
 
 	return out, difficulties, nil
+}
+
+func privateGuildWhere(guildFilter string) (string, []any) {
+	if guildFilter == "" {
+		return "", nil
+	}
+	return " AND guild = ?", []any{guildFilter}
 }
 
 func Mount(mux *http.ServeMux, deps Deps) {

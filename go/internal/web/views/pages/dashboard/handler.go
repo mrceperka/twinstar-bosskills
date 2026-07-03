@@ -27,6 +27,10 @@ const topBossLimit = 14
 func Handler(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		realmName := middleware.Realm(r.Context())
+		if middleware.GatePrivateRealm(w, r) {
+			return
+		}
+		guildFilter := middleware.PrivateRealmGuildFilter(r)
 
 		ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
 		defer cancel()
@@ -36,12 +40,12 @@ func Handler(deps Deps) http.HandlerFunc {
 		curWin := domain.RaidLock(now, 0)
 		prevWin := domain.RaidLock(now, 1)
 
-		curr, err := loadLockSummary(ctx, deps.DB, realmName, curWin, expansion)
+		curr, err := loadLockSummary(ctx, deps.DB, realmName, guildFilter, curWin, expansion)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		prev, err := loadLockSummary(ctx, deps.DB, realmName, prevWin, expansion)
+		prev, err := loadLockSummary(ctx, deps.DB, realmName, guildFilter, prevWin, expansion)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -66,11 +70,12 @@ func Handler(deps Deps) http.HandlerFunc {
 
 // loadLockSummary builds the per-lockout block: totals, top kills, top wipes,
 // and the bar-chart configs for day-of-week + hour-of-day.
-func loadLockSummary(ctx context.Context, db *sql.DB, realmName string, win domain.RaidLockWindow, expansion int) (LockSummary, error) {
+func loadLockSummary(ctx context.Context, db *sql.DB, realmName, guildFilter string, win domain.RaidLockWindow, expansion int) (LockSummary, error) {
 	s := LockSummary{
 		StartLabel: win.Start.Format("01/02/2006, 3:04 PM"),
 		EndLabel:   win.End.Format("01/02/2006, 3:04 PM"),
 	}
+	guildWhere, guildArgs := privateGuildWhere(guildFilter)
 
 	// Totals.
 	const totalsQ = `
@@ -79,7 +84,8 @@ func loadLockSummary(ctx context.Context, db *sql.DB, realmName string, win doma
 		WHERE realm = ? AND kill_time >= ? AND kill_time < ?
 	`
 	var kills, wipes uint64
-	if err := db.QueryRowContext(ctx, totalsQ, realmName, win.Start, win.End).Scan(&kills, &wipes); err != nil {
+	totalsArgs := append([]any{realmName, win.Start, win.End}, guildArgs...)
+	if err := db.QueryRowContext(ctx, totalsQ+guildWhere, totalsArgs...).Scan(&kills, &wipes); err != nil {
 		return s, err
 	}
 	s.TotalKills = int(kills)
@@ -89,14 +95,16 @@ func loadLockSummary(ctx context.Context, db *sql.DB, realmName string, win doma
 	}
 
 	// Most kills (top boss/mode combos).
+	topKillsArgs := append([]any{realmName, win.Start, win.End}, guildArgs...)
+	topKillsArgs = append(topKillsArgs, topBossLimit)
 	rows, err := db.QueryContext(ctx, `
 		SELECT count() AS c, boss_remote_id, any(boss_name), mode
 		FROM boss_kill
-		WHERE realm = ? AND kill_time >= ? AND kill_time < ?
+		WHERE realm = ? AND kill_time >= ? AND kill_time < ?`+guildWhere+`
 		GROUP BY boss_remote_id, mode
 		ORDER BY c DESC
 		LIMIT ?
-	`, realmName, win.Start, win.End, topBossLimit)
+	`, topKillsArgs...)
 	if err != nil {
 		return s, err
 	}
@@ -119,14 +127,16 @@ func loadLockSummary(ctx context.Context, db *sql.DB, realmName string, win doma
 	rows.Close()
 
 	// Most wipes.
+	topWipesArgs := append([]any{realmName, win.Start, win.End}, guildArgs...)
+	topWipesArgs = append(topWipesArgs, topBossLimit)
 	rows, err = db.QueryContext(ctx, `
 		SELECT sum(wipes) AS w, boss_remote_id, any(boss_name), mode
 		FROM boss_kill
-		WHERE realm = ? AND kill_time >= ? AND kill_time < ? AND wipes > 0
+		WHERE realm = ? AND kill_time >= ? AND kill_time < ? AND wipes > 0`+guildWhere+`
 		GROUP BY boss_remote_id, mode
 		ORDER BY w DESC
 		LIMIT ?
-	`, realmName, win.Start, win.End, topBossLimit)
+	`, topWipesArgs...)
 	if err != nil {
 		return s, err
 	}
@@ -150,12 +160,13 @@ func loadLockSummary(ctx context.Context, db *sql.DB, realmName string, win doma
 
 	// By day of week. CH: toDayOfWeek returns Mon=1..Sun=7.
 	dayCounts := [7]int{}
+	dayArgs := append([]any{realmName, win.Start, win.End}, guildArgs...)
 	rows, err = db.QueryContext(ctx, `
 		SELECT toDayOfWeek(kill_time) AS d, count()
 		FROM boss_kill
-		WHERE realm = ? AND kill_time >= ? AND kill_time < ?
+		WHERE realm = ? AND kill_time >= ? AND kill_time < ?`+guildWhere+`
 		GROUP BY d
-	`, realmName, win.Start, win.End)
+	`, dayArgs...)
 	if err != nil {
 		return s, err
 	}
@@ -193,12 +204,13 @@ func loadLockSummary(ctx context.Context, db *sql.DB, realmName string, win doma
 
 	// By hour 00..23.
 	hourCounts := [24]int{}
+	hourArgs := append([]any{realmName, win.Start, win.End}, guildArgs...)
 	rows, err = db.QueryContext(ctx, `
 		SELECT toHour(kill_time) AS h, count()
 		FROM boss_kill
-		WHERE realm = ? AND kill_time >= ? AND kill_time < ?
+		WHERE realm = ? AND kill_time >= ? AND kill_time < ?`+guildWhere+`
 		GROUP BY h
-	`, realmName, win.Start, win.End)
+	`, hourArgs...)
 	if err != nil {
 		return s, err
 	}
@@ -232,6 +244,13 @@ func loadLockSummary(ctx context.Context, db *sql.DB, realmName string, win doma
 	s.ByHourJSON, _ = buildBarChartJSON(hourLabels, hourValues)
 
 	return s, nil
+}
+
+func privateGuildWhere(guildFilter string) (string, []any) {
+	if guildFilter == "" {
+		return "", nil
+	}
+	return " AND guild = ?", []any{guildFilter}
 }
 
 func leftPad2(n int) string {

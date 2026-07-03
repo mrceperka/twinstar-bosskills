@@ -31,7 +31,7 @@ func syncRealm(ctx context.Context, log *slog.Logger, db *sql.DB, cli *api.Clien
 		return fmt.Errorf("unknown realm %q", opts.Realm)
 	}
 	if opts.BatchSize <= 0 {
-		opts.BatchSize = 200
+		opts.BatchSize = 10000
 	}
 	if opts.Concurrency <= 0 {
 		opts.Concurrency = 4
@@ -56,6 +56,7 @@ func syncRealm(ctx context.Context, log *slog.Logger, db *sql.DB, cli *api.Clien
 	}
 
 	var inserted, skipped, failed int
+	var firstErr error
 	for _, raid := range raids {
 		for _, boss := range raid.Bosses {
 			bossID := uint32(boss.Entry)
@@ -72,6 +73,12 @@ func syncRealm(ctx context.Context, log *slog.Logger, db *sql.DB, cli *api.Clien
 		}
 	}
 	log.Info("realm done", "inserted", inserted, "skipped", skipped, "failed", failed)
+	if firstErr != nil {
+		return fmt.Errorf("one or more bosses failed: %w", firstErr)
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d boss kill details failed", failed)
+	}
 	return nil
 }
 

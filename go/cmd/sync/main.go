@@ -11,7 +11,7 @@
 //	--boss-ids 71358        only these boss entries
 //	--page      <int>       0-indexed page; combined with --page-size
 //	--page-size <int>       upstream page size
-//	--batch-size 200        CH insert batch size
+//	--batch-size 10000        CH insert batch size
 //	--concurrency 4         API/CH concurrency per realm
 //
 // If --from-date is set, --offset is ignored (matches existing TS behavior).
@@ -48,7 +48,7 @@ func main() {
 		bossIDs     = flag.String("boss-ids", "", "comma-separated boss entry IDs")
 		page        = flag.Int("page", -1, "page (0-indexed); -1 means unset")
 		pageSize    = flag.Int("page-size", -1, "page size; -1 means unset")
-		batchSize   = flag.Int("batch-size", 200, "ClickHouse insert batch size")
+		batchSize   = flag.Int("batch-size", 10000, "ClickHouse insert batch size")
 		concurrency = flag.Int("concurrency", 4, "per-realm worker concurrency")
 	)
 	flag.Parse()

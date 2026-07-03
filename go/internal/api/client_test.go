@@ -6,7 +6,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -41,6 +44,66 @@ func TestGetCharacterActivityFeedEncodesQuery(t *testing.T) {
 	} {
 		if got := gotQuery.Get(key); got != want {
 			t.Fatalf("query %s = %q, want %q; full query = %#v", key, got, want, gotQuery)
+		}
+	}
+}
+
+func TestListAllLatestBossKillsFetchesOnlyRemainingPages(t *testing.T) {
+	var (
+		mu    sync.Mutex
+		pages []int
+	)
+
+	cli := NewClient("https://example.test")
+	cli.HTTP = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		page := req.URL.Query().Get("page")
+		pageN := 0
+		if page != "" {
+			var err error
+			pageN, err = strconv.Atoi(page)
+			if err != nil {
+				t.Fatalf("bad page query %q: %v", page, err)
+			}
+		}
+		mu.Lock()
+		pages = append(pages, pageN)
+		mu.Unlock()
+
+		body := `{"data":[{"id":"0"},{"id":"1"}],"total":3}`
+		switch pageN {
+		case 0:
+			body = `{"data":[{"id":"0"},{"id":"1"}],"total":3}`
+		case 1:
+			body = `{"data":[{"id":"2"}],"total":3}`
+		default:
+			t.Fatalf("unexpected page fetch: %d", pageN)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    req,
+		}, nil
+	})}
+
+	got, err := cli.ListAllLatestBossKills(context.Background(), Query{Realm: "Helios", PageSize: 2}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("len(got) = %d, want 3", len(got))
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	sort.Ints(pages)
+	want := []int{0, 1}
+	if len(pages) != len(want) {
+		t.Fatalf("pages = %v, want %v", pages, want)
+	}
+	for i := range want {
+		if pages[i] != want[i] {
+			t.Fatalf("pages = %v, want %v", pages, want)
 		}
 	}
 }
