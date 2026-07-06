@@ -110,6 +110,7 @@ type StatsMetric struct {
 	Label      string
 	Value      string
 	ValueClass string
+	Detail     string
 	PosDelta   string
 	NegDelta   string
 }
@@ -347,18 +348,18 @@ func buildStatsViewModel(ctx context.Context, row statsStorageRow, refreshErr er
 			Metrics: []StatsMetric{
 				{Label: "Attack Power", Value: format.Int(loc, int(row.AttackPower))},
 				{Label: "Spell Power", Value: format.Int(loc, int(row.SpellPower))},
-				{Label: "Hit", Value: formatRatingStat(loc, row.HitBase, row.HitPercent, row.HitRating)},
-				{Label: "Crit", Value: formatRatingStat(loc, row.CritBase, row.CritPercent, row.CritRating)},
-				{Label: "Haste", Value: formatRatingStat(loc, row.HasteBase, row.HastePercent, row.HasteRating)},
-				{Label: "Mastery", Value: formatRatingStat(loc, row.MasteryBase, row.MasteryPercent, row.MasteryRating)},
+				{Label: "Hit", Value: formatRatingStat(loc, row.HitBase, row.HitPercent)},
+				{Label: "Crit", Value: formatRatingStat(loc, row.CritBase, row.CritPercent)},
+				{Label: "Haste", Value: formatRatingStat(loc, row.HasteBase, row.HastePercent)},
+				{Label: "Mastery", Value: formatMasteryTotal(row.MasteryRating)},
 			},
 		},
 		{
 			Title: "Defense",
 			Metrics: []StatsMetric{
-				{Label: "Armor", Value: formatRatingStat(loc, row.ArmorBase, row.ArmorPercent, row.ArmorRating)},
-				{Label: "Dodge", Value: formatRatingStat(loc, row.DodgeBase, row.DodgePercent, row.DodgeRating)},
-				{Label: "Parry", Value: formatRatingStat(loc, row.ParryBase, row.ParryPercent, row.ParryRating)},
+				{Label: "Armor", Value: formatRatingStat(loc, row.ArmorBase, row.ArmorPercent)},
+				{Label: "Dodge", Value: formatRatingStat(loc, row.DodgeBase, row.DodgePercent)},
+				{Label: "Parry", Value: formatRatingStat(loc, row.ParryBase, row.ParryPercent)},
 			},
 		},
 	}
@@ -405,13 +406,23 @@ func nonNegativeUint32(v float64) uint32 {
 	return uint32(math.Round(v))
 }
 
-func formatRatingStat(loc format.Locale, base uint32, percent, rating float64) string {
-	return fmt.Sprintf("Base %s | %s | Rating %s", format.Int(loc, int(base)), formatPercent(percent), formatNumber(rating))
+func formatRatingStat(loc format.Locale, base uint32, percent float64) string {
+	return fmt.Sprintf("Base %s | %s", format.Int(loc, int(base)), formatPercent(percent))
+}
+
+func formatMasteryTotal(ratingBonus float64) string {
+	const baseMastery = 8
+	return formatFixed(baseMastery+ratingBonus, 2)
 }
 
 func formatNumber(v float64) string {
 	rounded := math.Round(v*10) / 10
 	s := fmt.Sprintf("%.1f", rounded)
+	return strings.TrimSuffix(strings.TrimSuffix(s, "0"), ".")
+}
+
+func formatFixed(v float64, digits int) string {
+	s := fmt.Sprintf("%.*f", digits, v)
 	return strings.TrimSuffix(strings.TrimSuffix(s, "0"), ".")
 }
 

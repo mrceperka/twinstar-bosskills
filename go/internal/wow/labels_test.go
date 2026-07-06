@@ -14,10 +14,10 @@ func TestDifficultyByExpansion(t *testing.T) {
 		mode      int
 		want      string
 	}{
-		{"mop 10 normal", realm.ExpansionMoP, 3, "10 N"},
-		{"mop 10 heroic", realm.ExpansionMoP, 5, "10 HC"},
-		{"cata 10 normal", realm.ExpansionCata, 0, "10 N"},
-		{"cata 10 heroic", realm.ExpansionCata, 2, "10 HC"},
+		{"mop 10 normal", realm.ExpansionMoP, DifficultyMoP10Normal, "10 N"},
+		{"mop 10 heroic", realm.ExpansionMoP, DifficultyMoP10Heroic, "10 HC"},
+		{"cata 10 normal", realm.ExpansionCata, DifficultyCata10Normal, "10 N"},
+		{"cata 10 heroic", realm.ExpansionCata, DifficultyCata10Heroic, "10 HC"},
 		{"vanilla forty", realm.ExpansionVanilla, 9, "40"},
 		{"unknown", realm.ExpansionMoP, 99, "99"},
 	}
@@ -31,11 +31,33 @@ func TestDifficultyByExpansion(t *testing.T) {
 }
 
 func TestDifficultyLists(t *testing.T) {
-	if got, want := RaidDifficulties(realm.ExpansionCata), []int{0, 1, 2, 3}; !reflect.DeepEqual(got, want) {
+	if got, want := RaidDifficulties(realm.ExpansionCata), []int{DifficultyCata10Normal, DifficultyCata25Normal, DifficultyCata10Heroic, DifficultyCata25Heroic}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("RaidDifficulties(Cata) = %v, want %v", got, want)
 	}
-	if got, want := RaidDifficulties(realm.ExpansionMoP), []int{3, 4, 5, 6, 7, 14}; !reflect.DeepEqual(got, want) {
+	if got, want := RaidDifficulties(realm.ExpansionMoP), []int{DifficultyMoP10Normal, DifficultyMoP25Normal, DifficultyMoP10Heroic, DifficultyMoP25Heroic, DifficultyMoPLFR, DifficultyMoPFlex}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("RaidDifficulties(MoP) = %v, want %v", got, want)
+	}
+}
+
+func TestIsRaidDifficultyWithLoot(t *testing.T) {
+	tests := []struct {
+		name      string
+		expansion int
+		mode      int
+		want      bool
+	}{
+		{"mop lfr", realm.ExpansionMoP, DifficultyMoPLFR, false},
+		{"mop flex", realm.ExpansionMoP, DifficultyMoPFlex, true},
+		{"mop challenge", realm.ExpansionMoP, DifficultyMoPChallenge, false},
+		{"cata heroic", realm.ExpansionCata, DifficultyCata10Heroic, true},
+		{"vanilla", realm.ExpansionVanilla, 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsRaidDifficultyWithLoot(tt.expansion, tt.mode); got != tt.want {
+				t.Fatalf("IsRaidDifficultyWithLoot(%d, %d) = %v, want %v", tt.expansion, tt.mode, got, tt.want)
+			}
+		})
 	}
 }
 

@@ -15,13 +15,18 @@ type ViewModel struct {
 	Realm    string
 	Lock     LockLabel
 	Raids    []Raid
-	Difficulties []string // header columns
+	Difficulties []DifficultyChoice // header columns
 }
 
 type LockLabel struct {
 	StartLabel string
 	EndLabel   string
 	Offset     int
+}
+
+type DifficultyChoice struct {
+	Mode  int
+	Label string
 }
 
 type Raid struct {
@@ -32,8 +37,8 @@ type Raid struct {
 type BossRow struct {
 	Name     string
 	RemoteID uint32
-	// KillsByDifficulty[difficulty index in Difficulties] = count
-	KillsByDifficulty []int
+	// KillsByDifficulty[mode] = count
+	KillsByDifficulty map[int]int
 	Total             int
 }
 
@@ -60,7 +65,7 @@ templ Page(vm ViewModel) {
 						<h2 class="text-sm font-medium uppercase tracking-wide text-bk-muted">{ r.Name }</h2>
 					</header>
 					<div class="p-4">
-						@raidTable(r, vm.Difficulties)
+						@raidTable(vm.Realm, r, vm.Difficulties)
 					</div>
 				</section>
 			}
@@ -73,13 +78,13 @@ templ Page(vm ViewModel) {
 	}
 }
 
-templ raidTable(r Raid, difficulties []string) {
+templ raidTable(realmName string, r Raid, difficulties []DifficultyChoice) {
 	@components.Table() {
 		<thead>
 			<tr>
 				<th>Boss</th>
 				for _, d := range difficulties {
-					<th class="text-right">{ d }</th>
+					<th class="text-right">{ d.Label }</th>
 				}
 				<th class="text-right">Total</th>
 			</tr>
@@ -88,16 +93,20 @@ templ raidTable(r Raid, difficulties []string) {
 			for _, b := range r.Bosses {
 				<tr>
 					<td>{ b.Name }</td>
-					for _, c := range b.KillsByDifficulty {
+					for _, d := range difficulties {
 						<td class="text-right">
-							if c > 0 {
-								{ format.IntCtx(ctx, c) }
+							if b.KillsByDifficulty[d.Mode] > 0 {
+								<a href={viewhelpers.BossWithDifficultyHref(realmName, b.RemoteID, d.Mode)}>
+									{ format.IntCtx(ctx, b.KillsByDifficulty[d.Mode]) }
+								</a>
 							} else {
 								<span class="text-bk-muted">—</span>
 							}
 						</td>
 					}
-					<td class="text-right font-medium">{ format.IntCtx(ctx, b.Total) }</td>
+					<td class="text-right font-medium">
+						{ format.IntCtx(ctx, b.Total) }
+					</td>
 				</tr>
 			}
 		</tbody>

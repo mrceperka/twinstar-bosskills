@@ -10,6 +10,7 @@ import (
 
 	"github.com/mrceperka/twinstar-bosskills/go/internal/api"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
 )
 
 // syncOptions controls one realm's sync run.
@@ -92,6 +93,7 @@ func syncBoss(
 	boss api.Boss,
 ) (inserted, skipped, failed int, err error) {
 	log = log.With("boss", boss.Name, "boss_entry", boss.Entry)
+	expansion := realm.Expansion(opts.Realm)
 
 	q := api.Query{
 		Realm: opts.Realm,
@@ -141,6 +143,20 @@ func syncBoss(
 	}
 	log.Info("fetched kills", "count", len(bosskills))
 
+	existingDarkShamanLFR, err := existingDarkShamanLFRSignatures(ctx, db, opts.Realm, bosskills)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	var duplicateSkipped int
+	bosskills, duplicateSkipped = filterDuplicateDarkShamanLFRBossKills(bosskills, existingDarkShamanLFR)
+	if duplicateSkipped > 0 {
+		log.Info("skipped duplicate Kor'kron Dark Shaman LFR kills", "count", duplicateSkipped)
+		skipped += duplicateSkipped
+	}
+	if len(bosskills) == 0 {
+		return 0, skipped, 0, nil
+	}
+
 	ids := make([]string, len(bosskills))
 	for i, bk := range bosskills {
 		ids[i] = bk.ID
@@ -174,11 +190,11 @@ func syncBoss(
 			failed++
 			continue
 		}
-		// Discard non-LFR kills with no loot. Upstream sometimes records two
+		// Discard loot-bearing-mode kills with no loot. Upstream sometimes records two
 		// rows for the same fight on bosses like Kor'kron Dark Shaman — the
-		// duplicate has no loot. Loot-bearing modes (everything except LFR=7)
-		// should always produce at least one loot row in a legitimate kill.
-		if bk.Mode != 7 && (detail == nil || len(detail.Loot) == 0) {
+		// duplicate has no loot. Loot-bearing raid modes should always produce
+		// at least one loot row in a legitimate kill.
+		if wow.IsRaidDifficultyWithLoot(expansion, bk.Mode) && (detail == nil || len(detail.Loot) == 0) {
 			log.Info("skip no-loot non-LFR kill", "id", bk.ID, "boss", boss.Name, "mode", bk.Mode)
 			skipped++
 			continue

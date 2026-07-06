@@ -70,7 +70,7 @@ func Handler(deps Deps) http.HandlerFunc {
 
 // loadRaids returns every known boss with a kill count per difficulty for
 // the selected lock. Bosses with no kills are kept visible.
-func loadRaids(ctx context.Context, db *sql.DB, realmName, guildFilter string, win domain.RaidLockWindow) ([]Raid, []string, error) {
+func loadRaids(ctx context.Context, db *sql.DB, realmName, guildFilter string, win domain.RaidLockWindow) ([]Raid, []DifficultyChoice, error) {
 	const bossQ = `
 		SELECT b.raid_name, b.remote_id, b.name, b.position, ifNull(r.position, 0)
 		FROM (
@@ -169,9 +169,9 @@ func loadRaids(ctx context.Context, db *sql.DB, realmName, guildFilter string, w
 	exp := realm.Expansion(realmName)
 	modes := wow.RaidDifficulties(exp)
 	sort.Ints(modes)
-	difficulties := make([]string, len(modes))
+	difficulties := make([]DifficultyChoice, len(modes))
 	for i, m := range modes {
-		difficulties[i] = wow.Difficulty(exp, m)
+		difficulties[i] = DifficultyChoice{Mode: m, Label: wow.Difficulty(exp, m)}
 	}
 
 	// Group bosses by raid; sort raids by total kills desc; bosses by remote_id.
@@ -194,11 +194,11 @@ func loadRaids(ctx context.Context, db *sql.DB, realmName, guildFilter string, w
 		row := BossRow{
 			Name:              agg.Name,
 			RemoteID:          k.RemoteID,
-			KillsByDifficulty: make([]int, len(modes)),
+			KillsByDifficulty: make(map[int]int, len(modes)),
 		}
-		for i, m := range modes {
+		for _, m := range modes {
 			c := agg.KillsByMode[m]
-			row.KillsByDifficulty[i] = c
+			row.KillsByDifficulty[m] = c
 			row.Total += c
 		}
 		ra.Bosses = append(ra.Bosses, row)

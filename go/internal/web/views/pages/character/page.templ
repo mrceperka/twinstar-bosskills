@@ -131,20 +131,19 @@ templ Page(vm ViewModel) {
 						<a href={ templ.SafeURL(links.TwinstarArmory(vm.Realm, vm.Char.Name)) } target="_blank" rel="noopener" class="text-xs text-bk-muted hover:text-bk-accent">Armory ↗</a>
 					</div>
 				</div>
-				<dl class="grid grid-cols-3 gap-x-6 gap-y-1 text-sm">
+				<dl class="grid w-full grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm sm:w-auto sm:grid-cols-3 sm:gap-x-6">
 					<dt class="text-bk-muted">Kills tracked</dt>
-					<dd class="col-span-2 font-mono">{ format.IntCtx(ctx, vm.Char.KillCount) }</dd>
+					<dd class="text-right font-mono sm:col-span-2 sm:text-left">{ format.IntCtx(ctx, vm.Char.KillCount) }</dd>
 					<dt class="text-bk-muted">First seen</dt>
-					<dd class="col-span-2 font-mono">{ vm.Char.FirstSeen }</dd>
+					<dd class="text-right font-mono sm:col-span-2 sm:text-left">{ vm.Char.FirstSeen }</dd>
 					<dt class="text-bk-muted">Last seen</dt>
-					<dd class="col-span-2 font-mono">{ vm.Char.LastSeen }</dd>
+					<dd class="text-right font-mono sm:col-span-2 sm:text-left">{ vm.Char.LastSeen }</dd>
 					if len(vm.SpecSummary) > 0 {
-						<dt class="text-bk-muted">Specs</dt>
-						<dd class="col-span-2 flex flex-wrap justify-end gap-1.5">
+						<dt aria-hidden="true"></dt>
+						<dd class="flex flex-wrap justify-end gap-1 sm:col-span-2 sm:gap-1.5">
 							for _, spec := range vm.SpecSummary {
-								<span class={ "inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs", specSummaryClass(spec.IsMostPlayed) }>
-									@components.ClassSpecIcons(vm.Realm, spec.Class, spec.Spec)
-									<span>{ spec.SpecLabel }</span>
+								<span class={ "inline-flex items-center gap-1 rounded border px-1 py-0.5 text-xs sm:px-1.5", specSummaryClass(spec.IsMostPlayed) }>
+									@components.ClassSpecIcons(vm.Realm, 0, spec.Spec)
 									<span class="font-mono">{ format.IntCtx(ctx, spec.KillCount) }</span>
 									if spec.IsMostPlayed {
 										<span class="sr-only">Most played</span>
@@ -189,35 +188,19 @@ templ killsFilterForm(vm ViewModel) {
 	>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Raid</span>
-			<select name="raid" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-24">
-				for _, o := range vm.RaidOptions {
-					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
-				}
-			</select>
+			@checkboxFilter("raid", vm.RaidOptions, len(vm.Filter.Raids) > 0, "min-h-24")
 		</label>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Boss</span>
-			<select name="boss" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-24">
-				for _, o := range vm.BossOptions {
-					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
-				}
-			</select>
+			@checkboxFilter("boss", vm.BossOptions, len(vm.Filter.Bosses) > 0, "min-h-24")
 		</label>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Difficulty</span>
-			<select name="difficulty" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-24">
-				for _, o := range vm.ModeOptions {
-					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
-				}
-			</select>
+			@checkboxFilter("difficulty", vm.ModeOptions, len(vm.Filter.Difficulties) > 0, "min-h-24")
 		</label>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Spec</span>
-			<select name="spec" multiple class="rounded border border-bk-border bg-bk-bg p-2 min-h-24">
-				for _, o := range vm.SpecOptions {
-					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
-				}
-			</select>
+			@checkboxFilter("spec", vm.SpecOptions, len(vm.Filter.Specs) > 0, "min-h-24")
 		</label>
 		<input type="hidden" name="sort" value={ vm.Filter.SortBy }/>
 		<input type="hidden" name="dir" value={ vm.Filter.SortDir }/>
@@ -226,6 +209,17 @@ templ killsFilterForm(vm ViewModel) {
 			<button type="submit" class="rounded bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Apply</button>
 		</div>
 	</form>
+}
+
+templ checkboxFilter(name string, options []Option, active bool, minHeightClass string) {
+	<div class={ viewhelpers.CheckboxFilterClass(active), minHeightClass }>
+		for _, o := range options {
+			<label class="bk-checkbox-option">
+				<input type="checkbox" name={ name } value={ o.Value } checked?={ o.Selected }/>
+				<span>{ o.Label }</span>
+			</label>
+		}
+	</div>
 }
 
 templ ActivityPanelShell(vm ViewModel) {
@@ -278,7 +272,7 @@ templ StatsFragment(vm StatsViewModel) {
 							<div class="mb-1.5 text-[11px] font-semibold uppercase text-bk-muted">{ group.Title }</div>
 							<dl class="space-y-0.5 text-xs">
 								for _, metric := range group.Metrics {
-									<div class="flex items-baseline justify-between gap-2">
+									<div class="flex items-baseline justify-between gap-2" title={ metric.Detail }>
 										<dt class="text-bk-muted">{ metric.Label }</dt>
 										<dd class="flex items-baseline justify-end gap-1.5 text-right font-mono">
 											<span class={ metric.ValueClass }>{ metric.Value }</span>

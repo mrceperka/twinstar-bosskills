@@ -141,9 +141,9 @@ func TabActiveClass(active bool) string {
 	return "rounded border border-bk-border px-2 py-1 text-bk-muted hover:text-bk-fg"
 }
 
-func SelectFilterClass(active bool) string {
+func CheckboxFilterClass(active bool) string {
 	if active {
-		return "rounded border border-bk-accent bg-bk-bg p-2"
+		return "bk-checkbox-list active"
 	}
-	return "rounded border border-bk-border bg-bk-bg p-2"
+	return "bk-checkbox-list"
 }

@@ -104,17 +104,24 @@ func TestPageRenderSpecSummaryHighlightsMostPlayed(t *testing.T) {
 	}
 	html := sb.String()
 	for _, want := range []string{
-		"Specs",
-		"Affliction",
+		`type=talent&amp;id=265&amp;realm=Helios`,
 		"10",
 		"Most played",
 		"border-bk-accent",
-		"Demonology",
+		`type=talent&amp;id=266&amp;realm=Helios`,
 		"5",
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("missing %q in HTML:\n%s", want, html)
 		}
+	}
+	for _, hidden := range []string{">Specs<", ">Affliction<", ">Demonology<"} {
+		if strings.Contains(html, hidden) {
+			t.Fatalf("visible spec summary text %q in HTML:\n%s", hidden, html)
+		}
+	}
+	if got := strings.Count(html, `type=class&amp;id=9`); got != 1 {
+		t.Fatalf("class icon count = %d, want only the header class icon. HTML:\n%s", got, html)
 	}
 }
 
@@ -394,28 +401,34 @@ func TestBuildStatsViewModelShowsPrimaryClassResource(t *testing.T) {
 	}
 }
 
-func TestBuildStatsViewModelKeepsRatingComponents(t *testing.T) {
+func TestBuildStatsViewModelHidesRatingComponents(t *testing.T) {
 	row := statsStorageRow{
-		Found:         true,
-		Realm:         "Helios",
-		CharacterName: "Hottik",
-		HitBase:       2563,
-		HitPercent:    7.538235294117647,
-		HitRating:     7.538235294117647,
-		ArmorBase:     21954,
-		ArmorPercent:  32.18525314331055,
-		ArmorRating:   0,
-		EnergyRegen:   1261.405029296875,
+		Found:          true,
+		Realm:          "Helios",
+		CharacterName:  "Hottik",
+		HitBase:        2563,
+		HitPercent:     7.538235294117647,
+		HitRating:      7.538235294117647,
+		MasteryBase:    2848,
+		MasteryPercent: 4.746666666666667,
+		MasteryRating:  4.746666666666667,
+		ArmorBase:      21954,
+		ArmorPercent:   32.18525314331055,
+		ArmorRating:    0,
+		EnergyRegen:    1261.405029296875,
 	}
 
 	vm := buildStatsViewModel(context.Background(), row, nil)
 
-	var hitValue, armorValue, energyValue, energyClass string
+	var hitValue, masteryValue, masteryDetail, armorValue, energyValue, energyClass string
 	for _, group := range vm.Groups {
 		for _, metric := range group.Metrics {
 			switch metric.Label {
 			case "Hit":
 				hitValue = metric.Value
+			case "Mastery":
+				masteryValue = metric.Value
+				masteryDetail = metric.Detail
 			case "Armor":
 				armorValue = metric.Value
 			case "Energy regen":
@@ -424,11 +437,22 @@ func TestBuildStatsViewModelKeepsRatingComponents(t *testing.T) {
 			}
 		}
 	}
-	if hitValue != "Base 2,563 | 7.5% | Rating 7.5" {
+	if hitValue != "Base 2,563 | 7.5%" {
 		t.Fatalf("Hit value = %q", hitValue)
 	}
-	if armorValue != "Base 21,954 | 32.2% | Rating 0" {
+	if masteryValue != "12.75" {
+		t.Fatalf("Mastery value = %q", masteryValue)
+	}
+	if masteryDetail != "" {
+		t.Fatalf("Mastery detail = %q", masteryDetail)
+	}
+	if armorValue != "Base 21,954 | 32.2%" {
 		t.Fatalf("Armor value = %q", armorValue)
+	}
+	for _, value := range []string{hitValue, masteryDetail, armorValue} {
+		if strings.Contains(value, "Rating") {
+			t.Fatalf("stats value still contains Rating: %q", value)
+		}
 	}
 	if energyValue != "1261.4" || energyClass != "text-yellow-300" {
 		t.Fatalf("Energy regen value/class = %q/%q", energyValue, energyClass)

@@ -16,42 +16,42 @@ func Difficulty(expansion, mode int) string {
 	switch expansion {
 	case realm.ExpansionMoP:
 		switch mode {
-		case 0:
+		case DifficultyMoPNone:
 			return "None"
-		case 1:
+		case DifficultyMoPNormal:
 			return "N"
-		case 2:
+		case DifficultyMoPHeroic:
 			return "HC"
-		case 3:
+		case DifficultyMoP10Normal:
 			return "10 N"
-		case 4:
+		case DifficultyMoP25Normal:
 			return "25 N"
-		case 5:
+		case DifficultyMoP10Heroic:
 			return "10 HC"
-		case 6:
+		case DifficultyMoP25Heroic:
 			return "25 HC"
-		case 7:
+		case DifficultyMoPLFR:
 			return "LFR"
-		case 8:
+		case DifficultyMoPChallenge:
 			return "Challenge"
-		case 9:
+		case DifficultyMoP40:
 			return "40"
-		case 11:
+		case DifficultyMoPHCScenario:
 			return "Scenario HC"
-		case 12:
+		case DifficultyMoPNScenario:
 			return "Scenario N"
-		case 14:
+		case DifficultyMoPFlex:
 			return "Flex"
 		}
 	case realm.ExpansionCata:
 		switch mode {
-		case 0:
+		case DifficultyCata10Normal:
 			return "10 N"
-		case 1:
+		case DifficultyCata25Normal:
 			return "25 N"
-		case 2:
+		case DifficultyCata10Heroic:
 			return "10 HC"
-		case 3:
+		case DifficultyCata25Heroic:
 			return "25 HC"
 		}
 	case realm.ExpansionVanilla:
@@ -70,9 +70,9 @@ func Difficulty(expansion, mode int) string {
 func DefaultDifficulty(expansion int) int {
 	switch expansion {
 	case realm.ExpansionMoP:
-		return 3
+		return DifficultyMoP10Normal
 	case realm.ExpansionCata:
-		return 0
+		return DifficultyCata10Normal
 	default:
 		return 0
 	}
@@ -81,9 +81,9 @@ func DefaultDifficulty(expansion int) int {
 func RaidDifficulties(expansion int) []int {
 	switch expansion {
 	case realm.ExpansionMoP:
-		return []int{3, 4, 5, 6, 7, 14}
+		return []int{DifficultyMoP10Normal, DifficultyMoP25Normal, DifficultyMoP10Heroic, DifficultyMoP25Heroic, DifficultyMoPLFR, DifficultyMoPFlex}
 	case realm.ExpansionCata:
-		return []int{0, 1, 2, 3}
+		return []int{DifficultyCata10Normal, DifficultyCata25Normal, DifficultyCata10Heroic, DifficultyCata25Heroic}
 	case realm.ExpansionVanilla:
 		return []int{0, 3, 4, 9}
 	default:
@@ -94,9 +94,9 @@ func RaidDifficulties(expansion int) []int {
 func PerformanceDifficulties(expansion int) []int {
 	switch expansion {
 	case realm.ExpansionMoP:
-		return []int{3, 5, 4, 6}
+		return []int{DifficultyMoP10Normal, DifficultyMoP10Heroic, DifficultyMoP25Normal, DifficultyMoP25Heroic}
 	case realm.ExpansionCata:
-		return []int{0, 2, 1, 3}
+		return []int{DifficultyCata10Normal, DifficultyCata10Heroic, DifficultyCata25Normal, DifficultyCata25Heroic}
 	default:
 		return nil
 	}

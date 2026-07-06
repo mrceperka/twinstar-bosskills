@@ -79,6 +79,50 @@ a:hover {
   text-decoration: underline;
 }
 
+/* Mobile-friendly multi-select filters. Native <select multiple> is cramped on
+ * touch screens, so filter forms render repeated checkbox inputs instead. */
+.bk-checkbox-list {
+  display: grid;
+  gap: 0.125rem;
+  max-height: 13rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.25rem;
+  border: 1px solid var(--color-bk-border);
+  border-radius: 0.25rem;
+  background: var(--color-bk-bg);
+}
+.bk-checkbox-list.active {
+  border-color: var(--color-bk-accent);
+}
+.bk-checkbox-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.45rem 0.5rem;
+  border-radius: 0.25rem;
+  color: var(--color-bk-fg);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.bk-checkbox-option:hover,
+.bk-checkbox-option:focus-within {
+  background: var(--color-bk-accent-soft);
+}
+.bk-checkbox-option input {
+  flex: 0 0 auto;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  accent-color: var(--color-bk-accent);
+}
+.bk-checkbox-option span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* Scrollbar — gold track, dark thumb */
 * {
   scrollbar-color: rgba(0, 0, 0, 0.75) var(--color-bk-accent);
