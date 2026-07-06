@@ -1,11 +1,12 @@
 package boss
 
 import (
-	
 	"github.com/mrceperka/twinstar-bosskills/go/internal/format"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/components"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/viewhelpers"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
 )
 
 type ViewModel struct {
@@ -109,7 +110,7 @@ templ Content(vm ViewModel) {
 	<section class="mt-6">
 		<h2 class="mb-2 text-lg font-semibold">DPS by Talent Spec</h2>
 		if len(vm.DPSBoxJSON) > 2 {
-			@components.ChartFromJSON("block w-full h-[36rem]", vm.DPSBoxJSON)
+			@components.ChartFromJSON("block w-full h-[44rem]", vm.DPSBoxJSON)
 		} else {
 			@emptyChart()
 		}
@@ -117,7 +118,7 @@ templ Content(vm ViewModel) {
 	<section class="mt-6">
 		<h2 class="mb-2 text-lg font-semibold">HPS by Talent Spec</h2>
 		if len(vm.HPSBoxJSON) > 2 {
-			@components.ChartFromJSON("block w-full h-[36rem]", vm.HPSBoxJSON)
+			@components.ChartFromJSON("block w-full h-[44rem]", vm.HPSBoxJSON)
 		} else {
 			@emptyChart()
 		}
@@ -151,12 +152,12 @@ templ narrative(vm ViewModel) {
 		<span class="text-bk-accent">{ format.IntCtx(ctx, vm.Stats.Kills) }</span>
 		times by raiders and wiped them
 		<span style="color: tomato">{ format.IntCtx(ctx, vm.Stats.Wipes) }</span>
-		times ({ formatFloat(vm.Stats.AvgWipes, 2) } times on average).
+		times ({ viewhelpers.FormatFloat(vm.Stats.AvgWipes, 2) } times on average).
 		<br/>
 		You have
-		<span class="text-bk-accent">{ formatFloat(vm.Stats.KillChance, 2) }%</span>
+		<span class="text-bk-accent">{ viewhelpers.FormatFloat(vm.Stats.KillChance, 2) }%</span>
 		chance to make a kill and
-		<span style="color: tomato">{ formatFloat(vm.Stats.WipeChance, 2) }%</span>
+		<span style="color: tomato">{ viewhelpers.FormatFloat(vm.Stats.WipeChance, 2) }%</span>
 		chance to wipe.
 	</p>
 }
@@ -165,10 +166,10 @@ templ durations(vm ViewModel) {
 	if vm.Stats.Kills > 0 {
 		<p class="text-sm">
 			<span class="text-bk-accent">Fastest</span> kill took
-			{ longDuration(vm.Stats.FastestSec) },
-			average kill took { longDuration(vm.Stats.AverageSec) } and
+			{ viewhelpers.LongDuration(vm.Stats.FastestSec) },
+			average kill took { viewhelpers.LongDuration(vm.Stats.AverageSec) } and
 			<span style="color: tomato">slowest</span> kill took
-			{ longDuration(vm.Stats.SlowestSec) }.
+			{ viewhelpers.LongDuration(vm.Stats.SlowestSec) }.
 		</p>
 	}
 }
@@ -194,7 +195,7 @@ templ difficultyTabs(vm ViewModel) {
 				hx-swap="innerHTML"
 				hx-push-url="true"
 				href={ tabHref(vm, d.Mode) }
-				class={ "cursor-pointer", tabActiveClass(d.Mode == vm.SelectedMode) }>
+				class={ "cursor-pointer", viewhelpers.TabActiveClass(d.Mode == vm.SelectedMode) }>
 				{ d.Label }
 			</a>
 		}
@@ -203,23 +204,23 @@ templ difficultyTabs(vm ViewModel) {
 
 templ percentileForm(vm ViewModel) {
 	<form
-		hx-get={ string(contentBaseURL(vm)) }
+		hx-get={ links.Boss(vm.Realm, vm.Boss.RemoteID) }
 		hx-target="#boss-content"
 		hx-swap="innerHTML"
 		hx-push-url="true"
 		hx-trigger="input changed delay:250ms, submit"
 		class="mb-3 flex items-center gap-3 text-sm"
 	>
-		<input type="hidden" name="difficulty" value={ itoa(vm.SelectedMode) }/>
-		<input type="hidden" name="raidlock" value={ itoa(vm.LockOffset) }/>
+		<input type="hidden" name="difficulty" value={ viewhelpers.Itoa(vm.SelectedMode) }/>
+		<input type="hidden" name="raidlock" value={ viewhelpers.Itoa(vm.LockOffset) }/>
 		if vm.SelectedSpec > 0 {
-			<input type="hidden" name="spec" value={ itoa(vm.SelectedSpec) }/>
+			<input type="hidden" name="spec" value={ viewhelpers.Itoa(vm.SelectedSpec) }/>
 		}
 		if vm.SelectedClass > 0 {
-			<input type="hidden" name="class" value={ itoa(vm.SelectedClass) }/>
+			<input type="hidden" name="class" value={ viewhelpers.Itoa(vm.SelectedClass) }/>
 		}
 		<label class="text-bk-muted">Show value at percentile</label>
-		<input type="number" name="p" min="1" max="99" value={ itoa(vm.SelectedPctile) } class="w-20 rounded border border-bk-accent bg-bk-bg p-1 text-bk-fg"/>
+		<input type="number" name="p" min="1" max="99" value={ viewhelpers.Itoa(vm.SelectedPctile) } class="w-20 rounded border border-bk-accent bg-bk-bg p-1 text-bk-fg"/>
 		<span class="text-xs text-bk-muted">Exact, not bucketed</span>
 	</form>
 }
@@ -232,14 +233,16 @@ templ percentileTable(vm ViewModel) {
 			<thead>
 				<tr>
 					<th>Spec</th>
-					<th>DPS @ p{ itoa(vm.SelectedPctile) }</th>
-					<th>HPS @ p{ itoa(vm.SelectedPctile) }</th>
+					<th>DPS @ p{ viewhelpers.Itoa(vm.SelectedPctile) }</th>
+					<th>HPS @ p{ viewhelpers.Itoa(vm.SelectedPctile) }</th>
 				</tr>
 			</thead>
 			<tbody>
 				for _, r := range vm.AtPercentile {
 					<tr>
-						<td>{ r.SpecLabel }</td>
+						<td>
+							@components.ClassSpecCell(vm.Realm, wow.ClassFromSpecForRealm(vm.Realm, r.Spec), r.Spec)
+						</td>
 						<td>
 							if r.DPS > 0 {
 								{ format.Int64Ctx(ctx, r.DPS) }
@@ -285,10 +288,10 @@ templ filterRow(vm ViewModel) {
 							hx-swap="innerHTML"
 							hx-push-url="true"
 							href={ templ.SafeURL(filterHref(vm, vm.SelectedSpec, c)) }
-							title={ wowClass(c) }
+							title={ wow.Class(c) }
 							class={ "inline-flex items-center justify-center p-1", filterCellClass(vm.SelectedClass == c) }
 						>
-							<img src={ templ.SafeURL(links.ClassIcon(c)) } alt={ wowClass(c) } width="22" height="22" class="rounded"/>
+							<img src={ templ.SafeURL(links.ClassIcon(c)) } alt={ wow.Class(c) } width="22" height="22" class="rounded"/>
 						</a>
 					}
 				</div>
@@ -311,10 +314,10 @@ templ filterRow(vm ViewModel) {
 							hx-swap="innerHTML"
 							hx-push-url="true"
 							href={ templ.SafeURL(filterHref(vm, s, vm.SelectedClass)) }
-							title={ wowSpecLabel(vm.Realm, s) }
+							title={ wow.SpecForRealm(vm.Realm, s) }
 							class={ "inline-flex items-center justify-center p-1", filterCellClass(vm.SelectedSpec == s) }
 						>
-							<img src={ templ.SafeURL(links.TalentIcon(vm.Realm, s)) } alt={ wowSpecLabel(vm.Realm, s) } width="22" height="22" class="rounded"/>
+							<img src={ templ.SafeURL(links.TalentIcon(vm.Realm, s)) } alt={ wow.SpecForRealm(vm.Realm, s) } width="22" height="22" class="rounded"/>
 						</a>
 					}
 				</div>
@@ -330,6 +333,7 @@ templ topTable(realmName string, rows []Ranking, metric string) {
 		@components.Table() {
 			<thead>
 				<tr>
+					<th>#</th>
 					<th>Character</th>
 					<th>Spec</th>
 					<th>{ metric } ↓</th>
@@ -348,8 +352,10 @@ templ topTable(realmName string, rows []Ranking, metric string) {
 				for _, r := range rows {
 					<tr>
 						<td>
+							<span class="text-bk-muted">{ viewhelpers.Itoa(r.Rank) }</span>
+						</td>
+						<td>
 							<a href={ templ.SafeURL(links.Character(realmName, r.Name)) }>{ r.Name }</a>
-							<span class="ml-1 text-bk-muted">#{ itoa(r.Rank) }</span>
 						</td>
 						<td>
 							<span class="inline-flex items-center gap-1">
@@ -376,9 +382,9 @@ templ topTable(realmName string, rows []Ranking, metric string) {
 								{ format.Int64Ctx(ctx, r.HealDone) }
 							}
 						</td>
-						<td>{ longDuration(r.LengthSec) }</td>
+						<td>{ viewhelpers.LongDuration(r.LengthSec) }</td>
 						<td>{ r.KilledAt }</td>
-						<td>{ formatFloat(r.ItemLevel, 0) }</td>
+						<td>{ viewhelpers.FormatFloat(r.ItemLevel, 0) }</td>
 						<td>
 							if r.RemoteID != "" {
 								<a href={ templ.SafeURL(links.BossKill(realmName, r.RemoteID)) }>Detail</a>

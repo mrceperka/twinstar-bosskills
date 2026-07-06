@@ -125,7 +125,3 @@ func TwinheadItem(realmName string, id uint32) string {
 	return "https://" + twinheadPrefix(realmName) + "twinhead.twinstar.cz/?item=" +
 		strconv.FormatUint(uint64(id), 10)
 }
-
-func WowheadItem(itemID uint32) string {
-	return "https://www.wowhead.com/mop-classic/item=" + strconv.FormatUint(uint64(itemID), 10)
-}

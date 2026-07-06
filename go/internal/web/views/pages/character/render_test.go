@@ -45,6 +45,42 @@ func TestKillsTableFragmentRenderSortHeaders(t *testing.T) {
 	}
 }
 
+func TestKillsTableFragmentRenderPerformanceTrend(t *testing.T) {
+	vm := ViewModel{
+		Realm: "Helios",
+		Char:  CharacterInfo{Name: "Foo"},
+		Filter: KillsFilter{
+			SortBy:  "kill_time",
+			SortDir: "desc",
+		},
+		RecentKills: []KillRow{{
+			RemoteID: "1", KillTime: "now", BossName: "B", BossID: 1,
+			Mode: 3, ModeLabel: "10 N", Spec: 62, SpecLabel: "Arcane",
+			DPS: 1000, HPS: 500, LengthSec: 300, AvgItemLvl: 500,
+			HasTrend: true, DPSDelta: 25, HPSDelta: -12.5,
+		}},
+		KillsPageSize: 20,
+		KillsTotal:    1,
+	}
+
+	var sb strings.Builder
+	if err := KillsTableFragment(vm).Render(context.Background(), &sb); err != nil {
+		t.Fatal(err)
+	}
+	html := sb.String()
+	for _, want := range []string{
+		`title="Compared to previous kill with same difficulty"`,
+		`25%`,
+		`-12.5%`,
+		`text-emerald-300`,
+		`text-red-300`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("missing %q in HTML:\n%s", want, html)
+		}
+	}
+}
+
 func TestPageRenderSpecSummaryHighlightsMostPlayed(t *testing.T) {
 	vm := ViewModel{
 		Realm: "Helios",

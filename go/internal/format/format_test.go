@@ -25,13 +25,13 @@ func TestInt_LocaleAware(t *testing.T) {
 
 func TestFromAcceptLanguage(t *testing.T) {
 	cases := map[string]Locale{
-		"":                                EN,
-		"en-US,en;q=0.9":                  EN,
-		"cs-CZ,cs;q=0.9,en;q=0.5":         CS,
-		"de;q=0.9,en;q=0.5":               DE,
-		"sk,en":                           SK,
-		"xx-XX":                           EN, // unknown
-		"fr-FR,fr;q=0.9":                  FR,
+		"":                        EN,
+		"en-US,en;q=0.9":          EN,
+		"cs-CZ,cs;q=0.9,en;q=0.5": CS,
+		"de;q=0.9,en;q=0.5":       DE,
+		"sk,en":                   SK,
+		"xx-XX":                   EN, // unknown
+		"fr-FR,fr;q=0.9":          FR,
 	}
 	for header, want := range cases {
 		if got := FromAcceptLanguage(header); got != want {

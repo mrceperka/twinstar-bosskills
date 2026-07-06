@@ -12,10 +12,10 @@ package metric
 // Indexed variants take a bound `idx` alias (`WITH indexOf(players.guid, ?) AS idx`)
 // so a single player's stat can be selected without unnesting.
 const (
-	DmgDoneArrayJoin      = "players.dmg_done"
-	HealAbsorbArrayJoin   = "(players.healing_done + players.absorb_done)"
-	DmgDoneIndexed        = "players.dmg_done[idx]"
-	HealAbsorbIndexed     = "(players.healing_done[idx] + players.absorb_done[idx])"
+	DmgDoneArrayJoin    = "players.dmg_done"
+	HealAbsorbArrayJoin = "(players.healing_done + players.absorb_done)"
+	DmgDoneIndexed      = "players.dmg_done[idx]"
+	HealAbsorbIndexed   = "(players.healing_done[idx] + players.absorb_done[idx])"
 )
 
 // SQLUInt64 builds a rate expression that truncates to a uint64. Use for

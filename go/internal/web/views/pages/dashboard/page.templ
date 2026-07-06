@@ -2,9 +2,9 @@ package dashboard
 
 import (
 	"github.com/mrceperka/twinstar-bosskills/go/internal/format"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/components"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/viewhelpers"
 )
 
 type ViewModel struct {
@@ -32,6 +32,7 @@ type BossCount struct {
 	Count     int
 	BossID    uint32
 	BossName  string
+	Mode uint8
 	ModeLabel string
 }
 
@@ -61,7 +62,7 @@ templ lockSection(realmName string, title string, lock LockSummary) {
 			<div class="space-y-2">
 				<h3 class="font-semibold">
 					Most wipes - total <span style="color: tomato">{ format.IntCtx(ctx, lock.TotalWipes) }</span>,
-					wipe chance <span style="color: tomato">{ formatFloat(lock.WipeChance, 2) }%</span>
+					wipe chance <span style="color: tomato">{ viewhelpers.FormatFloat(lock.WipeChance, 2) }%</span>
 				</h3>
 				@bossCountTable(realmName, lock.TopWipes)
 			</div>
@@ -101,7 +102,7 @@ templ bossCountTable(realmName string, rows []BossCount) {
 				<tr>
 					<td>{ format.IntCtx(ctx, r.Count) }</td>
 					<td>
-						<a href={ templ.SafeURL(links.Boss(realmName, r.BossID)) }>{ r.BossName }</a>
+						<a href={ viewhelpers.BossWithDifficultyHref(realmName,r.BossID, int(r.Mode))} >{ r.BossName }</a>
 					</td>
 					<td>{ r.ModeLabel }</td>
 				</tr>

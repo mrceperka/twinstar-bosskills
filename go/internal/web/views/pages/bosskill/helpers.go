@@ -6,7 +6,6 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/viewhelpers"
 )
 
 // wowheadHref points to the Wowhead Cata classic DB which carries MoP items.
@@ -22,20 +21,12 @@ func playerRowClass(p PlayerRow) string {
 	return ""
 }
 
-var (
-	bossHref         = viewhelpers.BossHref
-	bossWithModeHref = viewhelpers.BossWithDifficultyHref
-	characterHref    = viewhelpers.CharacterHref
-	itemIconHref     = viewhelpers.ItemIconHref
-	itemTooltipURL   = viewhelpers.ItemTooltipURL
-	raidIconHref     = viewhelpers.RaidIconHref
-	absInt           = viewhelpers.AbsInt
-	uitoa            = viewhelpers.Uitoa
-	formatFloat      = viewhelpers.FormatFloat
-	longDuration     = viewhelpers.LongDuration
-	classIconHref    = viewhelpers.ClassIconHref
-	specIconHref     = viewhelpers.SpecIconHref
-)
+func absInt(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
 
 // statsSortURL toggles sort direction on repeat clicks and switches column
 // otherwise. Server-side sorting keeps things simple: the whole page URL

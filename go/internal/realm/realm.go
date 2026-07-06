@@ -16,11 +16,11 @@ const (
 )
 
 const (
-	IDKronos       = 4
-	IDHelios       = 18
-	IDApollo       = 9
-	IDAthena       = 19
-	IDCataPrivate  = 21
+	IDKronos        = 4
+	IDHelios        = 18
+	IDApollo        = 9
+	IDAthena        = 19
+	IDCataPrivate   = 21
 	IDMoPPrivatePvE = 24
 )
 

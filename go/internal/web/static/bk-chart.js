@@ -94,6 +94,9 @@
     if (option.bkTooltip === "characterPerf") {
       option.tooltip.formatter = characterPerfTooltip;
       delete option.bkTooltip;
+    } else if (option.bkTooltip === "bossBoxplot") {
+      option.tooltip.formatter = bossBoxplotTooltip;
+      delete option.bkTooltip;
     }
   }
 
@@ -138,6 +141,59 @@
       rows.push(`<div class="text-xs opacity-70">click on the marker for the detail</div>`);
     }
     return rows.join("");
+  }
+
+  function bossBoxplotTooltip(params) {
+    const point = Array.isArray(params) ? params[0] : params;
+    if (!point) return "";
+
+    const data = point.data || {};
+    const stats = boxplotStats(data, point.value);
+    const metric = data.metric || point.seriesName || "";
+    const specLabel = data.specLabel || data.name || point.name || "Unknown";
+    const icons = [];
+    if (data.classIcon) {
+      icons.push(
+        `<img src="${escapeAttribute(data.classIcon)}" alt="" width="18" height="18" style="border-radius: 3px;">`,
+      );
+    }
+    if (data.specIcon) {
+      icons.push(
+        `<img src="${escapeAttribute(data.specIcon)}" alt="" width="18" height="18" style="border-radius: 3px;">`,
+      );
+    }
+
+    return [
+      `<div style="min-width: 12rem;">`,
+      `<div style="margin-bottom: 0.35rem; font-weight: 600;">${escapeHTML(metric)}</div>`,
+      `<div style="display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.45rem; font-weight: 600;">${icons.join("")}<span>${escapeHTML(specLabel)}</span></div>`,
+      `<div style="display: grid; grid-template-columns: max-content max-content; gap: 0.2rem 1rem;">`,
+      boxplotStatRow("min", stats.min),
+      boxplotStatRow("Q1", stats.q1),
+      boxplotStatRow("median", stats.median, true),
+      boxplotStatRow("Q3", stats.q3),
+      boxplotStatRow("max", stats.max),
+      `</div>`,
+      `</div>`,
+    ].join("");
+  }
+
+  function boxplotStats(data, value) {
+    if (data && data.stats) return data.stats;
+    const values = Array.isArray(value) ? value : [];
+    const offset = values.length >= 6 ? 1 : 0;
+    return {
+      min: values[offset],
+      q1: values[offset + 1],
+      median: values[offset + 2],
+      q3: values[offset + 3],
+      max: values[offset + 4],
+    };
+  }
+
+  function boxplotStatRow(label, value, strong) {
+    const weight = strong ? "font-weight: 700;" : "";
+    return `<span>${escapeHTML(label)}</span><span style="text-align: right; ${weight}">${escapeHTML(formatNumber(value))}</span>`;
   }
 
   function formatDate(value) {

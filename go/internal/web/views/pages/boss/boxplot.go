@@ -48,35 +48,60 @@ func buildBoxPlotJSON(title string, curves []SpecCurve, realmName string) ([]byt
 	}
 
 	categories := make([]string, 0, len(sorted))
-	boxes := make([][5]float64, 0, len(sorted))
+	boxes := make([]any, 0, len(sorted))
 	for _, c := range sorted {
 		q1 := c.Values[24]
 		med := c.Values[49]
 		q3 := c.Values[74]
 		mn := c.Values[0]  // p1
 		mx := c.Values[98] // p99
-		boxes = append(boxes, [5]float64{mn, q1, med, q3, mx})
 
 		class := wow.ClassFromSpecForRealm(realmName, c.Spec)
+		specLabel := wow.SpecForRealm(realmName, c.Spec)
+		if specLabel == "" {
+			specLabel = "Spec " + strconv.Itoa(c.Spec)
+		}
 		specKey := "s" + strconv.Itoa(c.Spec)
 		classKey := "c" + strconv.Itoa(class)
+		specIcon := links.TalentIcon(realmName, c.Spec)
+		classIcon := ""
+		if class > 0 {
+			classIcon = links.ClassIcon(class)
+		}
 
 		if _, ok := rich[specKey]; !ok {
-			rich[specKey] = iconStyle(links.TalentIcon(realmName, c.Spec))
+			rich[specKey] = iconStyle(specIcon)
 		}
 		if _, ok := rich[classKey]; !ok && class > 0 {
-			rich[classKey] = iconStyle(links.ClassIcon(class))
+			rich[classKey] = iconStyle(classIcon)
 		}
 
 		// "{classKey|}{specKey|} Spec Name" — ECharts parses rich-text tokens
 		// after substituting {value} so the icons render inline with the label.
-		label := "{" + classKey + "|}{" + specKey + "|} " + wow.SpecForRealm(realmName, c.Spec)
+		label := "{" + classKey + "|}{" + specKey + "|} " + specLabel
 		categories = append(categories, label)
+		boxes = append(boxes, map[string]any{
+			"name":      specLabel,
+			"value":     [5]float64{mn, q1, med, q3, mx},
+			"spec":      c.Spec,
+			"specLabel": specLabel,
+			"specIcon":  specIcon,
+			"class":     class,
+			"classIcon": classIcon,
+			"stats": map[string]float64{
+				"min":    mn,
+				"q1":     q1,
+				"median": med,
+				"q3":     q3,
+				"max":    mx,
+			},
+		})
 	}
 
 	opt := map[string]any{
 		"backgroundColor": "transparent",
 		"animation":       false,
+		"bkTooltip":       "bossBoxplot",
 		"tooltip": map[string]any{
 			"trigger": "item",
 		},
@@ -108,9 +133,10 @@ func buildBoxPlotJSON(title string, curves []SpecCurve, realmName string) ([]byt
 		},
 		"series": []any{
 			map[string]any{
-				"name": title,
-				"type": "boxplot",
-				"data": boxes,
+				"name":     title,
+				"type":     "boxplot",
+				"data":     boxes,
+				"boxWidth": []string{"38%", "62%"},
 				"itemStyle": map[string]any{
 					"color":       "rgba(218,165,32,0.25)",
 					"borderColor": "#daa520",

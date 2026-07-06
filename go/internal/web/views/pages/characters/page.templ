@@ -1,9 +1,11 @@
 package characters
 
 import (
-	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/components"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/format"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/components"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/viewhelpers"
 )
 
 type ViewModel struct {
@@ -31,7 +33,7 @@ templ Page(vm ViewModel) {
 			</header>
 			@components.Panel("Search") {
 				<form
-					hx-get={ formAction(vm.Realm) }
+					hx-get={ links.Characters(vm.Realm) }
 					hx-target="#matches"
 					hx-trigger="input changed delay:300ms, search, submit"
 					hx-push-url="true"
@@ -74,7 +76,7 @@ templ Matches(vm ViewModel) {
 				for _, m := range vm.Matches {
 					<tr>
 						<td>
-							<a href={ characterHref(vm.Realm, m.Name) } class="hover:text-bk-accent">{ m.Name }</a>
+							<a href={ viewhelpers.CharacterHref(vm.Realm, m.Name) } class="hover:text-bk-accent">{ m.Name }</a>
 						</td>
 						<td class="text-bk-muted">
 							<span class="inline-flex items-center gap-1">

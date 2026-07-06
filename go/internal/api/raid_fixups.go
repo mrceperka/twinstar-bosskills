@@ -79,13 +79,13 @@ func renameBosses(in []Boss) []Boss {
 }
 
 var kronosVanillaRaids = map[string]bool{
-	"Molten Core":      true,
-	"Onyxia's Lair":    true,
-	"Blackwing Lair":   true,
-	"Zul'Gurub":        true,
-	"Ahn'Qiraj Temple": true,
+	"Molten Core":        true,
+	"Onyxia's Lair":      true,
+	"Blackwing Lair":     true,
+	"Zul'Gurub":          true,
+	"Ahn'Qiraj Temple":   true,
 	"Ruins of Ahn'Qiraj": true,
-	"Naxxramas":        true,
+	"Naxxramas":          true,
 }
 
 func filterKronosVanillaRaids(in []Raid) []Raid {

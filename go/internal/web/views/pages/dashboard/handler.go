@@ -120,7 +120,10 @@ func loadLockSummary(ctx context.Context, db *sql.DB, realmName, guildFilter str
 			return s, err
 		}
 		s.TopKills = append(s.TopKills, BossCount{
-			Count: int(c), BossID: bossID, BossName: bossName,
+			Count:     int(c),
+			BossID:    bossID,
+			BossName:  bossName,
+			Mode:      mode,
 			ModeLabel: wow.Difficulty(expansion, int(mode)),
 		})
 	}
@@ -152,7 +155,10 @@ func loadLockSummary(ctx context.Context, db *sql.DB, realmName, guildFilter str
 			return s, err
 		}
 		s.TopWipes = append(s.TopWipes, BossCount{
-			Count: int(w), BossID: bossID, BossName: bossName,
+			Count:     int(w),
+			BossID:    bossID,
+			BossName:  bossName,
+			Mode:      mode,
 			ModeLabel: wow.Difficulty(expansion, int(mode)),
 		})
 	}

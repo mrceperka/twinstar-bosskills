@@ -4,83 +4,64 @@ import (
 	"strconv"
 
 	"github.com/a-h/templ"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/viewhelpers"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
 )
 
-// Page-specific URL builders. Generic helpers (formatFloat, longDuration,
-// itoa, tabActiveClass) come from internal/web/views/viewhelpers and
-// internal/links via the var aliases below.
-
-func contentBaseURL(vm ViewModel) templ.SafeURL {
-	return templ.SafeURL(links.Boss(vm.Realm, vm.Boss.RemoteID))
-}
-
 func tabHref(vm ViewModel, mode int) templ.SafeURL {
-	q := "difficulty=" + strconv.Itoa(mode) +
+	href := string(viewhelpers.BossWithDifficultyHref(vm.Realm, vm.Boss.RemoteID, mode)) +
 		"&raidlock=" + strconv.Itoa(vm.LockOffset) +
 		"&p=" + strconv.Itoa(vm.SelectedPctile)
 	if vm.SelectedSpec > 0 {
-		q += "&spec=" + strconv.Itoa(vm.SelectedSpec)
+		href += "&spec=" + strconv.Itoa(vm.SelectedSpec)
 	}
 	if vm.SelectedClass > 0 {
-		q += "&class=" + strconv.Itoa(vm.SelectedClass)
+		href += "&class=" + strconv.Itoa(vm.SelectedClass)
 	}
-	return templ.SafeURL(links.Boss(vm.Realm, vm.Boss.RemoteID) + "?" + q)
+	return templ.SafeURL(href)
 }
 
 // previousLockHref builds a Boss URL for the previous raid lockout while
 // preserving the current mode/spec/class/percentile filters.
 func previousLockHref(vm ViewModel) templ.SafeURL {
-	q := "difficulty=" + strconv.Itoa(vm.SelectedMode) +
+	href := string(viewhelpers.BossWithDifficultyHref(vm.Realm, vm.Boss.RemoteID, vm.SelectedMode)) +
 		"&raidlock=" + strconv.Itoa(vm.LockOffset+1) +
 		"&p=" + strconv.Itoa(vm.SelectedPctile)
 	if vm.SelectedSpec > 0 {
-		q += "&spec=" + strconv.Itoa(vm.SelectedSpec)
+		href += "&spec=" + strconv.Itoa(vm.SelectedSpec)
 	}
 	if vm.SelectedClass > 0 {
-		q += "&class=" + strconv.Itoa(vm.SelectedClass)
+		href += "&class=" + strconv.Itoa(vm.SelectedClass)
 	}
-	return templ.SafeURL(links.Boss(vm.Realm, vm.Boss.RemoteID) + "?" + q)
+	return templ.SafeURL(href)
 }
 
 // siblingHref links to a sibling boss while preserving the current mode/spec/class.
 func siblingHref(vm ViewModel, remoteID uint32) templ.SafeURL {
-	q := "difficulty=" + strconv.Itoa(vm.SelectedMode) +
+	href := string(viewhelpers.BossWithDifficultyHref(vm.Realm, remoteID, vm.SelectedMode)) +
 		"&raidlock=" + strconv.Itoa(vm.LockOffset)
 	if vm.SelectedSpec > 0 {
-		q += "&spec=" + strconv.Itoa(vm.SelectedSpec)
+		href += "&spec=" + strconv.Itoa(vm.SelectedSpec)
 	}
 	if vm.SelectedClass > 0 {
-		q += "&class=" + strconv.Itoa(vm.SelectedClass)
+		href += "&class=" + strconv.Itoa(vm.SelectedClass)
 	}
-	return templ.SafeURL(links.Boss(vm.Realm, remoteID) + "?" + q)
+	return templ.SafeURL(href)
 }
-
-var (
-	itoa           = viewhelpers.Itoa
-	formatFloat    = viewhelpers.FormatFloat
-	longDuration   = viewhelpers.LongDuration
-	raidIconHref   = viewhelpers.RaidIconHref
-	tabActiveClass = viewhelpers.TabActiveClass
-)
 
 // filterHref builds a /{realm}/boss/{id} URL with the requested
 // spec/class/mode/percentile combination. Used by the spec/class filter
 // row and by Reset.
 func filterHref(vm ViewModel, spec, class int) string {
-	base := links.Boss(vm.Realm, vm.Boss.RemoteID)
-	q := "difficulty=" + strconv.Itoa(vm.SelectedMode) +
+	href := string(viewhelpers.BossWithDifficultyHref(vm.Realm, vm.Boss.RemoteID, vm.SelectedMode)) +
 		"&raidlock=" + strconv.Itoa(vm.LockOffset) +
 		"&p=" + strconv.Itoa(vm.SelectedPctile)
 	if spec > 0 {
-		q += "&spec=" + strconv.Itoa(spec)
+		href += "&spec=" + strconv.Itoa(spec)
 	}
 	if class > 0 {
-		q += "&class=" + strconv.Itoa(class)
+		href += "&class=" + strconv.Itoa(class)
 	}
-	return base + "?" + q
+	return href
 }
 
 func filterCellClass(selected bool) string {
@@ -88,10 +69,4 @@ func filterCellClass(selected bool) string {
 		return "ring-2 ring-bk-accent rounded"
 	}
 	return "opacity-70 hover:opacity-100"
-}
-
-// Thin wrappers used by the templ filter row.
-func wowClass(c int) string { return wow.Class(c) }
-func wowSpecLabel(realmName string, spec int) string {
-	return wow.SpecForRealm(realmName, spec)
 }

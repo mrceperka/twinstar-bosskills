@@ -10,14 +10,14 @@ import (
 )
 
 func bossWithFiltersHref(realmName string, id uint32, mode, class, spec int) templ.SafeURL {
-	q := "?difficulty=" + strconv.Itoa(mode)
+	href := string(viewhelpers.BossWithDifficultyHref(realmName, id, mode))
 	if spec > 0 {
-		q += "&spec=" + strconv.Itoa(spec)
+		href += "&spec=" + strconv.Itoa(spec)
 	}
 	if class > 0 {
-		q += "&class=" + strconv.Itoa(class)
+		href += "&class=" + strconv.Itoa(class)
 	}
-	return templ.SafeURL(links.Boss(realmName, id) + q)
+	return templ.SafeURL(href)
 }
 
 // rankingsHref returns the URL for the lazy rankings fragment.
@@ -50,6 +50,20 @@ func specSummaryClass(mostPlayed bool) string {
 		return "border-bk-accent bg-bk-accent/10 text-bk-accent"
 	}
 	return "border-bk-border text-bk-muted"
+}
+
+func fmtTrendPct(v float64) string {
+	if v == 0 {
+		return "0"
+	}
+	return strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+func performanceTrendClass(v float64) string {
+	if v < 0 {
+		return "text-red-300"
+	}
+	return "text-emerald-300"
 }
 
 // killsBaseURL is the character page URL used as the hx-get target for the
@@ -119,18 +133,3 @@ func sortURL(vm ViewModel, col string) string {
 	}
 	return base
 }
-
-func rankLabel(rank int) string {
-	return viewhelpers.RankLabel(rank)
-}
-
-var (
-	bossHref                 = viewhelpers.BossHref
-	bosskillHref             = viewhelpers.BossKillHref
-	characterPerformanceHref = viewhelpers.CharacterPerformanceHref
-	fmtIlvl                  = viewhelpers.Ilvl
-	armoryHref               = links.TwinstarArmory
-	itemHref                 = links.TwinheadItem
-	itemIconHref             = viewhelpers.ItemIconHref
-	itemTooltipURL           = viewhelpers.ItemTooltipURL
-)

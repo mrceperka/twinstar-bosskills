@@ -78,8 +78,8 @@ func buildBossChart(realmName string, samples []Sample, dpsMedian, hpsMedian int
 	}
 
 	opt := map[string]any{
-		"bkTooltip":  "characterPerf",
-		"bkOnClick":  "openDetailUrl",
+		"bkTooltip": "characterPerf",
+		"bkOnClick": "openDetailUrl",
 		"tooltip": map[string]any{
 			"trigger": "axis",
 		},

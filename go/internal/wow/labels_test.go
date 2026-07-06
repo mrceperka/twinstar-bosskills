@@ -48,6 +48,14 @@ func TestSpecAndClassByExpansion(t *testing.T) {
 		wantClass int
 	}{
 		{"mop elemental", realm.ExpansionMoP, 262, "Elemental", ClassShaman},
+		{"mop retribution", realm.ExpansionMoP, 70, "Retribution", ClassPaladin},
+		{"mop beast mastery", realm.ExpansionMoP, 253, "Beast Mastery", ClassHunter},
+		{"mop marksmanship", realm.ExpansionMoP, 254, "Marksmanship", ClassHunter},
+		{"mop discipline", realm.ExpansionMoP, 256, "Discipline", ClassPriest},
+		{"mop assassination", realm.ExpansionMoP, 259, "Assassination", ClassRogue},
+		{"mop affliction", realm.ExpansionMoP, 265, "Affliction", ClassWarlock},
+		{"mop demonology", realm.ExpansionMoP, 266, "Demonology", ClassWarlock},
+		{"mop destruction", realm.ExpansionMoP, 267, "Destruction", ClassWarlock},
 		{"cata elemental collision", realm.ExpansionCata, 261, "Elemental", ClassShaman},
 		{"cata restoration shaman collision", realm.ExpansionCata, 262, "Restoration (Shaman)", ClassShaman},
 		{"vanilla fire", realm.ExpansionVanilla, 41, "Fire", ClassMage},

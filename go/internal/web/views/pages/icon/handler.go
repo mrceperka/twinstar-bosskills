@@ -3,11 +3,11 @@
 // URL: GET /img/icon?type=<class|race|raid|item|talent>&id=<id>&realm=<realm>
 //
 // The proxy:
-//   1. validates `type` against an allowlist
-//   2. validates `id` shape (integer for class/talent/item; string for race/raid)
-//   3. computes the upstream URL using the ported TS rules
-//   4. serves from disk cache if present, otherwise fetches + caches
-//   5. sets Content-Type + 14-day Cache-Control
+//  1. validates `type` against an allowlist
+//  2. validates `id` shape (integer for class/talent/item; string for race/raid)
+//  3. computes the upstream URL using the ported TS rules
+//  4. serves from disk cache if present, otherwise fetches + caches
+//  5. sets Content-Type + 14-day Cache-Control
 package icon
 
 import (

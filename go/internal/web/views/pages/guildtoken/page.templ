@@ -1,5 +1,6 @@
 package guildtoken
 
+import "github.com/mrceperka/twinstar-bosskills/go/internal/links"
 import "github.com/mrceperka/twinstar-bosskills/go/internal/web/views/components"
 import "github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
 
@@ -80,7 +81,7 @@ templ Page(vm ViewModel) {
 				</form>
 				<p class="mt-4 text-xs text-bk-muted">
 					Don't have a token? Ask the realm admin, or generate one at
-					<a href={ generateHref(vm.Realm) } class="text-bk-accent hover:underline">/guild-token/generate</a>.
+					<a href={ templ.SafeURL(links.GuildTokenGenerate(vm.Realm)) } class="text-bk-accent hover:underline">/guild-token/generate</a>.
 				</p>
 			}
 		</div>

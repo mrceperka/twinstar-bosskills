@@ -214,6 +214,7 @@ func loadKills(ctx context.Context, db *sql.DB, realmName string, f FilterValues
 			BossName:  bossName,
 			BossID:    bossID,
 			RaidName:  raidName,
+			Mode:      int(mode),
 			ModeLabel: wow.Difficulty(expansion, int(mode)),
 			Guild:     guild,
 			LengthSec: int(length) / 1000,

@@ -5,6 +5,7 @@ import (
 	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/components"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/viewhelpers"
 )
 
 type ViewModel struct {
@@ -43,6 +44,7 @@ type KillRow struct {
 	BossName   string
 	BossID     uint32
 	RaidName   string
+	Mode       int
 	ModeLabel  string
 	Guild      string
 	LengthSec  int
@@ -92,7 +94,7 @@ templ TableFragment(vm ViewModel) {
 					for _, r := range vm.Rows {
 						<tr>
 							<td>
-								<a href={ templ.SafeURL(links.Boss(vm.Realm, r.BossID)) }>{ r.BossName }</a>
+								<a href={ viewhelpers.BossWithDifficultyHref(vm.Realm, r.BossID, r.Mode) }>{ r.BossName }</a>
 							</td>
 							<td>{ r.RaidName }</td>
 							<td>{ r.ModeLabel }</td>
@@ -134,7 +136,7 @@ templ bkSortHeader(vm ViewModel, col string, label string) {
 
 templ filterForm(vm ViewModel) {
 	<form
-		hx-get={ string(bosskillsURL(vm.Realm)) }
+		hx-get={ links.BossKills(vm.Realm) }
 		hx-target="#kills-table"
 		hx-swap="innerHTML"
 		hx-push-url="true"
@@ -160,14 +162,14 @@ templ filterForm(vm ViewModel) {
 		</label>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Difficulty</span>
-			<select name="difficulty" multiple class={ selectFilterClass(len(vm.Filter.Difficulties) > 0), "min-h-24" }>
+			<select name="difficulty" multiple class={ viewhelpers.SelectFilterClass(len(vm.Filter.Difficulties) > 0), "min-h-24" }>
 				for _, o := range vm.ModeOptions {
 					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
 				}
 			</select>
 		</label>
 		<div class="sm:col-span-3 flex justify-end gap-2">
-			<a href={ bosskillsURL(vm.Realm) } class="rounded border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-text">Reset</a>
+			<a href={ templ.SafeURL(links.BossKills(vm.Realm)) } class="rounded border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-text">Reset</a>
 			<button type="submit" class="rounded bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Apply</button>
 		</div>
 	</form>

@@ -1,9 +1,13 @@
 package raids
 
 import (
+	"strconv"
+
 	"github.com/mrceperka/twinstar-bosskills/go/internal/format"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/components"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/viewhelpers"
 )
 
 type ViewModel struct {
@@ -40,14 +44,14 @@ templ Page(vm ViewModel) {
 				<h1 class="text-2xl font-semibold">{ vm.Realm } / Raids</h1>
 				<div class="text-xs text-bk-muted">
 					{ vm.Lock.StartLabel } → { vm.Lock.EndLabel }
-					<a href={ previousLockHref(vm.Realm, vm.Lock.Offset + 1) } class="ml-2 text-bk-accent">(see previous)</a>
+					<a href={ templ.SafeURL(links.Raids(vm.Realm) + "?raidlock=" + strconv.Itoa(vm.Lock.Offset + 1)) } class="ml-2 text-bk-accent">(see previous)</a>
 				</div>
 			</header>
 			for _, r := range vm.Raids {
 				<section class="rounded-md border border-bk-border bg-bk-panel">
 					<header class="flex items-center gap-3 border-b border-bk-border px-4 py-2">
 						<img
-							src={ raidIconHref(r.Name) }
+							src={ viewhelpers.RaidIconHref(r.Name) }
 							alt=""
 							loading="lazy"
 							width="36" height="36"

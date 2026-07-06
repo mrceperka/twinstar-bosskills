@@ -3,6 +3,7 @@ package character
 import (
 	"context"
 	"database/sql"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -719,6 +720,8 @@ func loadRecentKills(ctx context.Context, db *sql.DB, realmName string, guid uin
 	SELECT remote_id, kill_time, boss_name, boss_remote_id, mode, length,
 	       ` + metric.SQLUInt64(metric.DmgDoneIndexed) + ` AS dps,
 	       ` + metric.SQLUInt64(metric.HealAbsorbIndexed) + ` AS hps,
+	       ` + metric.SQLFloat64(metric.DmgDoneIndexed) + ` AS dps_rate,
+	       ` + metric.SQLFloat64(metric.HealAbsorbIndexed) + ` AS hps_rate,
 	       players.talent_spec[idx] AS spec,
 	       toFloat32(players.avg_item_lvl[idx]) AS avg_item_lvl
 	FROM boss_kill
@@ -745,15 +748,18 @@ func loadRecentKills(ctx context.Context, db *sql.DB, realmName string, guid uin
 			length     uint32
 			dps        uint64
 			hps        uint64
+			dpsRate    float64
+			hpsRate    float64
 			spec       uint16
 			avgItemLvl float32
 		)
-		if err := rows.Scan(&remoteID, &t, &bossName, &bossID, &mode, &length, &dps, &hps, &spec, &avgItemLvl); err != nil {
+		if err := rows.Scan(&remoteID, &t, &bossName, &bossID, &mode, &length, &dps, &hps, &dpsRate, &hpsRate, &spec, &avgItemLvl); err != nil {
 			return nil, 0, err
 		}
 		s := int(spec)
 		out = append(out, KillRow{
 			RemoteID:   remoteID,
+			KillAt:     t,
 			KillTime:   t.Format("2006-01-02 15:04"),
 			BossName:   bossName,
 			BossID:     bossID,
@@ -764,6 +770,8 @@ func loadRecentKills(ctx context.Context, db *sql.DB, realmName string, guid uin
 			SpecLabel:  wow.SpecForExpansion(expansion, s),
 			DPS:        int64(dps),
 			HPS:        int64(hps),
+			DPSRate:    dpsRate,
+			HPSRate:    hpsRate,
 			LengthSec:  int(length) / 1000,
 			AvgItemLvl: avgItemLvl,
 		})
@@ -777,7 +785,85 @@ func loadRecentKills(ctx context.Context, db *sql.DB, realmName string, guid uin
 	if err := db.QueryRowContext(ctx, countQ, whereArgs...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
+	if err := attachPerformanceTrends(ctx, db, realmName, guid, expansion, out); err != nil {
+		return nil, 0, err
+	}
 	return out, int(total), nil
+}
+
+func attachPerformanceTrends(ctx context.Context, db *sql.DB, realmName string, guid uint64, expansion int, rows []KillRow) error {
+	difficulties := wow.PerformanceDifficulties(expansion)
+	if len(difficulties) == 0 || len(rows) == 0 {
+		return nil
+	}
+	performanceMode := make(map[int]bool, len(difficulties))
+	for _, difficulty := range difficulties {
+		performanceMode[difficulty] = true
+	}
+	for i := range rows {
+		if !performanceMode[rows[i].Mode] || rows[i].Spec <= 0 || rows[i].KillAt.IsZero() {
+			continue
+		}
+		prevDPS, prevHPS, ok, err := loadPreviousPerformanceRates(ctx, db, realmName, guid, rows[i])
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		rows[i].HasTrend = true
+		rows[i].DPSDelta = trendPercent(rows[i].DPSRate, prevDPS)
+		rows[i].HPSDelta = trendPercent(rows[i].HPSRate, prevHPS)
+	}
+	return nil
+}
+
+func loadPreviousPerformanceRates(ctx context.Context, db *sql.DB, realmName string, guid uint64, current KillRow) (float64, float64, bool, error) {
+	q := `
+	WITH indexOf(players.guid, ?) AS idx
+	SELECT
+	       ` + metric.SQLFloat64(metric.DmgDoneIndexed) + ` AS dps_rate,
+	       ` + metric.SQLFloat64(metric.HealAbsorbIndexed) + ` AS hps_rate
+	FROM boss_kill
+	WHERE realm = ?
+	  AND has(players.guid, ?)
+	  AND boss_remote_id = ?
+	  AND mode = ?
+	  AND kill_time < ?
+	  AND players.talent_spec[idx] = ?
+	ORDER BY kill_time DESC
+	LIMIT 1
+	`
+	var dpsRate, hpsRate float64
+	err := db.QueryRowContext(
+		ctx,
+		q,
+		guid,
+		realmName,
+		guid,
+		current.BossID,
+		uint8(current.Mode),
+		current.KillAt,
+		uint16(current.Spec),
+	).Scan(&dpsRate, &hpsRate)
+	if err == sql.ErrNoRows {
+		return 0, 0, false, nil
+	}
+	if err != nil {
+		return 0, 0, false, err
+	}
+	return dpsRate, hpsRate, true, nil
+}
+
+func trendPercent(current, previous float64) float64 {
+	if previous <= 0 {
+		return 0
+	}
+	v := math.Round((10000*(current-previous))/previous) / 100
+	if v == 0 {
+		return 0
+	}
+	return v
 }
 
 // parseKillsFilter reads the URL params for the kills table.

@@ -2,8 +2,10 @@ package characterperf
 
 import (
 	"github.com/mrceperka/twinstar-bosskills/go/internal/format"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/components"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/viewhelpers"
 )
 
 type ViewModel struct {
@@ -51,9 +53,9 @@ templ Page(vm ViewModel) {
 						<span>{ vm.Char.ClassLabel } · performance</span>
 					</div>
 					<h1 class="text-2xl font-semibold">
-						<a href={ profileHref(vm.Realm, vm.CharName) } class="hover:text-bk-accent">{ vm.CharName }</a>
+						<a href={ viewhelpers.CharacterHref(vm.Realm, vm.CharName) } class="hover:text-bk-accent">{ vm.CharName }</a>
 					</h1>
-					<a href={ templ.SafeURL(armoryHref(vm.Realm, vm.CharName)) } target="_blank" rel="noopener" class="text-xs text-bk-muted hover:text-bk-accent">Armory ↗</a>
+					<a href={ templ.SafeURL(links.TwinstarArmory(vm.Realm, vm.CharName)) } target="_blank" rel="noopener" class="text-xs text-bk-muted hover:text-bk-accent">Armory ↗</a>
 				</div>
 				<dl class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
 					<dt class="text-bk-muted">Kills</dt>
@@ -73,7 +75,7 @@ templ Page(vm ViewModel) {
 						<section class="rounded-md border border-bk-border bg-bk-panel">
 							<header class="border-b border-bk-border px-4 py-2 text-sm font-medium">
 								Performance on
-								<a href={ bossHref(vm.Realm, chart.BossID, chart.Mode) } class="hover:text-bk-accent">
+								<a href={ viewhelpers.BossWithDifficultyHref(vm.Realm, chart.BossID, chart.Mode) } class="hover:text-bk-accent">
 									{ chart.BossName } ({ chart.ModeLabel })
 								</a>
 							</header>
@@ -116,7 +118,7 @@ templ filterForm(vm ViewModel) {
 		</label>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Difficulty</span>
-			<select name="difficulty" multiple class={ selectFilterClass(len(vm.Filter.Modes) > 0), "min-h-32" }>
+			<select name="difficulty" multiple class={ viewhelpers.SelectFilterClass(len(vm.Filter.Modes) > 0), "min-h-32" }>
 				for _, o := range vm.ModeOptions {
 					<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
 				}
@@ -124,14 +126,14 @@ templ filterForm(vm ViewModel) {
 		</label>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Min iLvl</span>
-			<input name="ilvl_min" type="number" min="0" value={ itoa(vm.Filter.IlvlMin) } class="rounded border border-bk-border bg-bk-bg p-2"/>
+			<input name="ilvl_min" type="number" min="0" value={ viewhelpers.EmptyItoa(vm.Filter.IlvlMin) } class="rounded border border-bk-border bg-bk-bg p-2"/>
 		</label>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Max iLvl</span>
-			<input name="ilvl_max" type="number" min="0" value={ itoa(vm.Filter.IlvlMax) } class="rounded border border-bk-border bg-bk-bg p-2"/>
+			<input name="ilvl_max" type="number" min="0" value={ viewhelpers.EmptyItoa(vm.Filter.IlvlMax) } class="rounded border border-bk-border bg-bk-bg p-2"/>
 		</label>
 		<div class="sm:col-span-2 lg:col-span-4 flex justify-end gap-2">
-			<a href={ resetHref(vm.Realm, vm.CharName) } class="rounded border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-text">Reset</a>
+			<a href={ templ.SafeURL(links.CharacterPerformance(vm.Realm, vm.CharName)) } class="rounded border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-text">Reset</a>
 			<button type="submit" class="rounded bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Apply</button>
 		</div>
 	</form>

@@ -6,6 +6,7 @@ import (
 	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/components"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/viewhelpers"
 )
 
 type ViewModel struct {
@@ -120,7 +121,7 @@ templ metaList(vm ViewModel) {
 	<dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1 text-sm">
 		<dt class="text-bk-muted">Boss</dt>
 		<dd>
-			<a href={ bossWithModeHref(vm.Realm, vm.Kill.BossID, vm.Kill.Mode) }>{ vm.Kill.BossName }</a>
+			<a href={ viewhelpers.BossWithDifficultyHref(vm.Realm, vm.Kill.BossID, vm.Kill.Mode) }>{ vm.Kill.BossName }</a>
 			<span class="mx-1 text-bk-muted">-</span>
 			<a href={ templ.SafeURL(links.TwinheadNPC(vm.Realm, vm.Kill.BossID)) } target="_blank" rel="noopener">Twinhead ↗</a>
 		</dd>
@@ -139,7 +140,7 @@ templ metaList(vm ViewModel) {
 		<dt class="text-bk-muted">Killed</dt>
 		<dd>{ vm.Kill.KillTime }</dd>
 		<dt class="text-bk-muted">Avg iLvl</dt>
-		<dd>{ formatFloat(vm.Kill.AvgIlvl, 0) }</dd>
+		<dd>{ viewhelpers.FormatFloat(vm.Kill.AvgIlvl, 0) }</dd>
 		<dt class="text-bk-muted">Wipes</dt>
 		<dd>{ format.IntCtx(ctx, vm.Kill.Wipes) }</dd>
 		<dt class="text-bk-muted">Total dmg done</dt>
@@ -149,7 +150,7 @@ templ metaList(vm ViewModel) {
 		<dt class="text-bk-muted">Total dmg taken</dt>
 		<dd>{ format.Int64Ctx(ctx, vm.Kill.TotalDmgTaken) }</dd>
 		<dt class="text-bk-muted">Fight Length</dt>
-		<dd>{ longDuration(vm.Kill.LengthSec) }</dd>
+		<dd>{ viewhelpers.LongDuration(vm.Kill.LengthSec) }</dd>
 		<dt class="text-bk-muted">Deaths / Ressurects</dt>
 		<dd>{ format.IntCtx(ctx, vm.Kill.Deaths) } / { format.IntCtx(ctx, vm.Kill.Ressurects) }</dd>
 	</dl>
@@ -163,12 +164,12 @@ templ bossLoot(vm ViewModel) {
 		} else {
 			<ul class="space-y-1">
 				for _, l := range vm.Loot {
-					<li class="bk-tip-row flex items-center gap-2 text-sm" data-tooltip-url={ itemTooltipURL(vm.Realm, l.ItemID) }>
-						<img src={ itemIconHref(l.ItemID) } alt="" loading="lazy" width="24" height="24" class="rounded border border-bk-border"/>
+					<li class="bk-tip-row flex items-center gap-2 text-sm" data-tooltip-url={ viewhelpers.ItemTooltipURL(vm.Realm, l.ItemID) }>
+						<img src={ viewhelpers.ItemIconHref(l.ItemID) } alt="" loading="lazy" width="24" height="24" class="rounded border border-bk-border"/>
 						if l.Item != nil {
 							<a href={ templ.SafeURL(links.TwinheadItem(vm.Realm, l.ItemID)) } target="_blank" rel="noopener" style={ "color: " + api.QualityColor(l.Item.Quality) } tabindex="0">{ l.Item.Name }</a>
 						} else {
-							<a href={ templ.SafeURL(links.TwinheadItem(vm.Realm, l.ItemID)) } target="_blank" rel="noopener" class="text-bk-muted">Item { uitoa(uint64(l.ItemID)) }</a>
+							<a href={ templ.SafeURL(links.TwinheadItem(vm.Realm, l.ItemID)) } target="_blank" rel="noopener" class="text-bk-muted">Item { viewhelpers.Uitoa(uint64(l.ItemID)) }</a>
 						}
 						if l.DropChanceLabel != "" {
 							<span class="text-bk-accent">({ l.DropChanceLabel })</span>
@@ -232,7 +233,7 @@ templ statsTable(vm ViewModel) {
 					<td>{ format.Int64Ctx(ctx, p.HealTaken) }</td>
 					<td>{ format.IntCtx(ctx, p.Interrupts) }</td>
 					<td>{ format.IntCtx(ctx, p.Dispels) }</td>
-					<td>{ formatFloat(p.ItemLvl, 0) }</td>
+					<td>{ viewhelpers.FormatFloat(p.ItemLvl, 0) }</td>
 				</tr>
 			}
 		</tbody>
@@ -266,9 +267,9 @@ templ percentileCell(p float64, kind string) {
 		<span class="text-bk-muted">N/A</span>
 	} else {
 		if kind == "heal" {
-			<span style="color: #1eff00">{ formatFloat(p, 0) }</span>
+			<span style="color: #1eff00">{ viewhelpers.FormatFloat(p, 0) }</span>
 		} else {
-			<span style="color: #ffd100">{ formatFloat(p, 0) }</span>
+			<span style="color: #ffd100">{ viewhelpers.FormatFloat(p, 0) }</span>
 		}
 	}
 }

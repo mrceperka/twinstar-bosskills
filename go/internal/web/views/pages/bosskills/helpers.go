@@ -4,14 +4,8 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/a-h/templ"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/viewhelpers"
 )
-
-func bosskillsURL(realmName string) templ.SafeURL {
-	return templ.SafeURL(links.BossKills(realmName))
-}
 
 // filterValues encodes the currently applied filters + sort state so
 // pagination + sort-header links preserve them.
@@ -63,8 +57,3 @@ func sortHref(vm ViewModel, col string) string {
 	}
 	return base
 }
-
-var (
-	bossHref          = viewhelpers.BossHref
-	selectFilterClass = viewhelpers.SelectFilterClass
-)
