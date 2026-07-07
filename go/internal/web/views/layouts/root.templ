@@ -36,38 +36,66 @@ templ Root(meta PageMeta) {
 				<script src={ jsURL(meta, "bk-chart.js") } defer></script>
 			}
 		</head>
-		<body>
+		<body class={ bodyClass(meta) }>
 			@topbar(meta)
 			<main>
 				{ children... }
 			</main>
+			@mobileNav(meta)
 			@footer()
 		</body>
 	</html>
 }
 
 templ topbar(meta PageMeta) {
-	<header class="bk-topbar">
-		<div class="flex items-center gap-3">
-			// <a href="/" class="font-semibold tracking-wide">Twinstar Bosskills</a>
-			if meta.Realm != "" {
-				@realmPicker(meta.Realm)
-			}
-		</div>
-		<nav>
-			if meta.Realm != "" {
-				<ul>
-					<li><a href={ realmHref(meta.Realm, "/boss-kills") }>Latest</a></li>
-					<li><a href={ realmHref(meta.Realm, "/raids") }>Raids</a></li>
-					if realm.IsPublic(meta.Realm) && !realm.IsVanilla(realm.Expansion(meta.Realm)) {
-						<li><a href={ realmHref(meta.Realm, "/ranks") }>Ranks</a></li>
-					}
-					<li><a href={ realmHref(meta.Realm, "/characters") }>Characters</a></li>
-				</ul>
-			}
+	if meta.Realm != "" {
+		<header class="bk-topbar">
+			@realmPicker(meta.Realm)
+			@desktopNav(meta)
+		</header>
+	}
+}
+
+templ desktopNav(meta PageMeta) {
+	<nav class="bk-desktop-nav" aria-label="Main">
+		@primaryNavList(meta, false)
+	</nav>
+}
+
+templ mobileNav(meta PageMeta) {
+	if meta.Realm != "" {
+		<nav class="bk-mobile-nav" data-mobile-nav aria-label="Main">
+			@primaryNavList(meta, true)
 		</nav>
-		<div></div>
-	</header>
+	}
+}
+
+templ primaryNavList(meta PageMeta, withIcons bool) {
+	<ul>
+		<li><a class={ primaryNavLinkClass(meta, "/boss-kills") } href={ realmHref(meta.Realm, "/boss-kills") }>@primaryNavIcon("latest", withIcons)<span>Latest</span></a></li>
+		<li><a class={ primaryNavLinkClass(meta, "/raids") } href={ realmHref(meta.Realm, "/raids") }>@primaryNavIcon("raids", withIcons)<span>Raids</span></a></li>
+		if realm.IsPublic(meta.Realm) {
+			<li><a class={ primaryNavLinkClass(meta, "/ranks") } href={ realmHref(meta.Realm, "/ranks") }>@primaryNavIcon("ranks", withIcons)<span>Ranks</span></a></li>
+		}
+		<li><a class={ primaryNavLinkClass(meta, "/stats") } href={ realmHref(meta.Realm, "/stats") }>@primaryNavIcon("stats", withIcons)<span>Stats</span></a></li>
+		<li><a class={ primaryNavLinkClass(meta, "/characters") } href={ realmHref(meta.Realm, "/characters") }>@primaryNavIcon("characters", withIcons)<span>Characters</span></a></li>
+	</ul>
+}
+
+templ primaryNavIcon(name string, enabled bool) {
+	if enabled {
+		if name == "latest" {
+			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8v5l3 2"></path><path d="M3.1 10a9 9 0 1 1 1.6 6.6"></path><path d="M3 16v-6h6"></path></svg>
+		} else if name == "raids" {
+			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 4v5c0 4.5-2.9 7.6-7 9-4.1-1.4-7-4.5-7-9V7l7-4z"></path><path d="M9 12h6"></path><path d="M12 9v6"></path></svg>
+		} else if name == "ranks" {
+			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v5a4 4 0 0 1-8 0V4z"></path><path d="M6 6H4v2a4 4 0 0 0 4 4"></path><path d="M18 6h2v2a4 4 0 0 1-4 4"></path><path d="M12 13v4"></path><path d="M9 21h6"></path><path d="M10 17h4"></path></svg>
+		} else if name == "stats" {
+			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5"></path><path d="M4 19h16"></path><path d="M8 16V9"></path><path d="M12 16V7"></path><path d="M16 16v-4"></path></svg>
+		} else if name == "characters" {
+			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 20v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="10" cy="7" r="4"></circle><path d="M20 20v-2a3 3 0 0 0-2-2.8"></path><path d="M16 3.2a4 4 0 0 1 0 7.6"></path></svg>
+		}
+	}
 }
 
 templ realmPicker(activeRealm string) {
@@ -151,4 +179,18 @@ func realmPickerClass(realmName, activeRealm string) string {
 
 func realmLogoURL(realmName string) templ.SafeURL {
 	return templ.SafeURL("/static/logos/32x32/" + strings.ToLower(realm.Normalize(realmName)) + ".png")
+}
+
+func primaryNavLinkClass(meta PageMeta, path string) string {
+	if meta.ActivePath == path {
+		return "bk-primary-link active"
+	}
+	return "bk-primary-link"
+}
+
+func bodyClass(meta PageMeta) string {
+	if meta.Realm != "" {
+		return "bk-has-mobile-nav"
+	}
+	return ""
 }

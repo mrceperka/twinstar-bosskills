@@ -15,6 +15,7 @@ type ViewModel struct {
 	Realm        string
 	LockLabel    string
 	LockOffset   int
+	ClassMode    bool
 	Difficulties []DifficultyChoice
 	SelectedMode int
 	ModeLabel    string
@@ -42,6 +43,7 @@ type Rank struct {
 	Rank      int
 	Name      string
 	Class     int
+	ClassLabel string
 	Spec      int
 	SpecLabel string
 	DPS       int64
@@ -59,7 +61,7 @@ templ Page(vm ViewModel) {
 				<div class="ml-auto flex items-center gap-3">
 					<span class="text-xs text-bk-muted">
 						{ vm.LockLabel }
-						<a href={ templ.SafeURL(links.Ranks(vm.Realm) + "?difficulty=" + strconv.Itoa(vm.SelectedMode) + "&raidlock=" + strconv.Itoa(vm.LockOffset + 1)) } class="ml-2 text-bk-accent">(see previous)</a>
+						<a href={ previousLockHref(vm) } class="ml-2 text-bk-accent">(see previous)</a>
 					</span>
 					@difficultyTabs(vm)
 				</div>
@@ -70,7 +72,7 @@ templ Page(vm ViewModel) {
 					@components.EmptyState("No DPS data for this week yet.")
 				} else {
 					for _, raid := range vm.DPSRaids {
-						@raidSection(vm.Realm, raid, "DPS", vm.SelectedMode)
+						@raidSection(vm, raid, "DPS")
 					}
 				}
 			</section>
@@ -80,7 +82,7 @@ templ Page(vm ViewModel) {
 					@components.EmptyState("No HPS data for this week yet.")
 				} else {
 					for _, raid := range vm.HPSRaids {
-						@raidSection(vm.Realm, raid, "HPS", vm.SelectedMode)
+						@raidSection(vm, raid, "HPS")
 					}
 				}
 			</section>
@@ -89,31 +91,33 @@ templ Page(vm ViewModel) {
 }
 
 templ difficultyTabs(vm ViewModel) {
-	<div class="flex gap-1 text-xs">
-		for _, d := range vm.Difficulties {
-			<a href={ templ.SafeURL(links.Ranks(vm.Realm) + "?difficulty=" + strconv.Itoa(d.Mode) + "&raidlock=" + strconv.Itoa(vm.LockOffset)) }
-			   class={ viewhelpers.TabActiveClass(d.Mode == vm.SelectedMode) }>
-				{ d.Label }
-			</a>
-		}
-	</div>
+	if !vm.ClassMode {
+		<div class="flex gap-1 text-xs">
+			for _, d := range vm.Difficulties {
+				<a href={ templ.SafeURL(links.Ranks(vm.Realm) + "?difficulty=" + strconv.Itoa(d.Mode) + "&raidlock=" + strconv.Itoa(vm.LockOffset)) }
+				   class={ viewhelpers.TabActiveClass(d.Mode == vm.SelectedMode) }>
+					{ d.Label }
+				</a>
+			}
+		</div>
+	}
 }
 
-templ raidSection(realmName string, raid RaidGroup, metric string, mode int) {
+templ raidSection(vm ViewModel, raid RaidGroup, metric string) {
 	<div class="space-y-4">
 		for _, boss := range raid.Bosses {
 			<div>
 				<h3 class="mb-2 font-medium">
 					{ raid.Name } —
-					<a href={ viewhelpers.BossWithDifficultyHref(realmName, boss.BossID, mode) } class="text-bk-accent hover:underline">{ boss.BossName }</a>
+					<a href={ rankBossHref(vm, boss.BossID) } class="text-bk-accent hover:underline">{ boss.BossName }</a>
 				</h3>
-				@bossRankTable(realmName, boss.Entries, metric)
+				@bossRankTable(vm, boss.Entries, metric)
 			</div>
 		}
 	</div>
 }
 
-templ bossRankTable(realmName string, rows []Rank, metric string) {
+templ bossRankTable(vm ViewModel, rows []Rank, metric string) {
 	if len(rows) == 0 {
 		@components.EmptyState("No data yet.")
 	} else {
@@ -122,7 +126,7 @@ templ bossRankTable(realmName string, rows []Rank, metric string) {
 				<tr>
 					<th class="w-8">#</th>
 					<th>Character</th>
-					<th>Spec</th>
+					<th>{ rankGroupLabel(vm) }</th>
 					<th class="text-right">{ metric }</th>
 					<th>Length</th>
 					<th>iLvl</th>
@@ -134,12 +138,17 @@ templ bossRankTable(realmName string, rows []Rank, metric string) {
 					<tr>
 						<td class="text-bk-muted">{ viewhelpers.Itoa(r.Rank) }</td>
 						<td>
-							<a href={ viewhelpers.CharacterHref(realmName, r.Name) } class="hover:underline">{ r.Name }</a>
+							<a href={ viewhelpers.CharacterHref(vm.Realm, r.Name) } class="hover:underline">{ r.Name }</a>
 						</td>
 						<td class="text-xs">
 							<span class="inline-flex items-center gap-1">
-								@components.ClassSpecIcons(realmName, r.Class, r.Spec)
-								<span>{ r.SpecLabel }</span>
+								if vm.ClassMode {
+									@components.ClassSpecIcons(vm.Realm, r.Class, 0)
+									<span>{ r.ClassLabel }</span>
+								} else {
+									@components.ClassSpecIcons(vm.Realm, r.Class, r.Spec)
+									<span>{ r.SpecLabel }</span>
+								}
 							</span>
 						</td>
 						<td class="text-right">
@@ -153,7 +162,7 @@ templ bossRankTable(realmName string, rows []Rank, metric string) {
 						<td>{ viewhelpers.Ilvl(r.Ilvl) }</td>
 						<td>
 							if r.KillID != "" {
-								<a href={ viewhelpers.BossKillHref(realmName, r.KillID) }>Detail</a>
+								<a href={ viewhelpers.BossKillHref(vm.Realm, r.KillID) }>Detail</a>
 							}
 						</td>
 					</tr>

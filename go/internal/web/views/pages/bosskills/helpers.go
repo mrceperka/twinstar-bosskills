@@ -20,6 +20,12 @@ func filterValues(vm ViewModel) url.Values {
 	for _, m := range vm.Filter.Difficulties {
 		v.Add("difficulty", strconv.Itoa(m))
 	}
+	for _, c := range vm.Filter.Classes {
+		v.Add("class", strconv.Itoa(c))
+	}
+	for _, s := range vm.Filter.Specs {
+		v.Add("spec", strconv.Itoa(s))
+	}
 	if vm.Filter.SortBy != "" && vm.Filter.SortBy != defaultBKSort {
 		v.Set("sort", vm.Filter.SortBy)
 	}

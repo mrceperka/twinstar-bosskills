@@ -11,10 +11,10 @@ func tabHref(vm ViewModel, mode int) templ.SafeURL {
 	href := string(viewhelpers.BossWithDifficultyHref(vm.Realm, vm.Boss.RemoteID, mode)) +
 		"&raidlock=" + strconv.Itoa(vm.LockOffset) +
 		"&p=" + strconv.Itoa(vm.SelectedPctile)
-	if vm.SelectedSpec > 0 {
+	if !vm.ClassMode && vm.SelectedSpec > 0 {
 		href += "&spec=" + strconv.Itoa(vm.SelectedSpec)
 	}
-	if vm.SelectedClass > 0 {
+	if vm.ClassMode && vm.SelectedClass > 0 {
 		href += "&class=" + strconv.Itoa(vm.SelectedClass)
 	}
 	return templ.SafeURL(href)
@@ -26,10 +26,10 @@ func previousLockHref(vm ViewModel) templ.SafeURL {
 	href := string(viewhelpers.BossWithDifficultyHref(vm.Realm, vm.Boss.RemoteID, vm.SelectedMode)) +
 		"&raidlock=" + strconv.Itoa(vm.LockOffset+1) +
 		"&p=" + strconv.Itoa(vm.SelectedPctile)
-	if vm.SelectedSpec > 0 {
+	if !vm.ClassMode && vm.SelectedSpec > 0 {
 		href += "&spec=" + strconv.Itoa(vm.SelectedSpec)
 	}
-	if vm.SelectedClass > 0 {
+	if vm.ClassMode && vm.SelectedClass > 0 {
 		href += "&class=" + strconv.Itoa(vm.SelectedClass)
 	}
 	return templ.SafeURL(href)
@@ -39,10 +39,10 @@ func previousLockHref(vm ViewModel) templ.SafeURL {
 func siblingHref(vm ViewModel, remoteID uint32) templ.SafeURL {
 	href := string(viewhelpers.BossWithDifficultyHref(vm.Realm, remoteID, vm.SelectedMode)) +
 		"&raidlock=" + strconv.Itoa(vm.LockOffset)
-	if vm.SelectedSpec > 0 {
+	if !vm.ClassMode && vm.SelectedSpec > 0 {
 		href += "&spec=" + strconv.Itoa(vm.SelectedSpec)
 	}
-	if vm.SelectedClass > 0 {
+	if vm.ClassMode && vm.SelectedClass > 0 {
 		href += "&class=" + strconv.Itoa(vm.SelectedClass)
 	}
 	return templ.SafeURL(href)
@@ -55,13 +55,27 @@ func filterHref(vm ViewModel, spec, class int) string {
 	href := string(viewhelpers.BossWithDifficultyHref(vm.Realm, vm.Boss.RemoteID, vm.SelectedMode)) +
 		"&raidlock=" + strconv.Itoa(vm.LockOffset) +
 		"&p=" + strconv.Itoa(vm.SelectedPctile)
-	if spec > 0 {
+	if !vm.ClassMode && spec > 0 {
 		href += "&spec=" + strconv.Itoa(spec)
 	}
-	if class > 0 {
+	if vm.ClassMode && class > 0 {
 		href += "&class=" + strconv.Itoa(class)
 	}
 	return href
+}
+
+func groupLabel(vm ViewModel) string {
+	if vm.ClassMode {
+		return "class"
+	}
+	return "spec"
+}
+
+func groupTitle(vm ViewModel) string {
+	if vm.ClassMode {
+		return "Class"
+	}
+	return "Talent Spec"
 }
 
 func filterCellClass(selected bool) string {

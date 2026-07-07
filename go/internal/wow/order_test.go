@@ -41,23 +41,3 @@ func TestBossPosition(t *testing.T) {
 		})
 	}
 }
-
-func TestBossSortKey(t *testing.T) {
-	tests := []struct {
-		name     string
-		remoteID uint32
-		want     int
-	}{
-		{"first boss in first raid", 59915, 101},
-		{"last boss in SoO", 71865, 514},
-		{"unknown", 999999, 1099999},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := BossSortKey(tt.remoteID); got != tt.want {
-				t.Fatalf("BossSortKey(%d) = %d, want %d", tt.remoteID, got, tt.want)
-			}
-		})
-	}
-}

@@ -83,30 +83,46 @@ templ raidTable(realmName string, r Raid, difficulties []DifficultyChoice) {
 		<thead>
 			<tr>
 				<th>Boss</th>
-				for _, d := range difficulties {
-					<th class="text-right">{ d.Label }</th>
+				if len(difficulties) == 0 {
+					<th class="text-right">Kills</th>
+				} else {
+					for _, d := range difficulties {
+						<th class="text-right">{ d.Label }</th>
+					}
+					<th class="text-right">Total</th>
 				}
-				<th class="text-right">Total</th>
 			</tr>
 		</thead>
 		<tbody>
 			for _, b := range r.Bosses {
 				<tr>
 					<td>{ b.Name }</td>
-					for _, d := range difficulties {
+					if len(difficulties) == 0 {
 						<td class="text-right">
-							if b.KillsByDifficulty[d.Mode] > 0 {
-								<a href={viewhelpers.BossWithDifficultyHref(realmName, b.RemoteID, d.Mode)}>
-									{ format.IntCtx(ctx, b.KillsByDifficulty[d.Mode]) }
+							if b.Total > 0 {
+								<a href={ viewhelpers.BossHref(realmName, b.RemoteID) }>
+									{ format.IntCtx(ctx, b.Total) }
 								</a>
 							} else {
 								<span class="text-bk-muted">—</span>
 							}
 						</td>
+					} else {
+						for _, d := range difficulties {
+							<td class="text-right">
+								if b.KillsByDifficulty[d.Mode] > 0 {
+									<a href={ viewhelpers.BossWithDifficultyHref(realmName, b.RemoteID, d.Mode) }>
+										{ format.IntCtx(ctx, b.KillsByDifficulty[d.Mode]) }
+									</a>
+								} else {
+									<span class="text-bk-muted">—</span>
+								}
+							</td>
+						}
+						<td class="text-right font-medium">
+							{ format.IntCtx(ctx, b.Total) }
+						</td>
 					}
-					<td class="text-right font-medium">
-						{ format.IntCtx(ctx, b.Total) }
-					</td>
 				</tr>
 			}
 		</tbody>

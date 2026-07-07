@@ -72,6 +72,11 @@ func Handler(deps Deps) http.HandlerFunc {
 		// "no filter".
 		spec, _ := strconv.Atoi(r.URL.Query().Get("spec"))
 		class, _ := strconv.Atoi(r.URL.Query().Get("class"))
+		if expansionIsClassMode(expansion) {
+			spec = 0
+		} else {
+			class = 0
+		}
 
 		stats, err := loadHeaderStats(ctx, deps.DB, realmName, bossID, mode, expansion, lock.Start, lock.End)
 		if err != nil {
@@ -85,7 +90,7 @@ func Handler(deps Deps) http.HandlerFunc {
 			return
 		}
 
-		dpsCurves, hpsCurves, err := loadSpecCurves(ctx, deps.DB, realmName, bossID, mode, spec, class, lock.Start, lock.End)
+		dpsCurves, hpsCurves, err := loadSpecCurves(ctx, deps.DB, realmName, bossID, mode, spec, class, expansion, lock.Start, lock.End)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -94,8 +99,12 @@ func Handler(deps Deps) http.HandlerFunc {
 		if v, err := strconv.Atoi(r.URL.Query().Get("p")); err == nil && v >= 1 && v <= 99 {
 			selectedP = v
 		}
-		dpsCurveJSON, _ := buildCurveJSON("DPS by spec", expansion, dpsCurves, selectedP)
-		hpsCurveJSON, _ := buildCurveJSON("HPS by spec", expansion, hpsCurves, selectedP)
+		groupLabel := "spec"
+		if expansionIsClassMode(expansion) {
+			groupLabel = "class"
+		}
+		dpsCurveJSON, _ := buildCurveJSON("DPS by "+groupLabel, expansion, dpsCurves, selectedP)
+		hpsCurveJSON, _ := buildCurveJSON("HPS by "+groupLabel, expansion, hpsCurves, selectedP)
 		dpsBoxJSON, _ := buildBoxPlotJSON("DPS", dpsCurves, realmName)
 		hpsBoxJSON, _ := buildBoxPlotJSON("HPS", hpsCurves, realmName)
 		atP := extractAtPercentile(dpsCurves, hpsCurves, selectedP, expansion)
@@ -112,7 +121,7 @@ func Handler(deps Deps) http.HandlerFunc {
 		}
 
 		// Collect available spec / class IDs for the filter row.
-		availSpecs, availClasses, err := loadAvailableSpecsClasses(ctx, deps.DB, realmName, bossID, mode, lock.Start, lock.End)
+		availSpecs, availClasses, err := loadAvailableSpecsClasses(ctx, deps.DB, realmName, bossID, mode, expansion, lock.Start, lock.End)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -136,6 +145,7 @@ func Handler(deps Deps) http.HandlerFunc {
 			LockOffset:       lockOffset,
 			SelectedSpec:     spec,
 			SelectedClass:    class,
+			ClassMode:        expansionIsClassMode(expansion),
 			AvailableSpecs:   availSpecs,
 			AvailableClasses: availClasses,
 			SelectedPctile:   selectedP,
@@ -154,6 +164,10 @@ func Handler(deps Deps) http.HandlerFunc {
 		}
 		_ = Page(vm).Render(r.Context(), w)
 	}
+}
+
+func expansionIsClassMode(expansion int) bool {
+	return expansion == realm.ExpansionVanilla
 }
 
 func loadBossInfo(ctx context.Context, db *sql.DB, realmName string, id uint32) (BossInfo, error) {
@@ -233,7 +247,34 @@ func lockLabel(start, end time.Time, _ int) string {
 // loadAvailableSpecsClasses returns the distinct spec / class IDs that have
 // data for the requested boss + mode, so the filter row can render only
 // icons that actually do something.
-func loadAvailableSpecsClasses(ctx context.Context, db *sql.DB, realmName string, id uint32, mode int, start, end time.Time) (specs, classes []int, err error) {
+func loadAvailableSpecsClasses(ctx context.Context, db *sql.DB, realmName string, id uint32, mode, expansion int, start, end time.Time) (specs, classes []int, err error) {
+	if expansionIsClassMode(expansion) {
+		rows, err := db.QueryContext(ctx, `
+			SELECT DISTINCT players.class AS c
+			FROM boss_kill ARRAY JOIN players
+			WHERE realm = ? AND boss_remote_id = ? AND mode = ?
+			  AND kill_time >= ? AND kill_time < ?
+			  AND players.class > 0
+		`, realmName, id, uint8(mode), start, end)
+		if err != nil {
+			return nil, nil, err
+		}
+		defer rows.Close()
+		classSet := map[int]bool{}
+		for rows.Next() {
+			var c uint8
+			if err := rows.Scan(&c); err != nil {
+				return nil, nil, err
+			}
+			classSet[int(c)] = true
+		}
+		for c := range classSet {
+			classes = append(classes, c)
+		}
+		sort.Ints(classes)
+		return nil, classes, rows.Err()
+	}
+
 	rows, err := db.QueryContext(ctx, `
 		SELECT DISTINCT players.talent_spec AS s, players.class AS c
 		FROM boss_kill ARRAY JOIN players
@@ -246,7 +287,6 @@ func loadAvailableSpecsClasses(ctx context.Context, db *sql.DB, realmName string
 	}
 	defer rows.Close()
 	specSet := map[int]bool{}
-	classSet := map[int]bool{}
 	for rows.Next() {
 		var s uint16
 		var c uint8
@@ -254,19 +294,12 @@ func loadAvailableSpecsClasses(ctx context.Context, db *sql.DB, realmName string
 			return nil, nil, err
 		}
 		specSet[int(s)] = true
-		if c > 0 {
-			classSet[int(c)] = true
-		}
 	}
 	for s := range specSet {
 		specs = append(specs, s)
 	}
-	for c := range classSet {
-		classes = append(classes, c)
-	}
 	sort.Ints(specs)
-	sort.Ints(classes)
-	return specs, classes, rows.Err()
+	return specs, nil, rows.Err()
 }
 
 // loadHeaderStats computes the narrative numbers shown above the tabs:
@@ -350,6 +383,7 @@ func loadSiblings(ctx context.Context, db *sql.DB, realmName, raidName string, c
 //
 // `specFilter` and `classFilter` are 0 for "no filter" — non-zero values
 // are applied as additional predicates on players.talent_spec / players.class.
+// Vanilla ranks by class, later expansions rank by spec.
 func loadRankings(ctx context.Context, db *sql.DB, realmName string, id uint32, mode, specFilter, classFilter, expansion int, start, end time.Time) (dps, hps []Ranking, err error) {
 	q := `
 		SELECT
@@ -370,11 +404,11 @@ func loadRankings(ctx context.Context, db *sql.DB, realmName string, id uint32, 
 		  AND kill_time >= ? AND kill_time < ?
 	`
 	args := []any{realmName, id, uint8(mode), start, end}
-	if specFilter > 0 {
+	if !expansionIsClassMode(expansion) && specFilter > 0 {
 		q += " AND players.talent_spec = ?"
 		args = append(args, uint16(specFilter))
 	}
-	if classFilter > 0 {
+	if expansionIsClassMode(expansion) && classFilter > 0 {
 		q += " AND players.class = ?"
 		args = append(args, uint8(classFilter))
 	}
@@ -410,15 +444,19 @@ func loadRankings(ctx context.Context, db *sql.DB, realmName string, id uint32, 
 		return nil, nil, err
 	}
 
-	// Pick best DPS / best HPS per (guid, spec).
+	// Pick best DPS / best HPS per character group.
 	type key struct {
-		Guid uint64
-		Spec uint16
+		Guid  uint64
+		Spec  uint16
+		Class uint8
 	}
 	bestDPS := map[key]sample{}
 	bestHPS := map[key]sample{}
 	for _, s := range all {
 		k := key{Guid: s.Guid, Spec: s.Spec}
+		if expansionIsClassMode(expansion) {
+			k = key{Guid: s.Guid, Class: s.Class}
+		}
 		if prev, ok := bestDPS[k]; !ok || s.DPS > prev.DPS {
 			bestDPS[k] = s
 		}

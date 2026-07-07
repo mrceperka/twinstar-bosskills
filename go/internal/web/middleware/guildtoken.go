@@ -72,22 +72,6 @@ func AttachGuildAuth(secretGuild string) func(http.Handler) http.Handler {
 	}
 }
 
-// RequireGuildAuth wraps a handler with a 403 gate for unverified guild auth
-// on private realms. Public realms pass through.
-//
-// The 403 body suggests the user visit /{realm}/guild-token to set their
-// token, matching the SvelteKit assertGuildTokenFromCookie behaviour.
-func RequireGuildAuth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth := Auth(r.Context())
-		if !auth.Verified {
-			http.Error(w, "Guild token required for this realm. Set one at /"+auth.Realm+"/guild-token", http.StatusForbidden)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 func cookieValueRaw(r *http.Request, name string) string {
 	c, err := r.Cookie(name)
 	if err != nil || c == nil {

@@ -27,6 +27,7 @@ type Deps struct {
 type rawRank struct {
 	BossID uint32
 	Spec   uint16
+	Class  uint8
 	GUID   uint64
 	DPS    uint64
 	HPS    uint64
@@ -62,9 +63,12 @@ func Handler(deps Deps) http.HandlerFunc {
 		defer cancel()
 
 		expansion := realm.Expansion(realmName)
+		classMode := realm.IsVanilla(expansion)
 		mode := wow.DefaultDifficulty(expansion)
-		if v, ok := query.Difficulty(r.URL.Query()); ok {
-			mode = v
+		if !classMode {
+			if v, ok := query.Difficulty(r.URL.Query()); ok {
+				mode = v
+			}
 		}
 		offset := 0
 		if v, ok := query.RaidLock(r.URL.Query()); ok {
@@ -74,7 +78,7 @@ func Handler(deps Deps) http.HandlerFunc {
 		now := time.Now().UTC()
 		win := domain.RaidLock(now, offset)
 
-		allRows, err := loadAllRankRows(ctx, deps.DB, realmName, win.Start, mode)
+		allRows, err := loadAllRankRows(ctx, deps.DB, realmName, win.Start, win.End, mode, expansion)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -100,7 +104,7 @@ func Handler(deps Deps) http.HandlerFunc {
 			return
 		}
 
-		killDetails, err := loadKillDetails(ctx, deps.DB, realmName, win.Start, win.End, mode, setKeysU64(guidSet))
+		killDetails, err := loadKillDetails(ctx, deps.DB, realmName, win.Start, win.End, mode, expansion, setKeysU64(guidSet))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -111,17 +115,19 @@ func Handler(deps Deps) http.HandlerFunc {
 
 		vm := ViewModel{
 			Meta: layouts.PageMeta{
-				Title:   realmName + " / Ranks",
-				Realm:   realmName,
-				CSSHash: deps.CSSHash,
-				JSHash:  deps.JSHash,
+				Title:      realmName + " / Ranks",
+				Realm:      realmName,
+				ActivePath: "/ranks",
+				CSSHash:    deps.CSSHash,
+				JSHash:     deps.JSHash,
 			},
 			Realm:        realmName,
 			LockLabel:    win.Start.Format("Jan 2 15:04 UTC") + " → " + win.End.Format("Jan 2 15:04 UTC"),
 			LockOffset:   offset,
-			Difficulties: buildDifficulties(expansion),
+			ClassMode:    classMode,
+			Difficulties: buildDifficulties(expansion, classMode),
 			SelectedMode: mode,
-			ModeLabel:    wow.Difficulty(expansion, mode),
+			ModeLabel:    modeLabel(expansion, mode, classMode),
 			DPSRaids:     dpsRaids,
 			HPSRaids:     hpsRaids,
 		}
@@ -130,7 +136,10 @@ func Handler(deps Deps) http.HandlerFunc {
 	}
 }
 
-func buildDifficulties(expansion int) []DifficultyChoice {
+func buildDifficulties(expansion int, classMode bool) []DifficultyChoice {
+	if classMode {
+		return nil
+	}
 	modes := wow.RaidDifficulties(expansion)
 	out := make([]DifficultyChoice, 0, len(modes))
 	for _, m := range modes {
@@ -139,7 +148,44 @@ func buildDifficulties(expansion int) []DifficultyChoice {
 	return out
 }
 
-func loadAllRankRows(ctx context.Context, db *sql.DB, realmName string, lockStart time.Time, mode int) ([]rawRank, error) {
+func modeLabel(expansion, mode int, classMode bool) string {
+	if classMode {
+		return "All kills"
+	}
+	return wow.Difficulty(expansion, mode)
+}
+
+func loadAllRankRows(ctx context.Context, db *sql.DB, realmName string, lockStart, lockEnd time.Time, mode, expansion int) ([]rawRank, error) {
+	if realm.IsVanilla(expansion) {
+		q := `
+			SELECT boss_remote_id,
+			       players.class,
+			       players.guid,
+			       max(` + metric.SQLUInt64(metric.DmgDoneArrayJoin) + `) AS dps,
+			       max(` + metric.SQLUInt64(metric.HealAbsorbArrayJoin) + `) AS hps
+			FROM boss_kill ARRAY JOIN players
+			WHERE realm = ?
+			  AND kill_time >= ? AND kill_time < ?
+			  AND length > 0
+			  AND players.class > 0
+			GROUP BY boss_remote_id, players.class, players.guid
+		`
+		rows, err := db.QueryContext(ctx, q, realmName, lockStart, lockEnd)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		var out []rawRank
+		for rows.Next() {
+			var r rawRank
+			if err := rows.Scan(&r.BossID, &r.Class, &r.GUID, &r.DPS, &r.HPS); err != nil {
+				return nil, err
+			}
+			out = append(out, r)
+		}
+		return out, rows.Err()
+	}
+
 	const q = `
 		SELECT boss_remote_id, talent_spec, guid,
 		       maxMerge(dps_state) AS dps,
@@ -245,14 +291,14 @@ func loadNames(ctx context.Context, db *sql.DB, realmName string, guids []uint64
 
 // loadKillDetails finds the best kill (by DPS) per (boss, guid) within the
 // lock window, returning fight length and item level for the rank table.
-func loadKillDetails(ctx context.Context, db *sql.DB, realmName string, lockStart, lockEnd time.Time, mode int, guids []uint64) (map[killDetailKey]killDetail, error) {
+func loadKillDetails(ctx context.Context, db *sql.DB, realmName string, lockStart, lockEnd time.Time, mode, expansion int, guids []uint64) (map[killDetailKey]killDetail, error) {
 	out := map[killDetailKey]killDetail{}
 	if len(guids) == 0 {
 		return out, nil
 	}
 	ph := sqlutil.Placeholders(len(guids))
 	args := make([]any, 0, len(guids)+4)
-	args = append(args, realmName, lockStart, lockEnd, uint8(mode))
+	args = append(args, realmName, lockStart, lockEnd)
 	for _, g := range guids {
 		args = append(args, g)
 	}
@@ -266,9 +312,13 @@ func loadKillDetails(ctx context.Context, db *sql.DB, realmName string, lockStar
 	ARRAY JOIN players
 	WHERE realm = ?
 	  AND kill_time >= ? AND kill_time < ?
-	  AND mode = ?
 	  AND players.guid IN (` + ph + `)
-	GROUP BY boss_remote_id, players.guid`
+	`
+	if !realm.IsVanilla(expansion) {
+		q += " AND mode = ?"
+		args = append(args, uint8(mode))
+	}
+	q += " GROUP BY boss_remote_id, players.guid"
 	rows, err := db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -374,7 +424,8 @@ func buildRankEntries(rows []rawRank, killDetails map[killDetailKey]killDetail, 
 		rawRank
 		val uint64
 	}
-	bySpec := map[uint16]best{}
+	byGroup := map[int]best{}
+	classMode := realm.IsVanilla(expansion)
 	for _, r := range rows {
 		var val uint64
 		if metric == "dps" {
@@ -385,13 +436,17 @@ func buildRankEntries(rows []rawRank, killDetails map[killDetailKey]killDetail, 
 		if val == 0 {
 			continue
 		}
-		if prev, ok := bySpec[r.Spec]; !ok || val > prev.val {
-			bySpec[r.Spec] = best{r, val}
+		key := int(r.Spec)
+		if classMode {
+			key = int(r.Class)
+		}
+		if prev, ok := byGroup[key]; !ok || val > prev.val {
+			byGroup[key] = best{r, val}
 		}
 	}
 
-	sorted := make([]best, 0, len(bySpec))
-	for _, b := range bySpec {
+	sorted := make([]best, 0, len(byGroup))
+	for _, b := range byGroup {
 		sorted = append(sorted, b)
 	}
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].val > sorted[j].val })
@@ -404,17 +459,24 @@ func buildRankEntries(rows []rawRank, killDetails map[killDetailKey]killDetail, 
 		}
 		dk := killDetailKey{BossID: b.BossID, GUID: b.GUID}
 		detail := killDetails[dk]
+		class := wow.ClassFromSpecForExpansion(expansion, int(b.Spec))
+		specLabel := wow.SpecForExpansion(expansion, int(b.Spec))
+		if classMode {
+			class = int(b.Class)
+			specLabel = ""
+		}
 		out = append(out, Rank{
-			Rank:      i + 1,
-			Name:      name,
-			Class:     wow.ClassFromSpecForExpansion(expansion, int(b.Spec)),
-			Spec:      int(b.Spec),
-			SpecLabel: wow.SpecForExpansion(expansion, int(b.Spec)),
-			DPS:       int64(b.DPS),
-			HPS:       int64(b.HPS),
-			LengthSec: detail.LengthSec,
-			Ilvl:      detail.Ilvl,
-			KillID:    detail.KillID,
+			Rank:       i + 1,
+			Name:       name,
+			Class:      class,
+			ClassLabel: wow.Class(class),
+			Spec:       int(b.Spec),
+			SpecLabel:  specLabel,
+			DPS:        int64(b.DPS),
+			HPS:        int64(b.HPS),
+			LengthSec:  detail.LengthSec,
+			Ilvl:       detail.Ilvl,
+			KillID:     detail.KillID,
 		})
 	}
 	return out

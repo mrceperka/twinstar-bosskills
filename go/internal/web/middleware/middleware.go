@@ -99,7 +99,7 @@ func SecurityHeaders(next http.Handler) http.Handler {
 			"default-src 'self'; "+
 				"script-src 'self'; "+
 				"style-src 'self' 'unsafe-inline'; "+
-				"img-src 'self' data:; "+
+				"img-src 'self' data: https://twinstar-api.twinstar-wow.com; "+
 				"connect-src 'self'; "+
 				"frame-ancestors 'none'")
 		next.ServeHTTP(w, r)

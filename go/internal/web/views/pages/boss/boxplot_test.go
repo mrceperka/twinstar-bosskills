@@ -42,3 +42,31 @@ func TestBuildBoxPlotJSONIncludesTooltipMetadata(t *testing.T) {
 		t.Fatalf("tooltip name contains rich label token: %q", data["name"])
 	}
 }
+
+func TestBuildBoxPlotJSONSupportsClassCurves(t *testing.T) {
+	var values [99]float64
+	for i := range values {
+		values[i] = float64((i + 1) * 1000)
+	}
+
+	raw, err := buildBoxPlotJSON("DPS", []SpecCurve{{Class: 8, Values: values}}, "Kronos")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var opt map[string]any
+	if err := json.Unmarshal(raw, &opt); err != nil {
+		t.Fatal(err)
+	}
+	series := opt["series"].([]any)[0].(map[string]any)
+	data := series["data"].([]any)[0].(map[string]any)
+	if got := data["name"]; got != "Mage" {
+		t.Fatalf("data.name = %v, want Mage", got)
+	}
+	if data["specIcon"] != "" {
+		t.Fatalf("specIcon = %v, want empty for class curve", data["specIcon"])
+	}
+	if !strings.Contains(data["classIcon"].(string), "type=class") {
+		t.Fatalf("classIcon = %q, want class icon URL", data["classIcon"])
+	}
+}

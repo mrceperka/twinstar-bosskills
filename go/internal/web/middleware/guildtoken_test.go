@@ -42,27 +42,3 @@ func TestAttachGuildAuth_PrivateRealmRequiresMatch(t *testing.T) {
 	r.AddCookie(&http.Cookie{Name: cookieGuildToken, Value: good})
 	h.ServeHTTP(httptest.NewRecorder(), r)
 }
-
-func TestRequireGuildAuth_403WithoutToken(t *testing.T) {
-	h := AttachGuildAuth("secret")(RequireGuildAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("downstream should not run")
-	})))
-	rr := httptest.NewRecorder()
-	r := newReqWithRealm("GET", "/MoPPvE/x", "MoPPvE")
-	h.ServeHTTP(rr, r)
-	if rr.Code != http.StatusForbidden {
-		t.Errorf("status: %d", rr.Code)
-	}
-}
-
-func TestRequireGuildAuth_PassesPublicRealm(t *testing.T) {
-	ok := false
-	h := AttachGuildAuth("secret")(RequireGuildAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ok = true
-	})))
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, newReqWithRealm("GET", "/Helios/x", "Helios"))
-	if !ok {
-		t.Errorf("public realm should pass through; status %d", rr.Code)
-	}
-}

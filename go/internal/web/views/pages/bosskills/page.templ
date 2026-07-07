@@ -15,6 +15,8 @@ type ViewModel struct {
 	BossOptions []Option
 	RaidOptions []Option
 	ModeOptions []Option
+	ClassOptions []Option
+	SpecOptions []Option
 	Rows       []KillRow
 	Page       int
 	PageSize   int
@@ -25,6 +27,8 @@ type FilterValues struct {
 	Bosses        []uint32
 	Raids         []string
 	Difficulties  []int
+	Classes       []int
+	Specs         []int
 	SortBy        string // kill_time (default), length, wipes, deaths
 	SortDir       string // asc, desc
 	// GuildOverride is set by the handler when on a private realm; it forces
@@ -32,11 +36,7 @@ type FilterValues struct {
 	GuildOverride string
 }
 
-type Option struct {
-	Value    string
-	Label    string
-	Selected bool
-}
+type Option = components.CheckboxOption
 
 type KillRow struct {
 	RemoteID   string
@@ -140,38 +140,38 @@ templ filterForm(vm ViewModel) {
 		hx-target="#kills-table"
 		hx-swap="innerHTML"
 		hx-push-url="true"
-		class="grid gap-3 sm:grid-cols-3"
+		class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
 	>
 		<input type="hidden" name="sort" value={ vm.Filter.SortBy }/>
 		<input type="hidden" name="dir" value={ vm.Filter.SortDir }/>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Raid</span>
-			@checkboxFilter("raid", vm.RaidOptions, len(vm.Filter.Raids) > 0, "min-h-24")
+			@components.CheckboxFilter("raid", vm.RaidOptions, len(vm.Filter.Raids) > 0, "min-h-24")
 		</label>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Boss</span>
-			@checkboxFilter("boss", vm.BossOptions, len(vm.Filter.Bosses) > 0, "min-h-24")
+			@components.CheckboxFilter("boss", vm.BossOptions, len(vm.Filter.Bosses) > 0, "min-h-24")
 		</label>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Difficulty</span>
-			@checkboxFilter("difficulty", vm.ModeOptions, len(vm.Filter.Difficulties) > 0, "min-h-24")
+			@components.CheckboxFilter("difficulty", vm.ModeOptions, len(vm.Filter.Difficulties) > 0, "min-h-24")
 		</label>
-		<div class="sm:col-span-3 flex justify-end gap-2">
+		if len(vm.ClassOptions) > 0 {
+			<label class="flex flex-col gap-1 text-sm">
+				<span class="text-bk-muted">Class</span>
+				@components.CheckboxFilter("class", vm.ClassOptions, len(vm.Filter.Classes) > 0, "min-h-24")
+			</label>
+		} else {
+			<label class="flex flex-col gap-1 text-sm">
+				<span class="text-bk-muted">Spec</span>
+				@components.CheckboxFilter("spec", vm.SpecOptions, len(vm.Filter.Specs) > 0, "min-h-24")
+			</label>
+		}
+		<div class="sm:col-span-2 lg:col-span-4 flex justify-end gap-2">
 			<a href={ templ.SafeURL(links.BossKills(vm.Realm)) } class="rounded border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-text">Reset</a>
 			<button type="submit" class="rounded bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Apply</button>
 		</div>
 	</form>
-}
-
-templ checkboxFilter(name string, options []Option, active bool, minHeightClass string) {
-	<div class={ viewhelpers.CheckboxFilterClass(active), minHeightClass }>
-		for _, o := range options {
-			<label class="bk-checkbox-option">
-				<input type="checkbox" name={ name } value={ o.Value } checked?={ o.Selected }/>
-				<span>{ o.Label }</span>
-			</label>
-		}
-	</div>
 }
 
 templ pagination(vm ViewModel) {

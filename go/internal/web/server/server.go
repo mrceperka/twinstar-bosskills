@@ -29,6 +29,7 @@ import (
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/pages/icon"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/pages/raids"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/pages/ranks"
+	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/pages/stats"
 )
 
 type Config struct {
@@ -72,6 +73,7 @@ func New(cfg Config) http.Handler {
 	bosskills.Mount(mux, bosskills.Deps{DB: cfg.DB, CSSHash: cssHash, JSHash: jsHash})
 	bosskill.Mount(mux, bosskill.Deps{DB: cfg.DB, Items: cfg.Items, CSSHash: cssHash, JSHash: jsHash})
 	ranks.Mount(mux, ranks.Deps{DB: cfg.DB, CSSHash: cssHash, JSHash: jsHash})
+	stats.Mount(mux, stats.Deps{DB: cfg.DB, CSSHash: cssHash, JSHash: jsHash})
 	character.Mount(mux, character.Deps{DB: cfg.DB, API: api.NewClient(cfg.APIBase), CSSHash: cssHash, JSHash: jsHash})
 	characterperf.Mount(mux, characterperf.Deps{DB: cfg.DB, CSSHash: cssHash, JSHash: jsHash})
 	characters.Mount(mux, characters.Deps{DB: cfg.DB, CSSHash: cssHash, JSHash: jsHash})

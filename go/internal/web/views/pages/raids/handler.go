@@ -49,10 +49,11 @@ func Handler(deps Deps) http.HandlerFunc {
 
 		vm := ViewModel{
 			Meta: layouts.PageMeta{
-				Title:   realmName + " / Raids",
-				Realm:   realmName,
-				CSSHash: deps.CSSHash,
-				JSHash:  deps.JSHash,
+				Title:      realmName + " / Raids",
+				Realm:      realmName,
+				ActivePath: "/raids",
+				CSSHash:    deps.CSSHash,
+				JSHash:     deps.JSHash,
 			},
 			Realm: realmName,
 			Lock: LockLabel{
@@ -167,11 +168,15 @@ func loadRaids(ctx context.Context, db *sql.DB, realmName, guildFilter string, w
 	}
 
 	exp := realm.Expansion(realmName)
-	modes := wow.RaidDifficulties(exp)
-	sort.Ints(modes)
-	difficulties := make([]DifficultyChoice, len(modes))
-	for i, m := range modes {
-		difficulties[i] = DifficultyChoice{Mode: m, Label: wow.Difficulty(exp, m)}
+	var modes []int
+	var difficulties []DifficultyChoice
+	if !realm.IsVanilla(exp) {
+		modes = wow.RaidDifficulties(exp)
+		sort.Ints(modes)
+		difficulties = make([]DifficultyChoice, len(modes))
+		for i, m := range modes {
+			difficulties[i] = DifficultyChoice{Mode: m, Label: wow.Difficulty(exp, m)}
+		}
 	}
 
 	// Group bosses by raid; sort raids by total kills desc; bosses by remote_id.
@@ -196,10 +201,16 @@ func loadRaids(ctx context.Context, db *sql.DB, realmName, guildFilter string, w
 			RemoteID:          k.RemoteID,
 			KillsByDifficulty: make(map[int]int, len(modes)),
 		}
-		for _, m := range modes {
-			c := agg.KillsByMode[m]
-			row.KillsByDifficulty[m] = c
-			row.Total += c
+		if len(modes) == 0 {
+			for _, c := range agg.KillsByMode {
+				row.Total += c
+			}
+		} else {
+			for _, m := range modes {
+				c := agg.KillsByMode[m]
+				row.KillsByDifficulty[m] = c
+				row.Total += c
+			}
 		}
 		ra.Bosses = append(ra.Bosses, row)
 		ra.TotalKills += row.Total

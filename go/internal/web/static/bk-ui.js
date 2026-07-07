@@ -30,6 +30,10 @@
 //   .bk-table-wrap table
 //     → first-column cells are capped in CSS. This script marks truncated
 //       first-column cells and shows their full text on hover/focus/tap.
+//
+//   [data-mobile-nav]
+//     → fixed mobile nav hides on downward scroll and reappears on upward
+//       scroll, page edges, keyboard navigation, and resize.
 
 (function () {
 
@@ -172,6 +176,63 @@
     });
   }
 
+  function initMobileNav() {
+    var nav = document.querySelector('[data-mobile-nav]');
+    if (!nav || nav._bkMobileNavBound) return;
+    nav._bkMobileNavBound = true;
+
+    var lastY = window.scrollY || window.pageYOffset || 0;
+    var ticking = false;
+    var mobileQuery = window.matchMedia('(max-width: 640px)');
+
+    function setHidden(hidden) {
+      nav.classList.toggle('bk-mobile-nav-hidden', hidden);
+    }
+
+    function isNearBottom(y) {
+      var doc = document.documentElement;
+      var height = Math.max(doc.scrollHeight, document.body.scrollHeight);
+      return y + window.innerHeight >= height - 24;
+    }
+
+    function update() {
+      ticking = false;
+      if (!mobileQuery.matches) {
+        setHidden(false);
+        lastY = window.scrollY || window.pageYOffset || 0;
+        return;
+      }
+
+      var y = Math.max(0, window.scrollY || window.pageYOffset || 0);
+      var delta = y - lastY;
+      if (y <= 24 || isNearBottom(y)) {
+        setHidden(false);
+      } else if (delta > 8 && y > 120) {
+        setHidden(true);
+      } else if (delta < -8) {
+        setHidden(false);
+      }
+      lastY = y;
+    }
+
+    function requestUpdate() {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(update);
+    }
+
+    window.addEventListener('scroll', requestUpdate, { passive: true });
+    window.addEventListener('resize', function () {
+      setHidden(false);
+      lastY = window.scrollY || window.pageYOffset || 0;
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Tab') setHidden(false);
+    });
+    nav.addEventListener('focusin', function () { setHidden(false); });
+    nav.addEventListener('touchstart', function () { setHidden(false); }, { passive: true });
+  }
+
   // Close tooltips when clicking outside any .bk-tip-row.
   document.addEventListener('click', function (e) {
     if (!e.target.closest('.bk-tip-row')) {
@@ -205,6 +266,7 @@
     });
     initTooltips(root);
     initStickyTableCells(root);
+    initMobileNav();
   }
 
   if (document.readyState === 'loading') {

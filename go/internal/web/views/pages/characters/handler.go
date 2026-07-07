@@ -45,10 +45,11 @@ func Handler(deps Deps) http.HandlerFunc {
 
 		vm := ViewModel{
 			Meta: layouts.PageMeta{
-				Title:   realmName + " / Characters",
-				Realm:   realmName,
-				CSSHash: deps.CSSHash,
-				JSHash:  deps.JSHash,
+				Title:      realmName + " / Characters",
+				Realm:      realmName,
+				ActivePath: "/characters",
+				CSSHash:    deps.CSSHash,
+				JSHash:     deps.JSHash,
 			},
 			Realm:   realmName,
 			Query:   q,

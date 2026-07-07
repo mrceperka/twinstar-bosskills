@@ -50,6 +50,8 @@ func Raids(realmName string) string { return "/" + realmName + "/raids" }
 
 func Ranks(realmName string) string { return "/" + realmName + "/ranks" }
 
+func Stats(realmName string) string { return "/" + realmName + "/stats" }
+
 func Characters(realmName string) string { return "/" + realmName + "/characters" }
 
 func Character(realmName, name string) string {

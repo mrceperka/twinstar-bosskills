@@ -4,6 +4,7 @@
 package wow
 
 import (
+	"sort"
 	"strconv"
 
 	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
@@ -147,6 +148,33 @@ func Class(c int) string {
 	return ""
 }
 
+func ClassesForExpansion(expansion int) []int {
+	classes := []int{
+		ClassWarrior,
+		ClassPaladin,
+		ClassHunter,
+		ClassRogue,
+		ClassPriest,
+		ClassDeathKnight,
+		ClassShaman,
+		ClassMage,
+		ClassWarlock,
+	}
+	if expansion == realm.ExpansionMoP {
+		return append(append([]int(nil), classes...), ClassMonk, ClassDruid)
+	}
+	if expansion == realm.ExpansionVanilla {
+		out := classes[:0]
+		for _, c := range classes {
+			if c != ClassDeathKnight {
+				out = append(out, c)
+			}
+		}
+		return append(append([]int(nil), out...), ClassDruid)
+	}
+	return append(append([]int(nil), classes...), ClassDruid)
+}
+
 var specNamesMoP = map[int]string{
 	62:  "Arcane",
 	63:  "Fire",
@@ -247,12 +275,6 @@ var specNamesVanilla = map[int]string{
 	301: "Destruction",
 }
 
-// Spec returns the MoP-era short label for a talent_spec ID. Prefer
-// SpecForExpansion when the page knows the active expansion.
-func Spec(id int) string {
-	return SpecForExpansion(realm.ExpansionMoP, id)
-}
-
 func SpecForRealm(realmName string, id int) string {
 	return SpecForExpansion(realm.Expansion(realmName), id)
 }
@@ -276,10 +298,35 @@ func SpecForExpansion(expansion, id int) string {
 	return strconv.Itoa(id)
 }
 
-// ClassFromSpec returns the MoP-era class ID for a known talent_spec ID.
-// Prefer ClassFromSpecForExpansion when the page knows the active expansion.
-func ClassFromSpec(spec int) int {
-	return ClassFromSpecForExpansion(realm.ExpansionMoP, spec)
+func SpecsForExpansion(expansion int) []int {
+	var names map[int]string
+	switch expansion {
+	case realm.ExpansionCata:
+		names = specNamesCata
+	case realm.ExpansionVanilla:
+		names = specNamesVanilla
+	default:
+		names = specNamesMoP
+	}
+
+	out := make([]int, 0, len(names))
+	for spec := range names {
+		out = append(out, spec)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		classI := ClassFromSpecForExpansion(expansion, out[i])
+		classJ := ClassFromSpecForExpansion(expansion, out[j])
+		if classI != classJ {
+			return classSortIndex(classI) < classSortIndex(classJ)
+		}
+		nameI := SpecForExpansion(expansion, out[i])
+		nameJ := SpecForExpansion(expansion, out[j])
+		if nameI != nameJ {
+			return nameI < nameJ
+		}
+		return out[i] < out[j]
+	})
+	return out
 }
 
 func ClassFromSpecForRealm(realmName string, spec int) int {
@@ -302,6 +349,15 @@ func classFromSpecMap(spec int, m map[int]int) int {
 		return cls
 	}
 	return 0
+}
+
+func classSortIndex(class int) int {
+	for i, c := range ClassesForExpansion(realm.ExpansionMoP) {
+		if c == class {
+			return i
+		}
+	}
+	return len(ClassesForExpansion(realm.ExpansionMoP))
 }
 
 var specClassMoP = map[int]int{

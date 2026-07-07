@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
 	"github.com/mrceperka/twinstar-bosskills/go/internal/web/router"
@@ -51,6 +52,11 @@ func Handler(deps Deps) http.HandlerFunc {
 		expansion := realm.Expansion(realmName)
 		q := r.URL.Query()
 		filter := parseFilter(q)
+		if expansion == realm.ExpansionVanilla {
+			filter.Specs = nil
+		} else {
+			filter.Classes = nil
+		}
 		// Force guild filter on private realms even if user hasn't selected
 		// one — the SvelteKit app applies the same constraint.
 		if guild := middleware.PrivateRealmGuildFilter(r); guild != "" {
@@ -76,23 +82,33 @@ func Handler(deps Deps) http.HandlerFunc {
 		markSelected(bossOpts, filter.Bosses, raidOpts, filter.Raids)
 
 		modeOpts := buildModeOptions(rows, filter.Difficulties, expansion)
+		var classOpts []Option
+		var specOpts []Option
+		if expansion == realm.ExpansionVanilla {
+			classOpts = buildClassOptions(filter.Classes, expansion)
+		} else {
+			specOpts = buildSpecOptions(realmName, filter.Specs, expansion)
+		}
 
 		vm := ViewModel{
 			Meta: layouts.PageMeta{
-				Title:   realmName + " / Boss kills",
-				Realm:   realmName,
-				CSSHash: deps.CSSHash,
-				JSHash:  deps.JSHash,
+				Title:      realmName + " / Boss kills",
+				Realm:      realmName,
+				ActivePath: "/boss-kills",
+				CSSHash:    deps.CSSHash,
+				JSHash:     deps.JSHash,
 			},
-			Realm:       realmName,
-			Filter:      filter,
-			BossOptions: bossOpts,
-			RaidOptions: raidOpts,
-			ModeOptions: modeOpts,
-			Rows:        rows,
-			Page:        page,
-			PageSize:    pageSize,
-			Total:       total,
+			Realm:        realmName,
+			Filter:       filter,
+			BossOptions:  bossOpts,
+			RaidOptions:  raidOpts,
+			ModeOptions:  modeOpts,
+			ClassOptions: classOpts,
+			SpecOptions:  specOpts,
+			Rows:         rows,
+			Page:         page,
+			PageSize:     pageSize,
+			Total:        total,
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -123,6 +139,20 @@ func parseFilter(q map[string][]string) FilterValues {
 		for _, part := range strings.Split(v, ",") {
 			if n, err := strconv.Atoi(strings.TrimSpace(part)); err == nil {
 				f.Difficulties = append(f.Difficulties, n)
+			}
+		}
+	}
+	for _, v := range q["class"] {
+		for _, part := range strings.Split(v, ",") {
+			if n, err := strconv.Atoi(strings.TrimSpace(part)); err == nil && n > 0 && n <= 255 {
+				f.Classes = append(f.Classes, n)
+			}
+		}
+	}
+	for _, v := range q["spec"] {
+		for _, part := range strings.Split(v, ",") {
+			if n, err := strconv.Atoi(strings.TrimSpace(part)); err == nil && n > 0 && n <= 65535 {
+				f.Specs = append(f.Specs, n)
 			}
 		}
 	}
@@ -171,6 +201,18 @@ func loadKills(ctx context.Context, db *sql.DB, realmName string, f FilterValues
 		whereParts = append(whereParts, "mode IN ("+ph+")")
 		for _, m := range f.Difficulties {
 			args = append(args, uint8(m))
+		}
+	}
+	if expansion == realm.ExpansionVanilla && len(f.Classes) > 0 {
+		whereParts = append(whereParts, hasAnyClause("players.class", len(f.Classes)))
+		for _, c := range f.Classes {
+			args = append(args, uint8(c))
+		}
+	}
+	if expansion != realm.ExpansionVanilla && len(f.Specs) > 0 {
+		whereParts = append(whereParts, hasAnyClause("players.talent_spec", len(f.Specs)))
+		for _, s := range f.Specs {
+			args = append(args, uint16(s))
 		}
 	}
 	if f.GuildOverride != "" {
@@ -232,6 +274,14 @@ func loadKills(ctx context.Context, db *sql.DB, realmName string, f FilterValues
 		return nil, 0, err
 	}
 	return out, int(total), nil
+}
+
+func hasAnyClause(column string, count int) string {
+	parts := make([]string, count)
+	for i := range parts {
+		parts[i] = "has(" + column + ", ?)"
+	}
+	return "(" + strings.Join(parts, " OR ") + ")"
 }
 
 func loadFilterOptions(ctx context.Context, db *sql.DB, realmName string) ([]Option, []Option, error) {
@@ -320,6 +370,64 @@ func buildModeOptions(rows []KillRow, selectedModes []int, expansion int) []Opti
 			Label:    wow.Difficulty(expansion, m),
 			Selected: sel[m],
 		})
+	}
+	return out
+}
+
+func buildClassOptions(selectedClasses []int, expansion int) []Option {
+	sel := intSet(selectedClasses)
+	classes := wow.ClassesForExpansion(expansion)
+	out := make([]Option, 0, len(classes))
+	for _, class := range classes {
+		label := wow.Class(class)
+		out = append(out, Option{
+			Value:    strconv.Itoa(class),
+			Label:    label,
+			Selected: sel[class],
+			IconURL:  links.ClassIcon(class),
+			IconAlt:  label,
+		})
+	}
+	return out
+}
+
+func buildSpecOptions(realmName string, selectedSpecs []int, expansion int) []Option {
+	sel := intSet(selectedSpecs)
+	specs := wow.SpecsForExpansion(expansion)
+	out := make([]Option, 0, len(specs))
+	for _, spec := range specs {
+		specLabel := wow.SpecForExpansion(expansion, spec)
+		class := wow.ClassFromSpecForExpansion(expansion, spec)
+		classLabel := wow.Class(class)
+		label := specLabel
+		iconURL := links.TalentIcon(realmName, spec)
+		iconAlt := specLabel
+		iconURL2 := ""
+		iconAlt2 := ""
+		if classLabel != "" {
+			label = classLabel + " / " + specLabel
+			iconURL = links.ClassIcon(class)
+			iconAlt = classLabel
+			iconURL2 = links.TalentIcon(realmName, spec)
+			iconAlt2 = specLabel
+		}
+		out = append(out, Option{
+			Value:    strconv.Itoa(spec),
+			Label:    label,
+			Selected: sel[spec],
+			IconURL:  iconURL,
+			IconAlt:  iconAlt,
+			IconURL2: iconURL2,
+			IconAlt2: iconAlt2,
+		})
+	}
+	return out
+}
+
+func intSet(values []int) map[int]bool {
+	out := make(map[int]bool, len(values))
+	for _, v := range values {
+		out[v] = true
 	}
 	return out
 }

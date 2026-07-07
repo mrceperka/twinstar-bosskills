@@ -30,17 +30,6 @@ var raidPositionsNorm = func() map[string]int {
 	return m
 }()
 
-// BossSortKey returns a global sort key for a boss by its remote_id (NPC ID).
-// Key encodes both the raid release position and the encounter order within
-// the raid: (raidPosition * 100 + bossPositionWithinRaid).
-// Returns (100_000 + remoteID) for unknown bosses so they sort stably at the end.
-func BossSortKey(remoteID uint32) int {
-	if pos, ok := bossPositions[remoteID]; ok {
-		return pos
-	}
-	return 100_000 + int(remoteID)
-}
-
 // BossPosition returns the encounter order within the boss's raid.
 // Returns 0 for unknown bosses.
 func BossPosition(remoteID uint32) int {
