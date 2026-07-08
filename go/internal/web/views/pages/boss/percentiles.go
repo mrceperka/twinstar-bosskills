@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/metric"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
+	"twinstar-bosskills/internal/metric"
+	"twinstar-bosskills/internal/wow"
 )
 
 // SpecCurve is a per-spec or per-class percentile curve: Values[i] = value at

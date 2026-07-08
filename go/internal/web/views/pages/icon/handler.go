@@ -16,9 +16,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/api"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/cache"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
+	"twinstar-bosskills/internal/api"
+	"twinstar-bosskills/internal/cache"
+	"twinstar-bosskills/internal/realm"
 )
 
 type Deps struct {

@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"strings"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
+	"twinstar-bosskills/internal/realm"
 )
 
 // GuildToken mirrors packages/sveltekit/src/lib/server/guild-token.service.ts.

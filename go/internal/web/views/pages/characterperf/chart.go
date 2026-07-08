@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
+	"twinstar-bosskills/internal/links"
 )
 
 // Sample is one kill-time point for a character's performance on a specific boss+mode.

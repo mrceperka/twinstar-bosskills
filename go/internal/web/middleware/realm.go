@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
+	"twinstar-bosskills/internal/realm"
 )
 
 // RequireRealm extracts the realm from URL.Path's first segment,

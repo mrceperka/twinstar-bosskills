@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/api"
+	"twinstar-bosskills/internal/api"
 )
 
 // ItemDisk caches /item/{id} responses on disk as JSON. One file per item.

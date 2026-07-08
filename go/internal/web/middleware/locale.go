@@ -3,7 +3,7 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/format"
+	"twinstar-bosskills/internal/format"
 )
 
 // AttachLocale parses Accept-Language once and stores the resulting Locale

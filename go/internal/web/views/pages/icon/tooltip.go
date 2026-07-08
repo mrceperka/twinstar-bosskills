@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/api"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
+	"twinstar-bosskills/internal/api"
+	"twinstar-bosskills/internal/realm"
 )
 
 // tooltipHandler serves GET /img/tooltip?id=N&realm=R.

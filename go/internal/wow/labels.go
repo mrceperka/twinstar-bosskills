@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
+	"twinstar-bosskills/internal/realm"
 )
 
 // Difficulty mirrors packages/core/src/wow.ts:difficultyToString. Returns a

@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"strings"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/metric"
+	"twinstar-bosskills/internal/metric"
 )
 
 // MedianPair holds p50 DPS and p50 HPS for a (boss, mode) combination.

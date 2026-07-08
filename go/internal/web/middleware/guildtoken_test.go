@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/domain"
+	"twinstar-bosskills/internal/domain"
 )
 
 func newReqWithRealm(method, path, realm string) *http.Request {

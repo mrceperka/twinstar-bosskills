@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/api"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/ch"
+	"twinstar-bosskills/internal/api"
+	"twinstar-bosskills/internal/ch"
 )
 
 func TestStatsInsertClickHouseSmoke(t *testing.T) {

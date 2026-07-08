@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/api"
+	"twinstar-bosskills/internal/api"
 )
 
 // row is the in-memory shape of one boss_kill INSERT, with Nested columns

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/web/router"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
+	"twinstar-bosskills/internal/web/middleware"
+	"twinstar-bosskills/internal/web/router"
+	"twinstar-bosskills/internal/web/views/layouts"
+	"twinstar-bosskills/internal/wow"
 )
 
 type Deps struct {

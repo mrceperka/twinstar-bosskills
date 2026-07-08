@@ -1,8 +1,4 @@
 // server is the HTTP entry point for the Go rewrite of twinstar-bosskills.
-//
-// Phase 1: home page rendered with templ + Tailwind + htmx. Subsequent phases
-// will add the remaining routes (raids, ranks, character, boss, boss-kills,
-// guild-token).
 package main
 
 import (
@@ -15,10 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/api"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/cache"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/ch"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/web/server"
+	"twinstar-bosskills/internal/api"
+	"twinstar-bosskills/internal/cache"
+	"twinstar-bosskills/internal/ch"
+	"twinstar-bosskills/internal/realm"
+	"twinstar-bosskills/internal/web/server"
 )
 
 var version = "dev"
@@ -77,7 +74,7 @@ func main() {
 	// data). Items previously cached without a tooltip stay valid — the
 	// rendered popover just doesn't appear for them until the cache entry
 	// gets re-created.
-	items.Expansion = 4
+	items.Expansion = realm.ExpansionMoP
 
 	handler := server.New(server.Config{
 		DB:          db,

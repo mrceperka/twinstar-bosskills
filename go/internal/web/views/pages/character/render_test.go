@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/api"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
+	"twinstar-bosskills/internal/api"
+	"twinstar-bosskills/internal/wow"
 )
 
 func TestKillsTableFragmentRenderSortHeaders(t *testing.T) {

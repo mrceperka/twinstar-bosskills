@@ -12,7 +12,7 @@ import (
 	"strconv"
 
 	"github.com/a-h/templ"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
+	"twinstar-bosskills/internal/links"
 )
 
 // Itoa is a small templ-friendly wrapper around strconv.Itoa so the templ

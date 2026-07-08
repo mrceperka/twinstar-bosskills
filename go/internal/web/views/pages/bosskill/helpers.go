@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/a-h/templ"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
+	"twinstar-bosskills/internal/links"
 )
 
 // wowheadHref points to the Wowhead Cata classic DB which carries MoP items.

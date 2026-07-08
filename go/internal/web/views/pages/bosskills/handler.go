@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/web/middleware"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/web/router"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/web/sqlutil"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
+	"twinstar-bosskills/internal/links"
+	"twinstar-bosskills/internal/realm"
+	"twinstar-bosskills/internal/web/middleware"
+	"twinstar-bosskills/internal/web/router"
+	"twinstar-bosskills/internal/web/sqlutil"
+	"twinstar-bosskills/internal/web/views/layouts"
+	"twinstar-bosskills/internal/wow"
 )
 
 type Deps struct {

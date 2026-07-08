@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/api"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
+	"twinstar-bosskills/internal/api"
+	"twinstar-bosskills/internal/realm"
+	"twinstar-bosskills/internal/wow"
 )
 
 const (

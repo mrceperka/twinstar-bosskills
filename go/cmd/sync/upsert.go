@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/api"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
+	"twinstar-bosskills/internal/api"
+	"twinstar-bosskills/internal/wow"
 )
 
 // upsertRaidsAndBosses writes raid + boss lookup rows for the given realm.

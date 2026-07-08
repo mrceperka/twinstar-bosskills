@@ -7,7 +7,7 @@ package router
 import (
 	"strings"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
+	"twinstar-bosskills/internal/realm"
 )
 
 // ForEachRealmPrefix calls register once for the canonical form and once for

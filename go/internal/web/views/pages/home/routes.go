@@ -3,7 +3,7 @@ package home
 import (
 	"net/http"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
+	"twinstar-bosskills/internal/realm"
 )
 
 func Mount(mux *http.ServeMux, deps Deps) {

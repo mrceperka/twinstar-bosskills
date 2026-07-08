@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/domain"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
+	"twinstar-bosskills/internal/domain"
+	"twinstar-bosskills/internal/realm"
 )
 
 const (

@@ -1,6 +1,6 @@
 package wow
 
-import "github.com/mrceperka/twinstar-bosskills/go/internal/realm"
+import "twinstar-bosskills/internal/realm"
 
 const (
 	DifficultyMoPNone       = 0

@@ -15,8 +15,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/ch"
-	"github.com/mrceperka/twinstar-bosskills/go/migrations"
+	"twinstar-bosskills/internal/ch"
+	"twinstar-bosskills/migrations"
 )
 
 func main() {

@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
+	"twinstar-bosskills/internal/links"
 )
 
 // filterValues encodes the currently applied filters + sort state so

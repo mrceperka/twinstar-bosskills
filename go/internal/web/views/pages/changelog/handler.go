@@ -3,9 +3,9 @@ package changelog
 import (
 	"net/http"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/layouts"
+	"twinstar-bosskills/internal/links"
+	"twinstar-bosskills/internal/realm"
+	"twinstar-bosskills/internal/web/views/layouts"
 )
 
 type Deps struct {

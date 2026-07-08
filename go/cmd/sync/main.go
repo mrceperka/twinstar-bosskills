@@ -30,10 +30,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/api"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/ch"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/domain"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/realm"
+	"twinstar-bosskills/internal/api"
+	"twinstar-bosskills/internal/ch"
+	"twinstar-bosskills/internal/domain"
+	"twinstar-bosskills/internal/realm"
 )
 
 func main() {

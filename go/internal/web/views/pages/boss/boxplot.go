@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/wow"
+	"twinstar-bosskills/internal/links"
+	"twinstar-bosskills/internal/wow"
 )
 
 // buildBoxPlotJSON renders a horizontal echarts boxplot config from per-spec

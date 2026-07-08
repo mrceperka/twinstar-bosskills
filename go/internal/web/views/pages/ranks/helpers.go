@@ -4,8 +4,8 @@ import (
 	"strconv"
 
 	"github.com/a-h/templ"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/links"
-	"github.com/mrceperka/twinstar-bosskills/go/internal/web/views/viewhelpers"
+	"twinstar-bosskills/internal/links"
+	"twinstar-bosskills/internal/web/views/viewhelpers"
 )
 
 func previousLockHref(vm ViewModel) templ.SafeURL {
