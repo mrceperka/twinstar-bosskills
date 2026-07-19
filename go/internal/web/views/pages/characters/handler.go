@@ -89,7 +89,7 @@ func search(ctx context.Context, db *sql.DB, realmName, guildFilter, q string) (
 		       argMaxMerge(name_state)   AS name,
 		       argMaxMerge(class_state)  AS class,
 		       argMaxMerge(level_state)  AS level,
-		       sumMerge(kill_count_state) AS kills,
+		       uniqExactMerge(kill_count_state) AS kills,
 		       maxMerge(last_seen_state)  AS last_seen
 		FROM character
 		WHERE realm = ?` + guildFilterSQL + `

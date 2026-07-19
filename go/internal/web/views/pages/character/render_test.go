@@ -125,6 +125,31 @@ func TestPageRenderSpecSummaryHighlightsMostPlayed(t *testing.T) {
 	}
 }
 
+func TestPageRendersStatsAndActivityCollapsedAndLazy(t *testing.T) {
+	vm := ViewModel{Realm: "Helios", Char: CharacterInfo{Name: "Foo"}}
+
+	var sb strings.Builder
+	if err := Page(vm).Render(context.Background(), &sb); err != nil {
+		t.Fatal(err)
+	}
+	html := sb.String()
+	for _, want := range []string{
+		`hx-get="/Helios/character/Foo/stats"`,
+		`hx-target="#character-stats"`,
+		`hx-get="/Helios/character/Foo/activity"`,
+		`hx-target="#activity-feed"`,
+		`hx-trigger="toggle once"`,
+		`aria-hidden="true"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("missing %q in HTML:\n%s", want, html)
+		}
+	}
+	if strings.Contains(html, `<details open`) || strings.Contains(html, `hx-trigger="load"`) {
+		t.Fatalf("stats and activity should start collapsed and load only when opened. HTML:\n%s", html)
+	}
+}
+
 func TestBuildSpecSummaryRowsSortsAndHighlightsMostPlayed(t *testing.T) {
 	got := buildSpecSummaryRows(5, map[int]uint64{105: 3, 103: 12, 104: 12})
 

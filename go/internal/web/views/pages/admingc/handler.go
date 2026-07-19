@@ -2,7 +2,7 @@
 //
 // In Go, GC is automatic; this endpoint exposes runtime.ReadMemStats so an
 // operator can spot RSS growth without shelling into the host. Calling GET
-// also triggers runtime.GC() — matches the old endpoint's behaviour.
+// also triggers runtime.GC() - matches the old endpoint's behaviour.
 //
 // Not auth-gated. If you ever expose this to the internet, wrap it with a
 // token check or hide it behind your reverse proxy.

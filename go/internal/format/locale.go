@@ -6,7 +6,7 @@ import (
 )
 
 // Locale holds the punctuation a number should use for the active user
-// locale. Only group / decimal characters are tracked — neither affects
+// locale. Only group / decimal characters are tracked - neither affects
 // units, currency, or word ordering.
 type Locale struct {
 	// Group is the thousand separator ("," in en-US, " " in fr/cs, "." in de).

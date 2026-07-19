@@ -106,7 +106,7 @@ func (c *ItemDisk) readDisk(id int) (*api.Item, bool) {
 	data, err := os.ReadFile(c.path(id))
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			// Surface IO errors silently — caller will refetch.
+			// Surface IO errors silently - caller will refetch.
 		}
 		return nil, false
 	}
@@ -114,6 +114,9 @@ func (c *ItemDisk) readDisk(id int) (*api.Item, bool) {
 	if err := json.Unmarshal(data, &it); err != nil {
 		return nil, false
 	}
+	// Disk entries may predate sanitization. Clean them again at the trust
+	// boundary before callers can pass the tooltip to templ.Raw.
+	it.Tooltip = api.SanitizeTooltipHTML(it.Tooltip)
 	return &it, true
 }
 

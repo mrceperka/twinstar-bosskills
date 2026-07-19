@@ -9,9 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"twinstar-bosskills/internal/collection"
 	"twinstar-bosskills/internal/metric"
 	"twinstar-bosskills/internal/realm"
 	"twinstar-bosskills/internal/web/middleware"
+	"twinstar-bosskills/internal/web/query"
+	"twinstar-bosskills/internal/web/repository"
 	"twinstar-bosskills/internal/web/router"
 	"twinstar-bosskills/internal/web/sqlutil"
 	"twinstar-bosskills/internal/web/views/layouts"
@@ -85,12 +88,12 @@ func Handler(deps Deps) http.HandlerFunc {
 			}
 		}
 
-		medians, err := loadMedianByBoss(ctx, deps.DB, realmName, keysU32(bossIDsSet), filter)
+		medians, err := loadMedianByBoss(ctx, deps.DB, realmName, collection.Keys(bossIDsSet), filter)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		bossPositions, err := loadBossPositions(ctx, deps.DB, realmName, keysU32(bossIDsSet))
+		bossPositions, err := loadBossPositions(ctx, deps.DB, realmName, collection.Keys(bossIDsSet))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -153,7 +156,7 @@ func Handler(deps Deps) http.HandlerFunc {
 
 		vm := ViewModel{
 			Meta: layouts.PageMeta{
-				Title:      name + " performance — " + realmName,
+				Title:      name + " performance - " + realmName,
 				Realm:      realmName,
 				CSSHash:    deps.CSSHash,
 				JSHash:     deps.JSHash,
@@ -209,49 +212,19 @@ func parseFilter(q map[string][]string) FilterValues {
 			}
 		}
 	}
-	f.IlvlMin = atoiOr(qValue(q, "ilvl_min"), 0)
-	f.IlvlMax = atoiOr(qValue(q, "ilvl_max"), 0)
+	f.IlvlMin = query.IntOr(query.First(q, "ilvl_min"), 0)
+	f.IlvlMax = query.IntOr(query.First(q, "ilvl_max"), 0)
 	return f
-}
-
-func qValue(q map[string][]string, key string) string {
-	if values := q[key]; len(values) > 0 {
-		return values[0]
-	}
-	return ""
-}
-
-func atoiOr(s string, fallback int) int {
-	if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
-		return n
-	}
-	return fallback
 }
 
 func lookupCharacter(ctx context.Context, db *sql.DB, realmName, name string) (
 	guid uint64, class int, killCount int, lastSeen time.Time, err error,
 ) {
-	const q = `
-		SELECT guid,
-		       argMaxMerge(class_state) AS class,
-		       sumMerge(kill_count_state) AS kills,
-		       maxMerge(last_seen_state) AS last_seen
-		FROM character
-		WHERE realm = ?
-		GROUP BY realm, guid
-		HAVING argMaxMerge(name_state) = ?
-		ORDER BY kills DESC
-		LIMIT 1
-	`
-	var cls uint8
-	var kc uint64
-	if err = db.QueryRowContext(ctx, q, realmName, name).Scan(&guid, &cls, &kc, &lastSeen); err != nil {
-		if err == sql.ErrNoRows {
-			return 0, 0, 0, time.Time{}, nil
-		}
-		return
+	character, err := repository.CharacterByName(ctx, db, realmName, name)
+	if err != nil {
+		return 0, 0, 0, time.Time{}, err
 	}
-	return guid, int(cls), int(kc), lastSeen, nil
+	return character.GUID, character.Class, character.KillCount, character.LastSeen, nil
 }
 
 func loadSamples(ctx context.Context, db *sql.DB, realmName string, guid uint64, f FilterValues) ([]Sample, error) {

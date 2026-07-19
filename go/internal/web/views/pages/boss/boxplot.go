@@ -14,7 +14,7 @@ import (
 // per spec, X axis = metric value, Y axis = spec label (categorical).
 //
 // Y-axis labels embed class + spec icons via ECharts rich-text syntax so that
-// each row shows "[class-icon][spec-icon] Spec Name" — matching the SvelteKit
+// each row shows "[class-icon][spec-icon] Spec Name" - matching the SvelteKit
 // BossPerformanceBoxChart component.
 //
 // Each box uses 5 points pulled from the curve:
@@ -84,7 +84,7 @@ func buildBoxPlotJSON(title string, curves []SpecCurve, realmName string) ([]byt
 			rich[classKey] = iconStyle(classIcon)
 		}
 
-		// "{classKey|}{specKey|} Spec Name" — ECharts parses rich-text tokens
+		// "{classKey|}{specKey|} Spec Name" - ECharts parses rich-text tokens
 		// after substituting {value} so the icons render inline with the label.
 		label := "{" + classKey + "|}{" + specKey + "|} " + specLabel
 		if classMode {

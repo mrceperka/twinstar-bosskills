@@ -191,7 +191,7 @@ func syncBoss(
 			continue
 		}
 		// Discard loot-bearing-mode kills with no loot. Upstream sometimes records two
-		// rows for the same fight on bosses like Kor'kron Dark Shaman — the
+		// rows for the same fight on bosses like Kor'kron Dark Shaman - the
 		// duplicate has no loot. Loot-bearing raid modes should always produce
 		// at least one loot row in a legitimate kill.
 		if wow.IsRaidDifficultyWithLoot(expansion, bk.Mode) && (detail == nil || len(detail.Loot) == 0) {
@@ -205,7 +205,7 @@ func syncBoss(
 			failed++
 			continue
 		}
-		// Use the boss name from the upstream raid roster — we already applied
+		// Use the boss name from the upstream raid roster - we already applied
 		// the sveltekit rename rules to it in GetRaids.
 		r.BossName = boss.Name
 		rows = append(rows, r)
@@ -223,7 +223,7 @@ func syncBoss(
 
 // insertBossKills batches one INSERT covering len(rows) tuples.
 //
-// The Nested columns are passed as parallel slices in the column list — this
+// The Nested columns are passed as parallel slices in the column list - this
 // is the wire format ClickHouse expects.
 func insertBossKills(ctx context.Context, db *sql.DB, rows []row) error {
 	if len(rows) == 0 {

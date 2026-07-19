@@ -15,6 +15,7 @@ import (
 	"twinstar-bosskills/internal/web/middleware"
 	"twinstar-bosskills/internal/web/query"
 	"twinstar-bosskills/internal/web/router"
+	"twinstar-bosskills/internal/web/sqlutil"
 	"twinstar-bosskills/internal/web/views/layouts"
 	"twinstar-bosskills/internal/wow"
 )
@@ -119,7 +120,7 @@ func lockSummaryLabels(win domain.RaidLockWindow) LockSummary {
 // and the bar-chart configs for day-of-week + hour-of-day.
 func loadLockSummary(ctx context.Context, db *sql.DB, realmName, guildFilter string, win domain.RaidLockWindow, expansion int) (LockSummary, error) {
 	s := lockSummaryLabels(win)
-	guildWhere, guildArgs := privateGuildWhere(guildFilter)
+	guildWhere, guildArgs := sqlutil.GuildFilter(guildFilter)
 
 	// Totals.
 	const totalsQ = `
@@ -377,7 +378,7 @@ func loadLatestRaidBosses(ctx context.Context, db *sql.DB, realmName string) (st
 }
 
 func loadCurrentLockPerformerModes(ctx context.Context, db *sql.DB, realmName, guildFilter, raidName string, win domain.RaidLockWindow, expansion int) ([]DifficultyChoice, error) {
-	guildWhere, guildArgs := privateGuildWhere(guildFilter)
+	guildWhere, guildArgs := sqlutil.GuildFilter(guildFilter)
 	args := append([]any{realmName, raidName, win.Start, win.End}, guildArgs...)
 	rows, err := db.QueryContext(ctx, `
 		SELECT DISTINCT mode
@@ -435,7 +436,7 @@ func loadCurrentLockPerformers(ctx context.Context, db *sql.DB, realmName, guild
 	}
 	selectedMode := selectPerformerMode(requestedMode, hasRequestedMode, difficulties, expansion)
 
-	guildWhere, guildArgs := privateGuildWhere(guildFilter)
+	guildWhere, guildArgs := sqlutil.GuildFilter(guildFilter)
 	args := append([]any{realmName, raidName, uint8(selectedMode), win.Start, win.End}, guildArgs...)
 	rows, err := db.QueryContext(ctx, `
 		SELECT
@@ -609,13 +610,6 @@ func loadCurrentLockPerformers(ctx context.Context, db *sql.DB, realmName, guild
 		out[active].Active = true
 	}
 	return raidName, difficulties, selectedMode, out, nil
-}
-
-func privateGuildWhere(guildFilter string) (string, []any) {
-	if guildFilter == "" {
-		return "", nil
-	}
-	return " AND guild = ?", []any{guildFilter}
 }
 
 func leftPad2(n int) string {

@@ -158,7 +158,7 @@ templ StatsContent(vm ViewModel) {
 				@components.Table() {
 					<thead>
 						<tr>
-							<th>Class</th>
+							<th class="bk-class-spec-column">Class</th>
 							<th class="text-right">Characters</th>
 							<th class="text-right">Kills</th>
 						</tr>
@@ -166,7 +166,7 @@ templ StatsContent(vm ViewModel) {
 					<tbody>
 				for _, r := range vm.ClassRows {
 					<tr>
-						<td>
+						<td class="bk-class-spec-column">
 							<span class="inline-flex items-center gap-1">
 								@components.ClassSpecIcons(vm.Realm, r.Class, 0)
 								<span>{ r.ClassLabel }</span>
@@ -216,7 +216,7 @@ templ StatsContent(vm ViewModel) {
 			@components.Table() {
 				<thead>
 					<tr>
-						<th>Spec</th>
+						<th class="bk-class-spec-column">Spec</th>
 						<th class="text-right">Characters</th>
 						<th class="text-right">Kills</th>
 					</tr>
@@ -224,11 +224,8 @@ templ StatsContent(vm ViewModel) {
 				<tbody>
 					for _, r := range vm.SpecRows {
 						<tr>
-							<td>
-								<span class="inline-flex items-center gap-1">
-									@components.ClassSpecIcons(vm.Realm, r.Class, r.Spec)
-									<span>{ r.SpecLabel }</span>
-								</span>
+							<td class="bk-class-spec-column">
+								@components.ClassSpecIcons(vm.Realm, r.Class, r.Spec)
 							</td>
 							<td class="text-right">{ format.IntCtx(ctx, r.Characters) }</td>
 							<td class="text-right">{ format.IntCtx(ctx, r.Kills) }</td>

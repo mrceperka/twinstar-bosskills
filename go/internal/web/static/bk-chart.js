@@ -1,4 +1,4 @@
-// bk-chart — a thin custom element wrapping echarts.
+// bk-chart - a thin custom element wrapping echarts.
 //
 // Usage:
 //   <bk-chart class="h-64 w-full">
@@ -10,7 +10,7 @@
 // also redraws when its config is swapped (htmx fragment replacement) by
 // listening to MutationObserver.
 //
-// Stays deliberately tiny — no Lit, no shadow DOM, no framework. The full
+// Stays deliberately tiny - no Lit, no shadow DOM, no framework. The full
 // expressiveness of echarts is reached by editing the JSON server-side.
 
 (function () {
@@ -70,7 +70,7 @@
       }
       hydrateFormatters(option);
       const onClick = pickClickHandler(option);
-      // Merge with sensible defaults — dark mode, no toolbox, sane fonts.
+      // Merge with sensible defaults - dark mode, no toolbox, sane fonts.
       const merged = Object.assign(
         {
           textStyle: { fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif" },

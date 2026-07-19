@@ -86,7 +86,7 @@ func AppliedVersions(ctx context.Context, db *sql.DB) (map[uint32]bool, error) {
 }
 
 // Apply runs every pending migration. Each statement inside a migration runs
-// as its own ExecContext — ClickHouse-go does not support multi-statement
+// as its own ExecContext - ClickHouse-go does not support multi-statement
 // requests over the native protocol.
 func Apply(ctx context.Context, db *sql.DB, migrations []Migration) ([]Migration, error) {
 	if err := EnsureMigrationTable(ctx, db); err != nil {

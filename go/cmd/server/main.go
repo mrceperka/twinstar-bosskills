@@ -71,7 +71,7 @@ func main() {
 		os.Exit(1)
 	}
 	// Tooltip API requires an expansion; default to MoP (matches the seed
-	// data). Items previously cached without a tooltip stay valid — the
+	// data). Items previously cached without a tooltip stay valid - the
 	// rendered popover just doesn't appear for them until the cache entry
 	// gets re-created.
 	items.Expansion = realm.ExpansionMoP

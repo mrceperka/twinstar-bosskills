@@ -233,7 +233,7 @@ templ percentileTable(vm ViewModel) {
 		@components.Table() {
 			<thead>
 				<tr>
-					<th>{ groupTitle(vm) }</th>
+					<th class="bk-class-spec-column">{ groupTitle(vm) }</th>
 					<th>DPS @ p{ viewhelpers.Itoa(vm.SelectedPctile) }</th>
 					<th>HPS @ p{ viewhelpers.Itoa(vm.SelectedPctile) }</th>
 				</tr>
@@ -241,12 +241,9 @@ templ percentileTable(vm ViewModel) {
 			<tbody>
 				for _, r := range vm.AtPercentile {
 					<tr>
-						<td>
+						<td class="bk-class-spec-column">
 							if vm.ClassMode {
-								<span class="inline-flex items-center gap-1">
-									<img src={ templ.SafeURL(links.ClassIcon(r.Class)) } alt={ wow.Class(r.Class) } width="18" height="18" class="rounded"/>
-									<span>{ r.SpecLabel }</span>
-								</span>
+								@components.ClassSpecIcons(vm.Realm, r.Class, 0)
 							} else {
 								@components.ClassSpecCell(vm.Realm, wow.ClassFromSpecForRealm(vm.Realm, r.Spec), r.Spec)
 							}
@@ -255,14 +252,14 @@ templ percentileTable(vm ViewModel) {
 							if r.DPS > 0 {
 								{ format.Int64Ctx(ctx, r.DPS) }
 							} else {
-								<span class="text-bk-muted">—</span>
+								<span class="text-bk-muted">-</span>
 							}
 						</td>
 						<td>
 							if r.HPS > 0 {
 								{ format.Int64Ctx(ctx, r.HPS) }
 							} else {
-								<span class="text-bk-muted">—</span>
+								<span class="text-bk-muted">-</span>
 							}
 						</td>
 					</tr>
@@ -342,7 +339,7 @@ templ topTable(vm ViewModel, rows []Ranking, metric string) {
 				<tr>
 					<th>#</th>
 					<th>Character</th>
-					<th>{ groupTitle(vm) }</th>
+					<th class="bk-class-spec-column">{ groupTitle(vm) }</th>
 					<th>{ metric } ↓</th>
 					if metric == "DPS" {
 						<th>Dmg Done</th>
@@ -364,18 +361,12 @@ templ topTable(vm ViewModel, rows []Ranking, metric string) {
 						<td>
 							<a href={ templ.SafeURL(links.Character(vm.Realm, r.Name)) }>{ r.Name }</a>
 						</td>
-						<td>
-							<span class="inline-flex items-center gap-1">
-								if r.Class > 0 {
-									<img src={ templ.SafeURL(links.ClassIcon(r.Class)) } alt="" width="18" height="18" class="rounded"/>
-								}
-								if !vm.ClassMode && r.Spec > 0 {
-									<img src={ templ.SafeURL(links.TalentIcon(vm.Realm, r.Spec)) } alt="" width="18" height="18" class="rounded"/>
-									<span>{ r.SpecLabel }</span>
-								} else {
-									<span>{ r.ClassLabel }</span>
-								}
-							</span>
+						<td class="bk-class-spec-column">
+							if vm.ClassMode {
+								@components.ClassSpecIcons(vm.Realm, r.Class, 0)
+							} else {
+								@components.ClassSpecIcons(vm.Realm, r.Class, r.Spec)
+							}
 						</td>
 						<td>
 							if metric == "DPS" {

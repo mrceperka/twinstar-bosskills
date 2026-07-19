@@ -1,4 +1,4 @@
-// bk-ui.js — small DOM wiring for declarative UI patterns.
+// bk-ui.js - small DOM wiring for declarative UI patterns.
 //
 // CSP blocks inline `onchange="..."` handlers, so we use `data-*` attributes
 // here instead. Add the relevant attribute to an element in templ; this

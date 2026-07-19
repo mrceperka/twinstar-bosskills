@@ -9,23 +9,23 @@ package api
 var bossesToDrop = map[int]bool{
 	// MoP
 	71858: true, // Wavebinder Kardris (duplicate; Kor'kron Dark Shaman is kept)
-	71475: true, // Rook Stonetoe   — kept Sun Tenderheart from Fallen Protectors group
+	71475: true, // Rook Stonetoe   - kept Sun Tenderheart from Fallen Protectors group
 	71479: true, // He Softfoot
-	68904: true, // Lu'lin           — kept Suen from Twin Consorts
-	69131: true, // Sul the Sandcrawler — Council of Elders group
+	68904: true, // Lu'lin           - kept Suen from Twin Consorts
+	69131: true, // Sul the Sandcrawler - Council of Elders group
 	69134: true, // Frost King Malakk
 	69078: true, // Kazra'jin
-	60586: true, // Elder Asani      — Protectors of the Endless
+	60586: true, // Elder Asani      - Protectors of the Endless
 
 	// Cata
-	57773: true, // DS — Kohcrom (duplicate of Yor'sahj)
-	54199: true, // FL — Rhyolith duplicate
-	45993: true, // BoT — Theralion
-	42166: true, // BWD — Arcanotron
-	42180: true, // BWD — Toxitron
-	41270: true, // BWD — Onyxia
-	45870: true, // TotFW — Anshal
-	45872: true, // TotFW — Rohash
+	57773: true, // DS - Kohcrom (duplicate of Yor'sahj)
+	54199: true, // FL - Rhyolith duplicate
+	45993: true, // BoT - Theralion
+	42166: true, // BWD - Arcanotron
+	42180: true, // BWD - Toxitron
+	41270: true, // BWD - Onyxia
+	45870: true, // TotFW - Anshal
+	45872: true, // TotFW - Rohash
 }
 
 // Display-name overrides for bosses kept in the roster.

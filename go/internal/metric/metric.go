@@ -2,7 +2,7 @@
 // aggregation code and in the ClickHouse queries.
 //
 // The rate is always `value * 1000 / lengthMs` because `length` in the schema
-// is stored in milliseconds. HPS treats absorbs and heals interchangeably —
+// is stored in milliseconds. HPS treats absorbs and heals interchangeably -
 // they are added before dividing.
 package metric
 
@@ -29,7 +29,7 @@ func SQLUInt64(fieldExpr string) string {
 }
 
 // SQLFloat64 builds a rate expression that stays in float64. Use when the
-// value feeds into `quantile*` / `quantilesExact` — integer truncation would
+// value feeds into `quantile*` / `quantilesExact` - integer truncation would
 // bias the sample.
 //
 //	metric.SQLFloat64(metric.DmgDoneArrayJoin)

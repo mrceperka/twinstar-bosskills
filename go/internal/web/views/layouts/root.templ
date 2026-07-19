@@ -5,6 +5,7 @@ import (
 
 	"twinstar-bosskills/internal/realm"
 	"twinstar-bosskills/internal/web/static"
+	"twinstar-bosskills/internal/web/views/components"
 )
 
 // Root is the base HTML layout. Pages compose it with `@layouts.Root(...) { ... }`.
@@ -85,15 +86,15 @@ templ primaryNavList(meta PageMeta, withIcons bool) {
 templ primaryNavIcon(name string, enabled bool) {
 	if enabled {
 		if name == "latest" {
-			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8v5l3 2"></path><path d="M3.1 10a9 9 0 1 1 1.6 6.6"></path><path d="M3 16v-6h6"></path></svg>
+			@components.LatestIcon("")
 		} else if name == "raids" {
-			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 4v5c0 4.5-2.9 7.6-7 9-4.1-1.4-7-4.5-7-9V7l7-4z"></path><path d="M9 12h6"></path><path d="M12 9v6"></path></svg>
+			@components.RaidsIcon("")
 		} else if name == "ranks" {
-			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v5a4 4 0 0 1-8 0V4z"></path><path d="M6 6H4v2a4 4 0 0 0 4 4"></path><path d="M18 6h2v2a4 4 0 0 1-4 4"></path><path d="M12 13v4"></path><path d="M9 21h6"></path><path d="M10 17h4"></path></svg>
+			@components.RankingsIcon("")
 		} else if name == "stats" {
-			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5"></path><path d="M4 19h16"></path><path d="M8 16V9"></path><path d="M12 16V7"></path><path d="M16 16v-4"></path></svg>
+			@components.StatsIcon("")
 		} else if name == "characters" {
-			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 20v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="10" cy="7" r="4"></circle><path d="M20 20v-2a3 3 0 0 0-2-2.8"></path><path d="M16 3.2a4 4 0 0 1 0 7.6"></path></svg>
+			@components.CharactersIcon("")
 		}
 	}
 }
@@ -129,7 +130,7 @@ func pageTitle(m PageMeta) string {
 	if m.Title == "" {
 		return "Twinstar Bosskills"
 	}
-	return m.Title + " — Twinstar Bosskills"
+	return m.Title + " - Twinstar Bosskills"
 }
 
 func faviconURL() templ.SafeURL {

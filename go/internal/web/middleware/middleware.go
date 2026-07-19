@@ -86,7 +86,7 @@ func Logger(log *slog.Logger) func(http.Handler) http.Handler {
 }
 
 // SecurityHeaders sets a small, sane default header set. CSP is intentionally
-// strict — htmx and inline-script-free templ make this easy.
+// strict - htmx and inline-script-free templ make this easy.
 func SecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()

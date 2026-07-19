@@ -14,7 +14,7 @@ type ViewModel struct {
 // is safe by construction.
 type Entry struct {
 	Date       string
-	TitleHTML  string   // rendered raw — may include <a>
+	TitleHTML  string   // rendered raw - may include <a>
 	Paragraphs []string // each becomes a <p>, rendered raw
 	Hint       *Hint    // optional explanation callout
 }

@@ -37,7 +37,7 @@ var curveLevelsCSV = func() string {
 
 // loadSpecCurves fetches a 99-point quantile curve per spec for DPS and HPS
 // in a single round trip. Reads from boss_kill directly (no MV) so values
-// are always exact — this is feasible because the per-realm/boss/mode cell
+// are always exact - this is feasible because the per-realm/boss/mode cell
 // rarely exceeds a few thousand rows. See migration 003 for the rationale.
 func loadSpecCurves(ctx context.Context, db *sql.DB, realmName string, id uint32, mode, specFilter, classFilter, expansion int, start, end time.Time) (dps, hps []SpecCurve, err error) {
 	groupExpr := "players.talent_spec"

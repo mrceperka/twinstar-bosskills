@@ -31,6 +31,6 @@ func PrivateRealmGuildFilter(r *http.Request) string {
 		return auth.Guild
 	}
 	// Caller should already have GatePrivateRealm'd; defensive empty value
-	// here would still leak — return a sentinel that no real guild can match.
+	// here would still leak - return a sentinel that no real guild can match.
 	return "\x00impossible-guild\x00"
 }

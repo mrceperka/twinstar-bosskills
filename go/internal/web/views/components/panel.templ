@@ -99,3 +99,21 @@ templ CheckboxFilter(name string, options []CheckboxOption, active bool, minHeig
 		}
 	</div>
 }
+
+// IconCheckboxFilter is the compact class/spec filter variant. Option names
+// remain available on hover, keyboard focus, and tap without visible labels.
+templ IconCheckboxFilter(name string, options []CheckboxOption, active bool, minHeightClass string) {
+	<div class={ viewhelpers.CheckboxFilterClass(active), minHeightClass }>
+		for _, o := range options {
+			<label class="bk-checkbox-option bk-icon-filter-option" data-label={ o.Label } title={ o.Label }>
+				<input type="checkbox" name={ name } value={ o.Value } checked?={ o.Selected } aria-label={ o.Label }/>
+				if o.IconURL != "" {
+					<img src={ templ.SafeURL(o.IconURL) } alt="" width="20" height="20" class="rounded"/>
+				}
+				if o.IconURL2 != "" {
+					<img src={ templ.SafeURL(o.IconURL2) } alt="" width="20" height="20" class="rounded"/>
+				}
+			</label>
+		}
+	</div>
+}

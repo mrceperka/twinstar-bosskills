@@ -99,7 +99,7 @@ func Handler(deps Deps) http.HandlerFunc {
 		vm := ViewModel{
 			Meta: layouts.PageMeta{
 				Title: "Changelog",
-				// The changelog isn't realm-scoped, but the top nav is — surface
+				// The changelog isn't realm-scoped, but the top nav is - surface
 				// the last visited realm so nav links keep working. Fall back
 				// to Helios, matching the home-page auto-redirect convention.
 				Realm:   navRealm(r),

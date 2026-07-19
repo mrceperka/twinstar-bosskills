@@ -184,7 +184,7 @@ func (c *Client) GetBossKillDetail(ctx context.Context, realmName, id string) (*
 	if err := c.getJSON(ctx, "/bosskills/"+url.PathEscape(id), q.Encode(), &out); err != nil {
 		return nil, err
 	}
-	// Treat empty ID as "no result" — upstream sometimes returns {}.
+	// Treat empty ID as "no result" - upstream sometimes returns {}.
 	if out.ID == "" {
 		return nil, nil
 	}

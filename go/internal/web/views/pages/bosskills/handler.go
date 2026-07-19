@@ -12,6 +12,7 @@ import (
 	"twinstar-bosskills/internal/links"
 	"twinstar-bosskills/internal/realm"
 	"twinstar-bosskills/internal/web/middleware"
+	"twinstar-bosskills/internal/web/query"
 	"twinstar-bosskills/internal/web/router"
 	"twinstar-bosskills/internal/web/sqlutil"
 	"twinstar-bosskills/internal/web/views/layouts"
@@ -58,11 +59,11 @@ func Handler(deps Deps) http.HandlerFunc {
 			filter.Classes = nil
 		}
 		// Force guild filter on private realms even if user hasn't selected
-		// one — the SvelteKit app applies the same constraint.
+		// one - the SvelteKit app applies the same constraint.
 		if guild := middleware.PrivateRealmGuildFilter(r); guild != "" {
 			filter.GuildOverride = guild
 		}
-		page := atoiOr(q.Get("page"), 0)
+		page := query.IntOr(q.Get("page"), 0)
 		if page < 0 {
 			page = 0
 		}
@@ -167,13 +168,6 @@ func parseFilter(q map[string][]string) FilterValues {
 		}
 	}
 	return f
-}
-
-func atoiOr(s string, fallback int) int {
-	if n, err := strconv.Atoi(s); err == nil {
-		return n
-	}
-	return fallback
 }
 
 // loadKills runs two queries: one for the page rows, one for total count.
@@ -286,7 +280,7 @@ func hasAnyClause(column string, count int) string {
 
 func loadFilterOptions(ctx context.Context, db *sql.DB, realmName string) ([]Option, []Option, error) {
 	// Bosses: take distinct (boss_remote_id, boss_name) from the events table,
-	// which always reflects the freshest names — even if a future rename hasn't
+	// which always reflects the freshest names - even if a future rename hasn't
 	// flushed into the `boss` lookup.
 	const bossQ = `
 		SELECT boss_remote_id, any(boss_name) AS name

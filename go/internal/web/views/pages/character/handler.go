@@ -11,9 +11,12 @@ import (
 	"time"
 
 	"twinstar-bosskills/internal/api"
+	"twinstar-bosskills/internal/collection"
 	"twinstar-bosskills/internal/metric"
 	"twinstar-bosskills/internal/realm"
 	"twinstar-bosskills/internal/web/middleware"
+	"twinstar-bosskills/internal/web/query"
+	"twinstar-bosskills/internal/web/repository"
 	"twinstar-bosskills/internal/web/router"
 	"twinstar-bosskills/internal/web/sqlutil"
 	"twinstar-bosskills/internal/web/views/layouts"
@@ -72,7 +75,7 @@ func Handler(deps Deps) http.HandlerFunc {
 			return
 		}
 
-		killsPage := atoiOr(r.URL.Query().Get("page"), 0)
+		killsPage := query.IntOr(r.URL.Query().Get("page"), 0)
 		if killsPage < 0 {
 			killsPage = 0
 		}
@@ -99,7 +102,7 @@ func Handler(deps Deps) http.HandlerFunc {
 
 		vm := ViewModel{
 			Meta: layouts.PageMeta{
-				Title:   name + " — " + realmName,
+				Title:   name + " - " + realmName,
 				Realm:   realmName,
 				CSSHash: deps.CSSHash,
 				JSHash:  deps.JSHash,
@@ -154,7 +157,7 @@ func RankingsHandler(deps Deps) http.HandlerFunc {
 		defer cancel()
 
 		expansion := realm.Expansion(realmName)
-		currentSpec := atoiOr(r.URL.Query().Get("spec"), 0)
+		currentSpec := query.IntOr(r.URL.Query().Get("spec"), 0)
 
 		guid, _, _, _, _, err := lookupCharacter(ctx, deps.DB, realmName, name)
 		if err != nil {
@@ -182,7 +185,7 @@ func RankingsHandler(deps Deps) http.HandlerFunc {
 		for _, rr := range rankRows {
 			bossIDsSet[rr.BossID] = true
 		}
-		bossMeta, err := loadBossMeta(ctx, deps.DB, realmName, mapKeysU32(bossIDsSet))
+		bossMeta, err := loadBossMeta(ctx, deps.DB, realmName, collection.Keys(bossIDsSet))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -229,7 +232,7 @@ func ActivityHandler(deps Deps) http.HandlerFunc {
 			http.NotFound(w, r)
 			return
 		}
-		page := atoiOr(r.URL.Query().Get("page"), 0)
+		page := query.IntOr(r.URL.Query().Get("page"), 0)
 		if page < 0 {
 			page = 0
 		}
@@ -584,39 +587,14 @@ func buildSpecButtons(rows []rankRow, currentSpec int, realmName, charName strin
 	return buttons
 }
 
-func atoiOr(s string, fallback int) int {
-	if n, err := strconv.Atoi(s); err == nil {
-		return n
-	}
-	return fallback
-}
-
 func lookupCharacter(ctx context.Context, db *sql.DB, realmName, name string) (
 	guid uint64, class int, firstSeen, lastSeen time.Time, killCount int, err error,
 ) {
-	const q = `
-		SELECT guid,
-		       argMaxMerge(class_state) AS class,
-		       minMerge(first_seen_state) AS first_seen,
-		       maxMerge(last_seen_state)  AS last_seen,
-		       sumMerge(kill_count_state) AS kills
-		FROM character
-		WHERE realm = ?
-		GROUP BY realm, guid
-		HAVING argMaxMerge(name_state) = ?
-		ORDER BY kills DESC
-		LIMIT 1
-	`
-	row := db.QueryRowContext(ctx, q, realmName, name)
-	var cls uint8
-	var kc uint64
-	if err = row.Scan(&guid, &cls, &firstSeen, &lastSeen, &kc); err != nil {
-		if err == sql.ErrNoRows {
-			return 0, 0, time.Time{}, time.Time{}, 0, nil
-		}
+	character, err := repository.CharacterByName(ctx, db, realmName, name)
+	if err != nil {
 		return 0, 0, time.Time{}, time.Time{}, 0, err
 	}
-	return guid, int(cls), firstSeen, lastSeen, int(kc), nil
+	return character.GUID, character.Class, character.FirstSeen, character.LastSeen, character.KillCount, nil
 }
 
 func loadSpecSummary(ctx context.Context, db *sql.DB, realmName string, guid uint64, expansion int) ([]SpecSummary, error) {
@@ -895,22 +873,15 @@ func parseKillsFilter(q map[string][]string) KillsFilter {
 			}
 		}
 	}
-	if sortRaw := getFirst(q, "sort"); sortRaw != "" {
+	if sortRaw := query.First(q, "sort"); sortRaw != "" {
 		if _, ok := validSortCols[sortRaw]; ok {
 			f.SortBy = sortRaw
 		}
 	}
-	if dirRaw := strings.ToLower(getFirst(q, "dir")); dirRaw == "asc" || dirRaw == "desc" {
+	if dirRaw := strings.ToLower(query.First(q, "dir")); dirRaw == "asc" || dirRaw == "desc" {
 		f.SortDir = dirRaw
 	}
 	return f
-}
-
-func getFirst(q map[string][]string, name string) string {
-	if v, ok := q[name]; ok && len(v) > 0 {
-		return v[0]
-	}
-	return ""
 }
 
 // loadKillsFilterOptions returns the filter dropdown options limited to
@@ -1061,14 +1032,6 @@ func loadBossMeta(ctx context.Context, db *sql.DB, realmName string, ids []uint3
 		out[id] = bossMeta{Name: name, Position: position}
 	}
 	return out, rows.Err()
-}
-
-func mapKeysU32(m map[uint32]bool) []uint32 {
-	out := make([]uint32, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
 }
 
 func Mount(mux *http.ServeMux, deps Deps) {

@@ -129,7 +129,7 @@ func Handler(deps Deps) http.HandlerFunc {
 
 		vm := ViewModel{
 			Meta: layouts.PageMeta{
-				Title:      bossInfo.Name + " — " + realmName,
+				Title:      bossInfo.Name + " - " + realmName,
 				Realm:      realmName,
 				CSSHash:    deps.CSSHash,
 				JSHash:     deps.JSHash,
@@ -381,7 +381,7 @@ func loadSiblings(ctx context.Context, db *sql.DB, realmName, raidName string, c
 // columns the SvelteKit page shows: dmg/heal totals, fight length, kill
 // time, ilvl, and the per-kill remote_id for the Detail link.
 //
-// `specFilter` and `classFilter` are 0 for "no filter" — non-zero values
+// `specFilter` and `classFilter` are 0 for "no filter" - non-zero values
 // are applied as additional predicates on players.talent_spec / players.class.
 // Vanilla ranks by class, later expansions rank by spec.
 func loadRankings(ctx context.Context, db *sql.DB, realmName string, id uint32, mode, specFilter, classFilter, expansion int, start, end time.Time) (dps, hps []Ranking, err error) {

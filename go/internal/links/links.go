@@ -120,7 +120,7 @@ func TwinstarArmory(realmName, characterName string) string {
 		url.QueryEscape(characterName) + "&realm=" + url.QueryEscape(realmName)
 }
 
-// TwinheadItem links to the Twinstar Twinhead item page — same DB the
+// TwinheadItem links to the Twinstar Twinhead item page - same DB the
 // tooltip API serves from, so it stays in sync with the in-game item data.
 // Wowhead is reserved as a fallback for non-Twinstar lookups.
 func TwinheadItem(realmName string, id uint32) string {

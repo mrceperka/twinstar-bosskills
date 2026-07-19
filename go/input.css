@@ -10,7 +10,7 @@
  * looks like the existing app (https://bosskills.twinstar-wow.com).
  * --------------------------------------------------------------------*/
 @theme {
-  /* Fonts — Tailwind v4's preflight applies `font-family: var(--default-font-family)`
+  /* Fonts - Tailwind v4's preflight applies `font-family: var(--default-font-family)`
    * to <html> and the default resolves via --font-sans. Overriding --font-sans
    * here unifies the whole app on Helvetica/Arial to match the SvelteKit app.
    * Tables get monospace via .bk-table-wrap tbody below (kept as an override). */
@@ -19,7 +19,7 @@
   --default-font-family: 'Helvetica', 'Arial', sans-serif;
   --default-mono-font-family: monospace;
 
-  --color-bk-bg: #1b1b1b;          /* page background — rgb(27,27,27) */
+  --color-bk-bg: #1b1b1b;          /* page background - rgb(27,27,27) */
   --color-bk-row: #000000bf;        /* zebra-stripe row (75% black) */
   --color-bk-fg: #f5f5f5;           /* whitesmoke */
   --color-bk-muted: #c5c5c5;
@@ -121,12 +121,39 @@ a:hover {
 .bk-checkbox-option img {
   flex: 0 0 auto;
 }
+.bk-icon-filter-option {
+  position: relative;
+  width: fit-content;
+}
+.bk-icon-filter-option::after {
+  content: attr(data-label);
+  position: absolute;
+  display: none;
+  z-index: 60;
+  left: calc(100% + 0.4rem);
+  top: 50%;
+  transform: translateY(-50%);
+  width: max-content;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--color-bk-border);
+  border-radius: 0.25rem;
+  background: var(--color-bk-bg);
+  color: var(--color-bk-fg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  pointer-events: none;
+}
+.bk-icon-filter-option:hover::after,
+.bk-icon-filter-option:focus-within::after {
+  display: block;
+}
 .bk-checkbox-option span {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-/* Scrollbar — gold track, dark thumb */
+/* Scrollbar - gold track, dark thumb */
 * {
   scrollbar-color: rgba(0, 0, 0, 0.75) var(--color-bk-accent);
 }
@@ -140,7 +167,7 @@ a:hover {
  *
  * Wrap each <table> in a `.bk-table-wrap` for sticky header / first
  * column + horizontal scroll. Inside, tables are flat (no rounded
- * corners), gold-headed, with zebra-striped rows — same as the SvelteKit
+ * corners), gold-headed, with zebra-striped rows - same as the SvelteKit
  * app's :global(table) rules.
  * --------------------------------------------------------------------*/
 .bk-table-wrap {
@@ -172,6 +199,10 @@ a:hover {
  * --default-font-family in @theme above. */
 .bk-table-wrap table {
   font-family: monospace;
+}
+.bk-table-wrap .bk-class-spec-column {
+  width: 64px;
+  white-space: nowrap;
 }
 .bk-table-wrap tbody tr:nth-child(even) {
   background: rgba(0, 0, 0, 0.5);
@@ -217,8 +248,54 @@ a:hover {
 .bk-table-wrap thead th:first-child > span {
   display: inline-block;
 }
+/* Icon-label cells intentionally use inline-flex for alignment and spacing.
+ * Keep that layout instead of letting the sticky-column fallback above
+ * flatten them to inline-block. */
+.bk-table-wrap tbody td:first-child > span.inline-flex,
+.bk-table-wrap thead th:first-child > span.inline-flex {
+  display: inline-flex;
+}
 .bk-table-wrap .bk-table-truncated {
   cursor: help;
+}
+
+/* Class/spec names stay available on hover and keyboard/touch focus without
+ * repeating text beside icons throughout compact tables. */
+.bk-class-spec-icons {
+  position: relative;
+  overflow: visible !important;
+  cursor: help;
+  outline: none;
+}
+.bk-table-wrap tbody td:first-child:has(> .bk-class-spec-icons) {
+  overflow: visible;
+}
+.bk-class-spec-icons::after {
+  content: attr(data-label);
+  position: absolute;
+  display: none;
+  z-index: 60;
+  left: 50%;
+  bottom: calc(100% + 0.35rem);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(18rem, calc(100vw - 1rem));
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--color-bk-border);
+  border-radius: 0.25rem;
+  background: var(--color-bk-bg);
+  color: var(--color-bk-fg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  font-family: var(--default-font-family);
+  font-size: 0.75rem;
+  font-weight: normal;
+  line-height: 1rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.bk-class-spec-icons:hover::after,
+.bk-class-spec-icons:focus::after {
+  display: block;
 }
 .bk-table-fulltext-tip {
   position: fixed;

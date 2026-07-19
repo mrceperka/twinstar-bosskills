@@ -1,5 +1,5 @@
 # ============================================================================
-# twinstar-bosskills — Go + ClickHouse build/dev pipeline
+# twinstar-bosskills - Go + ClickHouse build/dev pipeline
 #
 # Values come from .env if present; override on the command line like
 #   make sync ARGS="--realm Helios --from-date 2026-06-20"
@@ -7,7 +7,7 @@
 # ============================================================================
 
 # ---- .env autoload ----------------------------------------------------------
-# GNU make doesn't read .env on its own — pull in .env.example first (the
+# GNU make doesn't read .env on its own - pull in .env.example first (the
 # committed defaults) and then .env to override. This way `make sync` works
 # out of the box on a fresh checkout, and users only need to put secrets in
 # .env. Both files are optional.
@@ -46,7 +46,7 @@ BUILD_FLAGS := -trimpath -ldflags="$(LDFLAGS)"
 # Tailwind binary download (Linux x64; override for other platforms).
 TAILWIND_URL ?= https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-x64
 
-# CLI arg passthrough — `make sync ARGS="--realm Helios"`
+# CLI arg passthrough - `make sync ARGS="--realm Helios"`
 ARGS ?=
 
 .DEFAULT_GOAL := help
@@ -58,7 +58,7 @@ ARGS ?=
 
 # ---- help (default) ---------------------------------------------------------
 help:
-	@echo "twinstar-bosskills — common targets"
+	@echo "twinstar-bosskills - common targets"
 	@echo
 	@echo "  make setup        install templ/wgo, fetch tailwindcss binary"
 	@echo "  make dev          run templ + tailwind watchers + wgo-reloaded server"

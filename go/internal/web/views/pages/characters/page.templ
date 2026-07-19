@@ -67,7 +67,7 @@ templ Matches(vm ViewModel) {
 			<thead>
 				<tr>
 					<th>Name</th>
-					<th>Class</th>
+					<th class="bk-class-spec-column">Class</th>
 					<th class="text-right">Kills</th>
 					<th class="text-right">Last seen</th>
 				</tr>
@@ -78,11 +78,8 @@ templ Matches(vm ViewModel) {
 						<td>
 							<a href={ viewhelpers.CharacterHref(vm.Realm, m.Name) } class="hover:text-bk-accent">{ m.Name }</a>
 						</td>
-						<td class="text-bk-muted">
-							<span class="inline-flex items-center gap-1">
-								@components.ClassSpecIcons(vm.Realm, m.Class, 0)
-								<span>{ m.ClassLabel }</span>
-							</span>
+						<td class="bk-class-spec-column text-bk-muted">
+							@components.ClassSpecIcons(vm.Realm, m.Class, 0)
 						</td>
 						<td class="text-right">{ format.IntCtx(ctx, m.KillCount) }</td>
 						<td class="text-right text-bk-muted text-xs">{ m.LastSeen }</td>

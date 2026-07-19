@@ -85,8 +85,8 @@ templ TableFragment(vm ViewModel) {
 						<th>Raid</th>
 						<th>Difficulty</th>
 						<th>Guild</th>
-						<th>@bkSortHeader(vm, "length", "Fight length")</th>
-						<th>@bkSortHeader(vm, "kill_time", "Killed")</th>
+							<th>@components.SortHeader(sortHeaderProps(vm, "length", "Fight length"))</th>
+							<th>@components.SortHeader(sortHeaderProps(vm, "kill_time", "Killed"))</th>
 						<th>Fight details</th>
 					</tr>
 				</thead>
@@ -110,38 +110,13 @@ templ TableFragment(vm ViewModel) {
 					}
 				</tbody>
 			}
-			@pagination(vm)
+				@components.Pagination(paginationProps(vm))
 		}
 	}
 }
 
-templ bkSortHeader(vm ViewModel, col string, label string) {
-	<a
-		hx-get={ sortHref(vm, col) }
-		hx-target="#kills-table"
-		hx-push-url="true"
-		href={ templ.SafeURL(sortHref(vm, col)) }
-		class="-m-2 flex items-center gap-1 p-2 cursor-pointer hover:text-bk-accent"
-	>
-		{ label }
-		if vm.Filter.SortBy == col {
-			if vm.Filter.SortDir == "asc" {
-				<span class="text-bk-accent">↑</span>
-			} else {
-				<span class="text-bk-accent">↓</span>
-			}
-		}
-	</a>
-}
-
 templ filterForm(vm ViewModel) {
-	<form
-		hx-get={ links.BossKills(vm.Realm) }
-		hx-target="#kills-table"
-		hx-swap="innerHTML"
-		hx-push-url="true"
-		class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
-	>
+	@components.FilterForm(components.FilterFormProps{Action: links.BossKills(vm.Realm), HTMXTarget: "#kills-table", ResetURL: links.BossKills(vm.Realm)}) {
 		<input type="hidden" name="sort" value={ vm.Filter.SortBy }/>
 		<input type="hidden" name="dir" value={ vm.Filter.SortDir }/>
 		<label class="flex flex-col gap-1 text-sm">
@@ -159,46 +134,21 @@ templ filterForm(vm ViewModel) {
 		if len(vm.ClassOptions) > 0 {
 			<label class="flex flex-col gap-1 text-sm">
 				<span class="text-bk-muted">Class</span>
-				@components.CheckboxFilter("class", vm.ClassOptions, len(vm.Filter.Classes) > 0, "min-h-24")
+				@components.IconCheckboxFilter("class", vm.ClassOptions, len(vm.Filter.Classes) > 0, "min-h-24")
 			</label>
 		} else {
 			<label class="flex flex-col gap-1 text-sm">
 				<span class="text-bk-muted">Spec</span>
-				@components.CheckboxFilter("spec", vm.SpecOptions, len(vm.Filter.Specs) > 0, "min-h-24")
+				@components.IconCheckboxFilter("spec", vm.SpecOptions, len(vm.Filter.Specs) > 0, "min-h-24")
 			</label>
 		}
-		<div class="sm:col-span-2 lg:col-span-4 flex justify-end gap-2">
-			<a href={ templ.SafeURL(links.BossKills(vm.Realm)) } class="rounded border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-text">Reset</a>
-			<button type="submit" class="rounded bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Apply</button>
-		</div>
-	</form>
+	}
 }
 
-templ pagination(vm ViewModel) {
-	<nav class="mt-4 flex items-center justify-between text-sm">
-		<div class="text-bk-muted">
-			Page { format.IntCtx(ctx, vm.Page + 1) }
-			if vm.PageSize > 0 {
-				· showing { format.IntCtx(ctx, len(vm.Rows)) } of { format.IntCtx(ctx, vm.Total) }
-			}
-		</div>
-		<div class="flex gap-1">
-			if vm.Page > 0 {
-				<a
-					hx-get={ pagedURL(vm, vm.Page - 1) }
-					hx-target="#kills-table"
-					hx-push-url="true"
-					class="rounded border border-bk-border px-2 py-1 hover:text-bk-accent cursor-pointer"
-				>Prev</a>
-			}
-			if (vm.Page + 1) * vm.PageSize < vm.Total {
-				<a
-					hx-get={ pagedURL(vm, vm.Page + 1) }
-					hx-target="#kills-table"
-					hx-push-url="true"
-					class="rounded border border-bk-border px-2 py-1 hover:text-bk-accent cursor-pointer"
-				>Next</a>
-			}
-		</div>
-	</nav>
+func sortHeaderProps(vm ViewModel, col, label string) components.SortHeaderProps {
+	return components.SortHeaderProps{Label: label, URL: sortHref(vm, col), HTMXTarget: "#kills-table", Active: vm.Filter.SortBy == col, Direction: vm.Filter.SortDir}
+}
+
+func paginationProps(vm ViewModel) components.PaginationProps {
+	return components.PaginationProps{Page: vm.Page, PageSize: vm.PageSize, Visible: len(vm.Rows), Total: vm.Total, PreviousURL: pagedURL(vm, vm.Page-1), NextURL: pagedURL(vm, vm.Page+1), HTMXTarget: "#kills-table"}
 }

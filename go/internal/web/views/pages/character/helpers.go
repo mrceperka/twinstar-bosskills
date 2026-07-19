@@ -4,9 +4,10 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/a-h/templ"
 	"twinstar-bosskills/internal/links"
 	"twinstar-bosskills/internal/web/views/viewhelpers"
+
+	"github.com/a-h/templ"
 )
 
 func bossWithFiltersHref(realmName string, id uint32, mode, class, spec int) templ.SafeURL {
@@ -73,7 +74,7 @@ func killsBaseURL(vm ViewModel) string {
 	return links.Character(vm.Realm, vm.Char.Name)
 }
 
-// filterQuery encodes just the applied filters + sort — used to preserve
+// filterQuery encodes just the applied filters + sort - used to preserve
 // state across pagination + sort-header clicks.
 func filterQuery(vm ViewModel) url.Values {
 	q := url.Values{}

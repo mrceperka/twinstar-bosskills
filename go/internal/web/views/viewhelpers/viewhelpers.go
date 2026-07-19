@@ -2,7 +2,7 @@
 // page package. Per-page helpers.go files should keep ONLY page-specific
 // values (e.g. a Reset URL that needs the page's filter state).
 //
-// URL building lives in internal/links — use that for any kind of href.
+// URL building lives in internal/links - use that for any kind of href.
 // Number / duration / locale formatting lives in internal/format.
 // WoW domain labels (class, spec, difficulty) live in internal/wow.
 package viewhelpers
@@ -11,8 +11,9 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/a-h/templ"
 	"twinstar-bosskills/internal/links"
+
+	"github.com/a-h/templ"
 )
 
 // Itoa is a small templ-friendly wrapper around strconv.Itoa so the templ
@@ -20,12 +21,12 @@ import (
 func Itoa(v int) string { return strconv.Itoa(v) }
 
 // FormatFloat formats a float64 with the requested number of decimal places.
-// Locale-neutral — for thousand-separated numbers see format.IntCtx.
+// Locale-neutral - for thousand-separated numbers see format.IntCtx.
 func FormatFloat(v float64, decimals int) string {
 	return strconv.FormatFloat(v, 'f', decimals, 64)
 }
 
-// LongDuration formats seconds as "X minutes Y seconds" — matches the
+// LongDuration formats seconds as "X minutes Y seconds" - matches the
 // narrative phrasing the SvelteKit app uses (boss-page headlines, etc.).
 func LongDuration(seconds int) string {
 	if seconds <= 0 {
@@ -133,7 +134,7 @@ func ItemTooltipURL(realmName string, itemID uint32) string {
 }
 
 // TabActiveClass returns the Tailwind classes that mark a tab as active or
-// inactive. Used by boss / boss-history / ranks pages — same look for all.
+// inactive. Used by boss / boss-history / ranks pages - same look for all.
 func TabActiveClass(active bool) string {
 	if active {
 		return "rounded border border-bk-accent bg-bk-accent/20 px-2 py-1 text-bk-accent font-semibold"

@@ -16,7 +16,7 @@ const (
 // GuildAuth carries the request's guild-token verification state, derived
 // from cookies + the SECRET_TOKEN_GUILD.
 type GuildAuth struct {
-	// Realm name from URL — already canonicalised by RequireRealm.
+	// Realm name from URL - already canonicalised by RequireRealm.
 	Realm string
 	// IsPublic mirrors realm.IsPublic.
 	IsPublic bool
@@ -42,10 +42,10 @@ func Auth(ctx context.Context) GuildAuth {
 // URL.Path's first segment, and stores the result on the context.
 //
 // Reads URL.Path directly (rather than ctx) so it can run anywhere in the
-// chain — including before RequireRealm. For non-realm routes (e.g. /changelog,
+// chain - including before RequireRealm. For non-realm routes (e.g. /changelog,
 // /static) the auth simply stays zero-valued.
 //
-// Does NOT itself 403 — handlers that gate on private-realm data should call
+// Does NOT itself 403 - handlers that gate on private-realm data should call
 // Auth(ctx).Verified and decide what to do. This keeps the middleware generic.
 func AttachGuildAuth(secretGuild string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

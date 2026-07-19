@@ -12,6 +12,7 @@ import (
 	"twinstar-bosskills/internal/web/middleware"
 	"twinstar-bosskills/internal/web/query"
 	"twinstar-bosskills/internal/web/router"
+	"twinstar-bosskills/internal/web/sqlutil"
 	"twinstar-bosskills/internal/web/views/layouts"
 	"twinstar-bosskills/internal/wow"
 )
@@ -127,7 +128,7 @@ func loadRaids(ctx context.Context, db *sql.DB, realmName, guildFilter string, w
 		return nil, nil, err
 	}
 
-	guildWhere, guildArgs := privateGuildWhere(guildFilter)
+	guildWhere, guildArgs := sqlutil.GuildFilter(guildFilter)
 	killQ := `
 		SELECT raid_name,
 		       boss_remote_id,
@@ -248,13 +249,6 @@ func loadRaids(ctx context.Context, db *sql.DB, realmName, guildFilter string, w
 	})
 
 	return out, difficulties, nil
-}
-
-func privateGuildWhere(guildFilter string) (string, []any) {
-	if guildFilter == "" {
-		return "", nil
-	}
-	return " AND guild = ?", []any{guildFilter}
 }
 
 func Mount(mux *http.ServeMux, deps Deps) {

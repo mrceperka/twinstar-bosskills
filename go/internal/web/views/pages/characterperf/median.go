@@ -78,11 +78,3 @@ func loadMedianByBoss(ctx context.Context, db *sql.DB, realmName string, bossIDs
 	}
 	return out, rows.Err()
 }
-
-func keysU32(m map[uint32]bool) []uint32 {
-	out := make([]uint32, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
-}

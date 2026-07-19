@@ -80,7 +80,7 @@ func Handler(deps Deps) http.HandlerFunc {
 
 		vm := ViewModel{
 			Meta: layouts.PageMeta{
-				Title:      info.BossName + " kill — " + realmName,
+				Title:      info.BossName + " kill - " + realmName,
 				Realm:      realmName,
 				CSSHash:    deps.CSSHash,
 				JSHash:     deps.JSHash,

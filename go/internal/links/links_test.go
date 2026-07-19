@@ -12,7 +12,7 @@ func TestTwinheadBossKill_StripsRealmPrefix(t *testing.T) {
 }
 
 func TestTwinheadBossKill_VanillaPrefix(t *testing.T) {
-	// Kronos is vanilla — realm ID 4.
+	// Kronos is vanilla - realm ID 4.
 	got := TwinheadBossKill("Kronos", "4_1234")
 	want := "https://vanilla-twinhead.twinstar.cz/?boss-kill=1234"
 	if got != want {

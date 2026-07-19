@@ -30,7 +30,7 @@ templ Page(vm ViewModel) {
 						if vm.CurrentGuild != "" {
 							{ vm.CurrentGuild }
 						} else {
-							<span class="text-bk-muted">—</span>
+							<span class="text-bk-muted">-</span>
 						}
 					</dd>
 					<dt class="text-bk-muted">Token</dt>
@@ -38,7 +38,7 @@ templ Page(vm ViewModel) {
 						if vm.CurrentToken != "" {
 							{ maskToken(vm.CurrentToken) }
 						} else {
-							<span class="text-bk-muted">—</span>
+							<span class="text-bk-muted">-</span>
 						}
 					</dd>
 				</dl>

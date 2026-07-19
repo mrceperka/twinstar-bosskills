@@ -2,8 +2,8 @@
 //
 // Two distinct caches live here so they can be tuned independently:
 //
-//   - icons.Disk        — large, binary, persists across restarts
-//   - (future) memory   — small, fast, query-result cache
+//   - icons.Disk        - large, binary, persists across restarts
+//   - (future) memory   - small, fast, query-result cache
 package cache
 
 import (
@@ -21,8 +21,8 @@ import (
 
 // IconDisk caches icon blobs on local disk. One blob = two files:
 //
-//	<sha256>.bin   — raw bytes
-//	<sha256>.meta  — Content-Type string
+//	<sha256>.bin   - raw bytes
+//	<sha256>.meta  - Content-Type string
 //
 // Cache keys are derived from the upstream URL so the same icon shared across
 // realms is stored once.
@@ -53,7 +53,7 @@ type Blob struct {
 
 // Get returns the blob, either from disk or by fetching upstream and caching.
 // If the upstream fetch returns a non-allowed content type, the function
-// returns (nil, nil) — the caller should serve a placeholder.
+// returns (nil, nil) - the caller should serve a placeholder.
 func (c *IconDisk) Get(ctx context.Context, upstreamURL string) (*Blob, error) {
 	key := hashKey(upstreamURL)
 	dataPath := filepath.Join(c.Dir, key+".bin")

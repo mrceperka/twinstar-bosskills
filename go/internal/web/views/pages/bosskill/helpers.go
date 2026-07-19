@@ -4,12 +4,13 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/a-h/templ"
 	"twinstar-bosskills/internal/links"
+
+	"github.com/a-h/templ"
 )
 
 // wowheadHref points to the Wowhead Cata classic DB which carries MoP items.
-// External link — opens in a new tab so users can read the full tooltip.
+// External link - opens in a new tab so users can read the full tooltip.
 func wowheadHref(itemID uint32) templ.SafeURL {
 	return templ.SafeURL("https://www.wowhead.com/mop-classic/item=" + strconv.FormatUint(uint64(itemID), 10))
 }

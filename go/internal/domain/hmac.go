@@ -12,7 +12,7 @@ import (
 //
 // The existing TS implementation hashes the concatenation
 // SECRET_TOKEN_GUILD + realm + guild with SHA-256 and returns hex.
-// Order and lack of separators are intentional — must match byte-for-byte
+// Order and lack of separators are intentional - must match byte-for-byte
 // to keep existing cookies valid after cutover.
 func GuildToken(secret, realmName, guild string) string {
 	sum := sha256.Sum256([]byte(secret + realmName + guild))

@@ -46,7 +46,7 @@ templ Page(vm ViewModel) {
 				<div>
 					<div class="text-xs uppercase tracking-wide text-bk-muted inline-flex items-center gap-1">
 						@components.ClassSpecIcons(vm.Realm, vm.Char.Class, 0)
-						<span>{ vm.Char.ClassLabel } · performance</span>
+						<span>Performance</span>
 					</div>
 					<h1 class="text-2xl font-semibold">
 						<a href={ viewhelpers.CharacterHref(vm.Realm, vm.CharName) } class="hover:text-bk-accent">{ vm.CharName }</a>
@@ -87,7 +87,7 @@ templ Page(vm ViewModel) {
 }
 
 templ filterForm(vm ViewModel) {
-	<form method="GET" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+	@components.FilterForm(components.FilterFormProps{Action: links.CharacterPerformance(vm.Realm, vm.CharName), ResetURL: links.CharacterPerformance(vm.Realm, vm.CharName)}) {
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Raid</span>
 			@components.CheckboxFilter("raid", vm.RaidOptions, len(vm.Filter.Raids) > 0, "min-h-32")
@@ -112,9 +112,5 @@ templ filterForm(vm ViewModel) {
 			<span class="text-bk-muted">Max iLvl</span>
 			<input name="ilvl_max" type="number" min="0" value={ viewhelpers.EmptyItoa(vm.Filter.IlvlMax) } class="rounded border border-bk-border bg-bk-bg p-2"/>
 		</label>
-		<div class="sm:col-span-2 lg:col-span-4 flex justify-end gap-2">
-			<a href={ templ.SafeURL(links.CharacterPerformance(vm.Realm, vm.CharName)) } class="rounded border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-text">Reset</a>
-			<button type="submit" class="rounded bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Apply</button>
-		</div>
-	</form>
+	}
 }

@@ -67,7 +67,7 @@ templ Page(vm ViewModel) {
 				</div>
 			</header>
 			<section class="space-y-6">
-				<h2 class="text-lg font-semibold">Top DPS ranks — { vm.ModeLabel }</h2>
+				<h2 class="text-lg font-semibold">Top DPS ranks - { vm.ModeLabel }</h2>
 				if len(vm.DPSRaids) == 0 {
 					@components.EmptyState("No DPS data for this week yet.")
 				} else {
@@ -77,7 +77,7 @@ templ Page(vm ViewModel) {
 				}
 			</section>
 			<section class="space-y-6">
-				<h2 class="text-lg font-semibold">Top HPS ranks — { vm.ModeLabel }</h2>
+				<h2 class="text-lg font-semibold">Top HPS ranks - { vm.ModeLabel }</h2>
 				if len(vm.HPSRaids) == 0 {
 					@components.EmptyState("No HPS data for this week yet.")
 				} else {
@@ -108,7 +108,7 @@ templ raidSection(vm ViewModel, raid RaidGroup, metric string) {
 		for _, boss := range raid.Bosses {
 			<div>
 				<h3 class="mb-2 font-medium">
-					{ raid.Name } —
+					{ raid.Name } -
 					<a href={ rankBossHref(vm, boss.BossID) } class="text-bk-accent hover:underline">{ boss.BossName }</a>
 				</h3>
 				@bossRankTable(vm, boss.Entries, metric)
@@ -126,7 +126,7 @@ templ bossRankTable(vm ViewModel, rows []Rank, metric string) {
 				<tr>
 					<th class="w-8">#</th>
 					<th>Character</th>
-					<th>{ rankGroupLabel(vm) }</th>
+					<th class="bk-class-spec-column">{ rankGroupLabel(vm) }</th>
 					<th class="text-right">{ metric }</th>
 					<th>Length</th>
 					<th>iLvl</th>
@@ -140,16 +140,12 @@ templ bossRankTable(vm ViewModel, rows []Rank, metric string) {
 						<td>
 							<a href={ viewhelpers.CharacterHref(vm.Realm, r.Name) } class="hover:underline">{ r.Name }</a>
 						</td>
-						<td class="text-xs">
-							<span class="inline-flex items-center gap-1">
-								if vm.ClassMode {
-									@components.ClassSpecIcons(vm.Realm, r.Class, 0)
-									<span>{ r.ClassLabel }</span>
-								} else {
-									@components.ClassSpecIcons(vm.Realm, r.Class, r.Spec)
-									<span>{ r.SpecLabel }</span>
-								}
-							</span>
+						<td class="bk-class-spec-column text-xs">
+							if vm.ClassMode {
+								@components.ClassSpecIcons(vm.Realm, r.Class, 0)
+							} else {
+								@components.ClassSpecIcons(vm.Realm, r.Class, r.Spec)
+							}
 						</td>
 						<td class="text-right">
 							if metric == "DPS" {

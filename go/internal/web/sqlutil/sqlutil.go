@@ -12,3 +12,11 @@ func Placeholders(n int) string {
 	}
 	return strings.Join(parts, ",")
 }
+
+// GuildFilter returns the optional boss_kill guild predicate and its argument.
+func GuildFilter(guild string) (string, []any) {
+	if guild == "" {
+		return "", nil
+	}
+	return " AND guild = ?", []any{guild}
+}

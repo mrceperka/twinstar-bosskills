@@ -56,7 +56,7 @@ type row struct {
 }
 
 // buildRow assembles a row from a list-API entry and its detail. detail may be
-// nil — in that case the Nested slices are left empty.
+// nil - in that case the Nested slices are left empty.
 func buildRow(realmName, raidName string, bk api.BossKill, detail *api.BossKillDetail) (row, error) {
 	t, err := parseAPITime(bk.Time)
 	if err != nil {

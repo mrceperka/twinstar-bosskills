@@ -3,7 +3,23 @@ package query
 import (
 	"net/url"
 	"strconv"
+	"strings"
 )
+
+func IntOr(raw string, fallback int) int {
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil {
+		return fallback
+	}
+	return n
+}
+
+func First(values map[string][]string, name string) string {
+	if items := values[name]; len(items) > 0 {
+		return items[0]
+	}
+	return ""
+}
 
 // Int returns the first valid integer found under any of names.
 func Int(values url.Values, min int, names ...string) (int, bool) {

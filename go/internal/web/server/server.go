@@ -49,7 +49,7 @@ func New(cfg Config) http.Handler {
 	cssHash := static.Hash("app.css")
 	jsHash := static.Hash("htmx.min.js")
 
-	// Static assets — content-hashed in URLs, cached aggressively.
+	// Static assets - content-hashed in URLs, cached aggressively.
 	mux.Handle("GET /static/", cacheStatic(http.StripPrefix("/static", static.Handler())))
 	mux.Handle("GET /favicon.ico", cacheStatic(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, static.FS(), "favicon.ico")
@@ -61,10 +61,10 @@ func New(cfg Config) http.Handler {
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	// /admin/gc — runtime memory stats + manual GC trigger.
+	// /admin/gc - runtime memory stats + manual GC trigger.
 	admingc.Mount(mux)
 
-	// Pages — one Mount() per route group.
+	// Pages - one Mount() per route group.
 	home.Mount(mux, home.Deps{DB: cfg.DB, CSSHash: cssHash, JSHash: jsHash})
 	changelog.Mount(mux, changelog.Deps{CSSHash: cssHash, JSHash: jsHash})
 	dashboard.Mount(mux, dashboard.Deps{DB: cfg.DB, CSSHash: cssHash, JSHash: jsHash})

@@ -119,7 +119,6 @@ templ Page(vm ViewModel) {
 				<div>
 					<div class="text-xs uppercase tracking-wide text-bk-muted inline-flex items-center gap-1">
 						@components.ClassSpecIcons(vm.Realm, vm.Char.Class, 0)
-						<span>{ vm.Char.ClassLabel }</span>
 					</div>
 					<h1 class="text-2xl font-semibold">{ vm.Char.Name }</h1>
 					<div class="flex items-center gap-3">
@@ -159,7 +158,10 @@ templ Page(vm ViewModel) {
 				hx-target="#rankings-content"
 				hx-swap="innerHTML"
 			>
-				<summary class="px-4 py-3 font-semibold cursor-pointer select-none">Overall rankings by DPS and HPS</summary>
+				<summary class="flex cursor-pointer select-none items-center gap-2 px-4 py-3 font-semibold">
+					@components.StatsIcon("h-5 w-5 shrink-0 text-bk-accent")
+					<span>Overall rankings by DPS and HPS</span>
+				</summary>
 				<div id="rankings-content" class="px-4 pb-4">
 					<span class="text-bk-muted text-sm">Loading…</span>
 				</div>
@@ -175,13 +177,7 @@ templ Page(vm ViewModel) {
 }
 
 templ killsFilterForm(vm ViewModel) {
-	<form
-		hx-get={ killsBaseURL(vm) }
-		hx-target="#kills-table"
-		hx-swap="innerHTML"
-		hx-push-url="true"
-		class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
-	>
+	@components.FilterForm(components.FilterFormProps{Action: killsBaseURL(vm), HTMXTarget: "#kills-table", ResetURL: killsBaseURL(vm)}) {
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Raid</span>
 			@components.CheckboxFilter("raid", vm.RaidOptions, len(vm.Filter.Raids) > 0, "min-h-24")
@@ -200,42 +196,47 @@ templ killsFilterForm(vm ViewModel) {
 		</label>
 		<input type="hidden" name="sort" value={ vm.Filter.SortBy }/>
 		<input type="hidden" name="dir" value={ vm.Filter.SortDir }/>
-		<div class="sm:col-span-2 lg:col-span-4 flex justify-end gap-2">
-			<a href={ templ.SafeURL(killsBaseURL(vm)) } class="rounded border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-text">Reset</a>
-			<button type="submit" class="rounded bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Apply</button>
-		</div>
-	</form>
+	}
 }
 
 templ ActivityPanelShell(vm ViewModel) {
-	<div
-		id="activity-feed"
+	<details
+		class="rounded border border-bk-border"
 		hx-get={ activityHref(vm.Realm, vm.Char.Name) }
-		hx-trigger="load"
+		hx-trigger="toggle once"
+		hx-target="#activity-feed"
 		hx-swap="outerHTML"
 	>
-		@components.Panel("Activity") {
+		<summary class="flex cursor-pointer select-none items-center gap-2 px-4 py-3 font-semibold">
+			@components.ActivityIcon("h-5 w-5 shrink-0 text-bk-accent")
+			<span>Activity</span>
+		</summary>
+		<div id="activity-feed" class="px-4 pb-4">
 			<div class="text-sm text-bk-muted">Loading activity…</div>
-		}
-	</div>
+		</div>
+	</details>
 }
 
 templ StatsPanelShell(vm ViewModel) {
-	<div
-		id="character-stats"
+	<details
+		class="rounded border border-bk-border"
 		hx-get={ statsHref(vm.Realm, vm.Char.Name) }
-		hx-trigger="load"
+		hx-trigger="toggle once"
+		hx-target="#character-stats"
 		hx-swap="outerHTML"
 	>
-		@components.Panel("Stats") {
+		<summary class="flex cursor-pointer select-none items-center gap-2 px-4 py-3 font-semibold">
+			@components.AttributesIcon("h-5 w-5 shrink-0 text-bk-accent")
+			<span>Stats</span>
+		</summary>
+		<div id="character-stats" class="px-4 pb-4">
 			<div class="text-sm text-bk-muted">Loading stats…</div>
-		}
-	</div>
+		</div>
+	</details>
 }
 
 templ StatsFragment(vm StatsViewModel) {
-	<div id="character-stats">
-		@components.Panel("Stats") {
+	<div id="character-stats" class="px-4 pb-4">
 			<div class="mb-3 space-y-1 text-xs text-bk-muted">
 				<p>{ vm.Notice }</p>
 				if vm.LastSuccessAt != "" {
@@ -275,13 +276,11 @@ templ StatsFragment(vm StatsViewModel) {
 					}
 				</div>
 			}
-		}
 	</div>
 }
 
 templ ActivityFragment(vm ActivityViewModel) {
-	<div id="activity-feed">
-		@components.Panel("Activity") {
+	<div id="activity-feed" class="px-4 pb-4">
 			<div class="mb-3 space-y-1 text-xs text-bk-muted">
 				<p>{ vm.Notice }</p>
 				if vm.LastSuccessAt != "" {
@@ -343,7 +342,6 @@ templ ActivityFragment(vm ActivityViewModel) {
 					</div>
 				}
 			}
-		}
 	</div>
 }
 
@@ -401,7 +399,7 @@ templ RankingsFragment(vm RankingsViewModel) {
 			<div class="space-y-4">
 				<div class="text-xs font-semibold uppercase tracking-wider text-bk-muted">DPS</div>
 				if len(vm.DPSGroups) == 0 {
-					<p class="text-bk-muted text-sm">—</p>
+					<p class="text-bk-muted text-sm">-</p>
 				} else {
 					for _, bg := range vm.DPSGroups {
 						@rankingBossGroup(vm.Realm, bg)
@@ -411,7 +409,7 @@ templ RankingsFragment(vm RankingsViewModel) {
 			<div class="space-y-4">
 				<div class="text-xs font-semibold uppercase tracking-wider text-bk-muted">HPS</div>
 				if len(vm.HPSGroups) == 0 {
-					<p class="text-bk-muted text-sm">—</p>
+					<p class="text-bk-muted text-sm">-</p>
 				} else {
 					for _, bg := range vm.HPSGroups {
 						@rankingBossGroup(vm.Realm, bg)
@@ -467,12 +465,12 @@ templ KillsTableFragment(vm ViewModel) {
 					<tr>
 						<th>Boss</th>
 						<th>Diff</th>
-						<th>Spec</th>
-						<th class="text-right">@sortHeader(vm, "dps", "DPS")</th>
-						<th class="text-right">@sortHeader(vm, "hps", "HPS")</th>
-						<th class="text-right">@sortHeader(vm, "length", "Length")</th>
-						<th class="text-right">@sortHeader(vm, "ilvl", "iLvl")</th>
-						<th>@sortHeader(vm, "kill_time", "Time")</th>
+						<th class="bk-class-spec-column">Spec</th>
+							<th class="text-right">@components.SortHeader(sortHeaderProps(vm, "dps", "DPS"))</th>
+							<th class="text-right">@components.SortHeader(sortHeaderProps(vm, "hps", "HPS"))</th>
+							<th class="text-right">@components.SortHeader(sortHeaderProps(vm, "length", "Length"))</th>
+							<th class="text-right">@components.SortHeader(sortHeaderProps(vm, "ilvl", "iLvl"))</th>
+							<th>@components.SortHeader(sortHeaderProps(vm, "kill_time", "Time"))</th>
 						<th></th>
 					</tr>
 				</thead>
@@ -483,11 +481,8 @@ templ KillsTableFragment(vm ViewModel) {
 								<a href={ bossWithFiltersHref(vm.Realm, k.BossID, k.Mode, k.Class, k.Spec) } class="hover:text-bk-accent">{ k.BossName }</a>
 							</td>
 							<td>{ k.ModeLabel }</td>
-							<td class="text-xs">
-								<span class="inline-flex items-center gap-1">
-									@components.ClassSpecIcons(vm.Realm, k.Class, k.Spec)
-									<span class="text-bk-muted">{ k.SpecLabel }</span>
-								</span>
+							<td class="bk-class-spec-column text-xs">
+								@components.ClassSpecIcons(vm.Realm, k.Class, k.Spec)
 							</td>
 							<td class="text-right">
 								if k.DPS > 0 {
@@ -498,7 +493,7 @@ templ KillsTableFragment(vm ViewModel) {
 										}
 									</span>
 								} else {
-									<span class="text-bk-muted">—</span>
+									<span class="text-bk-muted">-</span>
 								}
 							</td>
 							<td class="text-right">
@@ -510,7 +505,7 @@ templ KillsTableFragment(vm ViewModel) {
 										}
 									</span>
 								} else {
-									<span class="text-bk-muted">—</span>
+									<span class="text-bk-muted">-</span>
 								}
 							</td>
 							<td class="text-right text-bk-muted text-xs">{ format.Duration(k.LengthSec) }</td>
@@ -518,7 +513,7 @@ templ KillsTableFragment(vm ViewModel) {
 								if k.AvgItemLvl > 0 {
 									{ viewhelpers.Ilvl(k.AvgItemLvl) }
 								} else {
-									—
+									-
 								}
 							</td>
 							<td class="text-bk-muted text-xs">{ k.KillTime }</td>
@@ -532,7 +527,7 @@ templ KillsTableFragment(vm ViewModel) {
 				</tbody>
 			}
 		}
-		@killsPagination(vm)
+		@components.Pagination(paginationProps(vm))
 	}
 }
 
@@ -553,52 +548,10 @@ templ performanceTrend(delta float64) {
 // direction and swaps the kills table via htmx. The `<a>` uses flex + negative
 // margins so the whole `<th>` cell (including its padding) is clickable, not
 // just the label text.
-templ sortHeader(vm ViewModel, col string, label string) {
-	<a
-		hx-get={ sortURL(vm, col) }
-		hx-target="#kills-table"
-		hx-push-url="true"
-		href={ templ.SafeURL(sortURL(vm, col)) }
-		class="-m-2 flex items-center gap-1 p-2 cursor-pointer hover:text-bk-accent"
-	>
-		{ label }
-		if vm.Filter.SortBy == col {
-			if vm.Filter.SortDir == "asc" {
-				<span class="text-bk-accent">↑</span>
-			} else {
-				<span class="text-bk-accent">↓</span>
-			}
-		}
-	</a>
+func sortHeaderProps(vm ViewModel, col, label string) components.SortHeaderProps {
+	return components.SortHeaderProps{Label: label, URL: sortURL(vm, col), HTMXTarget: "#kills-table", Active: vm.Filter.SortBy == col, Direction: vm.Filter.SortDir}
 }
 
-templ killsPagination(vm ViewModel) {
-	if vm.KillsTotal > 0 {
-		<nav class="mt-4 flex items-center justify-between text-sm">
-			<div class="text-bk-muted">
-				Page { format.IntCtx(ctx, vm.KillsPage+1) }
-				· showing { format.IntCtx(ctx, len(vm.RecentKills)) } of { format.IntCtx(ctx, vm.KillsTotal) }
-			</div>
-			<div class="flex gap-1">
-				if vm.KillsPage > 0 {
-					<a
-						hx-get={ pagedKillsURL(vm, vm.KillsPage-1) }
-						hx-target="#kills-table"
-						hx-push-url="true"
-						href={ templ.SafeURL(pagedKillsURL(vm, vm.KillsPage-1)) }
-						class="rounded border border-bk-border px-2 py-1 hover:text-bk-accent cursor-pointer"
-					>Prev</a>
-				}
-				if (vm.KillsPage+1)*vm.KillsPageSize < vm.KillsTotal {
-					<a
-						hx-get={ pagedKillsURL(vm, vm.KillsPage+1) }
-						hx-target="#kills-table"
-						hx-push-url="true"
-						href={ templ.SafeURL(pagedKillsURL(vm, vm.KillsPage+1)) }
-						class="rounded border border-bk-border px-2 py-1 hover:text-bk-accent cursor-pointer"
-					>Next</a>
-				}
-			</div>
-		</nav>
-	}
+func paginationProps(vm ViewModel) components.PaginationProps {
+	return components.PaginationProps{Page: vm.KillsPage, PageSize: vm.KillsPageSize, Visible: len(vm.RecentKills), Total: vm.KillsTotal, PreviousURL: pagedKillsURL(vm, vm.KillsPage-1), NextURL: pagedKillsURL(vm, vm.KillsPage+1), HTMXTarget: "#kills-table"}
 }

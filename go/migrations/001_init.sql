@@ -3,9 +3,9 @@
 -- This migration is intentionally squashed: it represents the complete schema
 -- expected by the current Go application for fresh databases.
 --
--- All mutable/event tables use ReplacingMergeTree on a `version` column so
--- re-syncs update existing rows on the next merge. Reads that need immediate
--- replacement visibility must use FINAL or argMax-style aggregation.
+-- Mutable/cache tables use ReplacingMergeTree on a `version` column. The sync
+-- command treats existing boss-kill IDs as immutable and skips them; it does
+-- not currently use ReplacingMergeTree as an update mechanism for kills.
 
 -- --------------------------------------------------------------------------
 -- Lookup tables
@@ -126,7 +126,11 @@ CREATE TABLE IF NOT EXISTS character (
     level_state      AggregateFunction(argMax, UInt8,  DateTime),
     first_seen_state AggregateFunction(min, DateTime),
     last_seen_state  AggregateFunction(max, DateTime),
-    kill_count_state AggregateFunction(sum, UInt64)
+    -- uniq makes this aggregate idempotent when the same upstream kill is
+    -- inserted more than once (for example after a retry with an ambiguous
+    -- commit result). Materialized views consume inserted blocks before a
+    -- ReplacingMergeTree source has merged duplicate versions.
+    kill_count_state AggregateFunction(uniqExact, String)
 )
 ENGINE = AggregatingMergeTree
 ORDER BY (realm, guid);
@@ -143,7 +147,7 @@ SELECT
     argMaxState(players.level,  kill_time) AS level_state,
     minState(kill_time)                    AS first_seen_state,
     maxState(kill_time)                    AS last_seen_state,
-    sumState(toUInt64(1))                  AS kill_count_state
+    uniqExactState(remote_id)              AS kill_count_state
 FROM boss_kill
 ARRAY JOIN players
 GROUP BY realm, players.guid;

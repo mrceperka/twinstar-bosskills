@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"twinstar-bosskills/internal/collection"
 	"twinstar-bosskills/internal/domain"
 	"twinstar-bosskills/internal/metric"
 	"twinstar-bosskills/internal/realm"
@@ -92,19 +93,19 @@ func Handler(deps Deps) http.HandlerFunc {
 			guidSet[r.GUID] = true
 		}
 
-		bossInfos, err := loadBossInfos(ctx, deps.DB, realmName, setKeysU32(bossIDSet))
+		bossInfos, err := loadBossInfos(ctx, deps.DB, realmName, collection.Keys(bossIDSet))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		names, err := loadNames(ctx, deps.DB, realmName, setKeysU64(guidSet))
+		names, err := loadNames(ctx, deps.DB, realmName, collection.Keys(guidSet))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		killDetails, err := loadKillDetails(ctx, deps.DB, realmName, win.Start, win.End, mode, expansion, setKeysU64(guidSet))
+		killDetails, err := loadKillDetails(ctx, deps.DB, realmName, win.Start, win.End, mode, expansion, collection.Keys(guidSet))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -478,22 +479,6 @@ func buildRankEntries(rows []rawRank, killDetails map[killDetailKey]killDetail, 
 			Ilvl:       detail.Ilvl,
 			KillID:     detail.KillID,
 		})
-	}
-	return out
-}
-
-func setKeysU32(m map[uint32]bool) []uint32 {
-	out := make([]uint32, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
-}
-
-func setKeysU64(m map[uint64]bool) []uint64 {
-	out := make([]uint64, 0, len(m))
-	for k := range m {
-		out = append(out, k)
 	}
 	return out
 }

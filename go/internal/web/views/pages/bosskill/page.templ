@@ -73,7 +73,7 @@ type PlayerRow struct {
 type LootRow struct {
 	ItemID uint32
 	Count  int
-	// DropChance is "1 of 6 ~ 16.67%" style text — computed in handler.
+	// DropChance is "1 of 6 ~ 16.67%" style text - computed in handler.
 	DropChanceLabel string
 	Item            *api.Item
 }
@@ -190,20 +190,20 @@ templ statsTable(vm ViewModel) {
 	@components.Table() {
 		<thead>
 			<tr>
-				<th>@statsSortHeader(vm, "name", "Name")</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "name", "Name"))</th>
 				<th>%ile</th>
-				<th>Class</th>
-				<th>@statsSortHeader(vm, "dps", "DPS")</th>
-				<th>@statsSortHeader(vm, "dmg_done", "Dmg Done")</th>
-				<th>@statsSortHeader(vm, "dmg_taken", "Dmg Taken")</th>
-				<th>@statsSortHeader(vm, "dmg_absorbed", "Dmg Absorb")</th>
-				<th>@statsSortHeader(vm, "hps", "HPS")</th>
-				<th>@statsSortHeader(vm, "heal_done", "Healing Done")</th>
-				<th>@statsSortHeader(vm, "abs_done", "Absorb Done")</th>
-				<th>@statsSortHeader(vm, "heal_taken", "Heal Taken")</th>
-				<th>@statsSortHeader(vm, "interrupts", "I")</th>
-				<th>@statsSortHeader(vm, "dispels", "D")</th>
-				<th>@statsSortHeader(vm, "ilvl", "iLvl")</th>
+				<th class="bk-class-spec-column">Class</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "dps", "DPS"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "dmg_done", "Dmg Done"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "dmg_taken", "Dmg Taken"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "dmg_absorbed", "Dmg Absorb"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "hps", "HPS"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "heal_done", "Healing Done"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "abs_done", "Absorb Done"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "heal_taken", "Heal Taken"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "interrupts", "I"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "dispels", "D"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "ilvl", "iLvl"))</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -217,11 +217,8 @@ templ statsTable(vm ViewModel) {
 						<span class="mx-1 text-bk-muted">|</span>
 						@percentileCell(p.HPSPercentile, "heal")
 					</td>
-					<td>
-						<span class="inline-flex items-center gap-1">
-							@components.ClassSpecIcons(vm.Realm, p.Class, p.Spec)
-							<span class="text-bk-muted">{ p.SpecLabel }</span>
-						</span>
+					<td class="bk-class-spec-column">
+						@components.ClassSpecIcons(vm.Realm, p.Class, p.Spec)
 					</td>
 					<td>{ format.Int64Ctx(ctx, p.DPS) }</td>
 					<td>{ format.Int64Ctx(ctx, p.DmgDone) }</td>
@@ -240,23 +237,8 @@ templ statsTable(vm ViewModel) {
 	}
 }
 
-templ statsSortHeader(vm ViewModel, col string, label string) {
-	<a
-		hx-get={ statsSortURL(vm, col) }
-		hx-target="#stats-table"
-		hx-push-url="true"
-		href={ templ.SafeURL(statsSortURL(vm, col)) }
-		class="-m-2 flex items-center gap-1 p-2 cursor-pointer hover:text-bk-accent"
-	>
-		{ label }
-		if vm.SortBy == col {
-			if vm.SortDir == "asc" {
-				<span class="text-bk-accent">↑</span>
-			} else {
-				<span class="text-bk-accent">↓</span>
-			}
-		}
-	</a>
+func statsSortHeaderProps(vm ViewModel, col, label string) components.SortHeaderProps {
+	return components.SortHeaderProps{Label: label, URL: statsSortURL(vm, col), HTMXTarget: "#stats-table", Active: vm.SortBy == col, Direction: vm.SortDir}
 }
 
 // percentileCell renders one half of the "%ile" cell with a metric-tinted

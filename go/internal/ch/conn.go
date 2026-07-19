@@ -17,7 +17,7 @@ type Options struct {
 	// "clickhouse://default:@127.0.0.1:9000/bosskills?dial_timeout=10s".
 	DSN string
 	// MaxOpen caps the connection pool. ClickHouse prefers a few long-lived
-	// connections — keep this small.
+	// connections - keep this small.
 	MaxOpen int
 	// ConnLifetime recycles idle conns. ClickHouse server kills long idles
 	// by default; 1h is safe.

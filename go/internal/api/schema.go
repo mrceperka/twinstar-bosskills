@@ -1,4 +1,4 @@
-// Package api ports packages/api — the upstream twinstar-api client and its
+// Package api ports packages/api - the upstream twinstar-api client and its
 // JSON schemas. Validation is done with struct tags + targeted strconv where
 // the upstream uses string-coerced numbers.
 package api
@@ -10,7 +10,7 @@ import (
 
 // FlexInt is a JSON number that may arrive quoted as a string ("123") or as
 // a real number (123). The TS schemas use z.coerce.number() for the
-// per-player damage/healing fields — same idea here.
+// per-player damage/healing fields - same idea here.
 type FlexInt int64
 
 func (f *FlexInt) UnmarshalJSON(data []byte) error {

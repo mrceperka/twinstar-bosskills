@@ -75,8 +75,9 @@ func upsertRaidsAndBosses(ctx context.Context, db *sql.DB, realmName string, rai
 }
 
 // existingRemoteIDs returns the set of boss_kill.remote_id values already
-// present in CH for the given realm + candidate list. Used to avoid feeding
-// duplicate rows to the materialized views.
+// present in CH for the given realm + candidate list. This avoids unnecessary
+// writes. The materialized views are independently idempotent for duplicate
+// kill IDs; this preflight query is not a uniqueness guarantee.
 func existingRemoteIDs(ctx context.Context, db *sql.DB, realmName string, ids []string) (map[string]bool, error) {
 	out := map[string]bool{}
 	if len(ids) == 0 {

@@ -15,7 +15,7 @@ type Item struct {
 	ID      int    `json:"id"`
 	Name    string `json:"name"`
 	Quality int    `json:"quality"`
-	// Tooltip is the HTML body served by /item/tooltip — used by the
+	// Tooltip is the HTML body served by /item/tooltip - used by the
 	// bosskill detail page to render rich-hover popovers.
 	Tooltip string `json:"tooltip,omitempty"`
 }
@@ -39,8 +39,8 @@ type rawTooltip struct {
 	} `json:"data"`
 }
 
-// GetItemTooltip returns the upstream HTML tooltip body. Empty string + nil
-// error means upstream had no tooltip (e.g. removed item).
+// GetItemTooltip returns a sanitized upstream HTML tooltip body. Empty string
+// + nil error means upstream had no tooltip (e.g. removed item).
 func (c *Client) GetItemTooltip(ctx context.Context, id, expansion int) (string, error) {
 	if id <= 0 {
 		return "", ErrItemNotFound
@@ -67,7 +67,7 @@ func (c *Client) GetItemTooltip(ctx context.Context, id, expansion int) (string,
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return "", err
 	}
-	return raw.Data.Tooltip, nil
+	return SanitizeTooltipHTML(raw.Data.Tooltip), nil
 }
 
 // GetItem fetches one item by ID.

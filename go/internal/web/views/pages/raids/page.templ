@@ -104,7 +104,7 @@ templ raidTable(realmName string, r Raid, difficulties []DifficultyChoice) {
 									{ format.IntCtx(ctx, b.Total) }
 								</a>
 							} else {
-								<span class="text-bk-muted">—</span>
+								<span class="text-bk-muted">-</span>
 							}
 						</td>
 					} else {
@@ -115,7 +115,7 @@ templ raidTable(realmName string, r Raid, difficulties []DifficultyChoice) {
 										{ format.IntCtx(ctx, b.KillsByDifficulty[d.Mode]) }
 									</a>
 								} else {
-									<span class="text-bk-muted">—</span>
+									<span class="text-bk-muted">-</span>
 								}
 							</td>
 						}
