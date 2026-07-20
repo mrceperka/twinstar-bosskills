@@ -95,12 +95,14 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		// Allow self + inline styles (Tailwind inlines nothing at runtime, but
 		// echarts may inject a <style>; revisit if it bites).
+		// The sha256 token allows the known inline bootstrap emitted alongside
+		// Umami without opening script-src to arbitrary inline JavaScript.
 		h.Set("Content-Security-Policy",
 			"default-src 'self'; "+
-				"script-src 'self' https://eu.umami.is; "+
+				"script-src 'self' https://cloud.umami.is https://eu.umami.is https://static.cloudflareinsights.com 'sha256-HfNXcA3dx+bO75yls1LFTq2iLZW53+o5VHqNpcJnIcI='; "+
 				"style-src 'self' 'unsafe-inline'; "+
 				"img-src 'self' data: https://twinstar-api.twinstar-wow.com; "+
-				"connect-src 'self' https://eu.umami.is; "+
+				"connect-src 'self' https://cloud.umami.is https://eu.umami.is https://cloudflareinsights.com; "+
 				"frame-ancestors 'none'")
 		next.ServeHTTP(w, r)
 	})
