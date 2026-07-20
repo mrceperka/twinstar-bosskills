@@ -85,8 +85,7 @@ func Logger(log *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-// SecurityHeaders sets a small, sane default header set. CSP is intentionally
-// strict - htmx and inline-script-free templ make this easy.
+// SecurityHeaders sets a small, sane default header set.
 func SecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
@@ -95,14 +94,16 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		// Allow self + inline styles (Tailwind inlines nothing at runtime, but
 		// echarts may inject a <style>; revisit if it bites).
-		// The sha256 token allows the known inline bootstrap emitted alongside
-		// Umami without opening script-src to arbitrary inline JavaScript.
+		// Cloudflare injects an inline bootstrap whose contents are not stable, so
+		// a CSP hash cannot be pinned. Keep inline event handlers disabled even
+		// though script elements must allow Cloudflare's bootstrap.
 		h.Set("Content-Security-Policy",
 			"default-src 'self'; "+
-				"script-src 'self' https://cloud.umami.is https://eu.umami.is https://static.cloudflareinsights.com 'sha256-HfNXcA3dx+bO75yls1LFTq2iLZW53+o5VHqNpcJnIcI='; "+
+				"script-src 'self' 'unsafe-inline' https://*.umami.is https://static.cloudflareinsights.com; "+
+				"script-src-attr 'none'; "+
 				"style-src 'self' 'unsafe-inline'; "+
 				"img-src 'self' data: https://twinstar-api.twinstar-wow.com; "+
-				"connect-src 'self' https://cloud.umami.is https://eu.umami.is https://cloudflareinsights.com; "+
+				"connect-src 'self' https://*.umami.is https://cloudflareinsights.com; "+
 				"frame-ancestors 'none'")
 		next.ServeHTTP(w, r)
 	})
