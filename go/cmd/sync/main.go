@@ -3,7 +3,7 @@
 // Flags mirror the existing CLI:
 //
 //	--realm     <name>      single realm
-//	--realms    Helios,Athena   multiple realms (sync runs in parallel)
+//	--realms    Helios,Proudmoore   multiple realms (sync runs in parallel)
 //	--from-date 2026-06-01  starting date (RFC3339 also OK)
 //	--offset    <int>       raid-lock offset (0 = current). Sets startsAt/endsAt
 //	                        from the current raid lock window

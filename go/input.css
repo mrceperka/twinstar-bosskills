@@ -62,6 +62,7 @@ html, body {
   font-family: 'Helvetica', 'Arial', sans-serif;
   font-size: 14px;
   -webkit-text-size-adjust: 100%;
+  overflow-x: clip;
 }
 body {
   max-width: 1920px;
@@ -174,7 +175,9 @@ a:hover {
   overflow-x: auto;
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
-  max-width: 100vw;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 .bk-table-wrap table {
   width: 100%;
@@ -263,6 +266,7 @@ a:hover {
  * repeating text beside icons throughout compact tables. */
 .bk-class-spec-icons {
   position: relative;
+  flex: 0 0 auto;
   overflow: visible !important;
   cursor: help;
   outline: none;
@@ -296,6 +300,11 @@ a:hover {
 .bk-class-spec-icons:hover::after,
 .bk-class-spec-icons:focus::after {
   display: block;
+}
+.bk-details-summary-content {
+  display: inline-flex;
+  width: calc(100% - 1.25rem);
+  vertical-align: middle;
 }
 .bk-table-fulltext-tip {
   position: fixed;

@@ -27,17 +27,14 @@ func TestRequireRealm_CanonicalCaseRedirect(t *testing.T) {
 	}
 }
 
-func TestRequireRealm_ApolloRedirectsToAthena(t *testing.T) {
+func TestRequireRealm_InactiveAthena404(t *testing.T) {
 	h := RequireRealm(http.HandlerFunc(noopOK))
 
-	req := httptest.NewRequest("GET", "/Apollo/x", nil)
+	req := httptest.NewRequest("GET", "/Athena/x", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
-	if rr.Code != http.StatusMovedPermanently {
+	if rr.Code != http.StatusNotFound {
 		t.Fatalf("status: %d", rr.Code)
-	}
-	if got := rr.Header().Get("Location"); got != "/Athena/x" {
-		t.Errorf("Location: %s", got)
 	}
 }
 

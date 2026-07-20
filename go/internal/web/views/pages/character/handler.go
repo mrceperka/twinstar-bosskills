@@ -12,6 +12,7 @@ import (
 
 	"twinstar-bosskills/internal/api"
 	"twinstar-bosskills/internal/collection"
+	"twinstar-bosskills/internal/links"
 	"twinstar-bosskills/internal/metric"
 	"twinstar-bosskills/internal/realm"
 	"twinstar-bosskills/internal/web/middleware"
@@ -1067,10 +1068,13 @@ func loadKillsFilterOptions(ctx context.Context, db *sql.DB, realmName string, g
 	}
 	sort.Ints(specs)
 	for _, s := range specs {
+		label := wow.SpecForExpansion(expansion, s)
 		specOpts = append(specOpts, Option{
 			Value:    strconv.Itoa(s),
-			Label:    wow.SpecForExpansion(expansion, s),
+			Label:    label,
 			Selected: specSel[s],
+			IconURL:  links.TalentIcon(realmName, s),
+			IconAlt:  label,
 		})
 	}
 	return bossOpts, raidOpts, modeOpts, specOpts, nil

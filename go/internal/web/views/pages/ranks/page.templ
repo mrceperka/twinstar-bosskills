@@ -132,33 +132,34 @@ templ raidList(vm ViewModel) {
 
 templ raidSummary(vm ViewModel, raid RaidGroup) {
 	<details
-		class="group rounded-lg border border-bk-border bg-black/20"
+		class="border border-bk-border bg-black/20"
 		hx-get={ rankRaidFragmentHref(vm, raid.Name) }
 		hx-target={ "#" + raidContentID(raid.Name) }
 		hx-trigger="toggle once"
 		hx-swap="innerHTML"
 	>
-		<summary class="sticky top-0 z-30 flex cursor-pointer list-none items-center gap-3 rounded-t-lg bg-bk-bg/95 px-4 py-3 backdrop-blur hover:bg-bk-accent-soft">
-			<img
-				src={ viewhelpers.RaidIconHref(raid.Name) }
-				alt=""
-				loading="lazy"
-				width="36" height="36"
-				class="h-9 w-9 shrink-0 rounded-md border border-bk-border object-cover"
-			/>
-			<div class="min-w-0">
-				<div class="truncate font-semibold text-bk-fg">{ raid.Name }</div>
-				<div class="text-xs text-bk-muted">
-					{ viewhelpers.Itoa(len(raid.Bosses)) } of { viewhelpers.Itoa(raidTotalBosses(raid)) } encounters
-				</div>
-			</div>
-			<div class="ml-auto flex items-center gap-3 text-xs text-bk-muted">
-				<div class="hidden h-1 w-24 rounded-full bg-bk-border sm:block">
-					<div class="h-1 rounded-full bg-bk-accent" style={ raidProgressStyle(raid) }></div>
-				</div>
-				<span>{ viewhelpers.Itoa(len(raid.Bosses)) } / { viewhelpers.Itoa(raidTotalBosses(raid)) }</span>
-				<span class="transition group-open:rotate-180">⌄</span>
-			</div>
+		<summary class="sticky top-0 z-30 cursor-pointer bg-bk-bg/95 px-4 py-3 backdrop-blur hover:bg-bk-accent-soft">
+			<span class="bk-details-summary-content items-center gap-3">
+				<img
+					src={ viewhelpers.RaidIconHref(raid.Name) }
+					alt=""
+					loading="lazy"
+					width="36" height="36"
+					class="h-9 w-9 shrink-0 rounded-md border border-bk-border object-cover"
+				/>
+				<span class="min-w-0">
+					<span class="block truncate font-semibold text-bk-fg">{ raid.Name }</span>
+					<span class="block text-xs text-bk-muted">
+						{ viewhelpers.Itoa(len(raid.Bosses)) } of { viewhelpers.Itoa(raidTotalBosses(raid)) } encounters
+					</span>
+				</span>
+				<span class="ml-auto flex items-center gap-3 text-xs text-bk-muted">
+					<span class="hidden h-1 w-24 rounded-full bg-bk-border sm:block">
+						<span class="block h-1 rounded-full bg-bk-accent" style={ raidProgressStyle(raid) }></span>
+					</span>
+					<span>{ viewhelpers.Itoa(len(raid.Bosses)) } / { viewhelpers.Itoa(raidTotalBosses(raid)) }</span>
+				</span>
+			</span>
 		</summary>
 		<div id={ raidContentID(raid.Name) } class="border-t border-bk-border">
 			<div class="px-4 py-3 text-sm text-bk-muted">
@@ -182,14 +183,15 @@ templ RaidRanksFragment(content RaidRankContent) {
 }
 
 templ bossRankBlock(content RaidRankContent, boss BossRankContent) {
-	<div class="space-y-3 rounded-md border border-bk-border bg-bk-bg/60 p-3">
-		<div class="sticky top-16 z-20 -mx-3 -mt-3 flex flex-wrap items-baseline gap-2 border-b border-bk-border bg-bk-bg/95 px-3 py-2 backdrop-blur">
-			<h3 class="font-medium">
-				<a href={ rankContentBossHref(content, boss.BossID) } class="text-bk-accent hover:underline">{ boss.BossName }</a>
-			</h3>
-			<span class="text-xs text-bk-muted">{ content.RaidName }</span>
-		</div>
-		<div class="grid gap-4 xl:grid-cols-2">
+	<details class="border border-bk-border bg-bk-bg/60">
+		<summary class="sticky top-16 z-20 cursor-pointer border-b border-bk-border bg-bk-bg/95 px-3 py-2 backdrop-blur hover:bg-bk-accent-soft">
+			<span class="bk-details-summary-content flex-wrap items-baseline gap-2">
+				<span class="font-medium">
+					<a href={ rankContentBossHref(content, boss.BossID) } class="text-bk-accent hover:underline">{ boss.BossName }</a>
+				</span>
+			</span>
+		</summary>
+		<div class="grid gap-4 p-3 xl:grid-cols-2">
 			<div class="min-w-0 space-y-2">
 				<h4 class="text-xs font-semibold uppercase tracking-wide text-bk-accent">DPS</h4>
 				@bossRankTable(rankTableContext(content), boss.DPSEntries, "DPS")
@@ -199,7 +201,7 @@ templ bossRankBlock(content RaidRankContent, boss BossRankContent) {
 				@bossRankTable(rankTableContext(content), boss.HPSEntries, "HPS")
 			</div>
 		</div>
-	</div>
+	</details>
 }
 
 templ bossRankTable(vm ViewModel, rows []Rank, metric string) {

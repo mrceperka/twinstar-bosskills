@@ -26,7 +26,7 @@ func TestQuery_Encode_Defaults(t *testing.T) {
 
 func TestQuery_Encode_FiltersAreJSON(t *testing.T) {
 	q := Query{
-		Realm: "Athena",
+		Realm: "Proudmoore",
 		Filters: []Filter{
 			{Column: "entry", Operator: OpEquals, Value: 71358},
 		},

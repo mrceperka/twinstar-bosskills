@@ -9,8 +9,6 @@ import "strings"
 const (
 	Kronos         = "Kronos"
 	Helios         = "Helios"
-	Athena         = "Athena"
-	Apollo         = "Apollo"
 	CataProudmoore = "Proudmoore"
 	MoPPrivatePvE  = "MoPPvE"
 )
@@ -18,8 +16,6 @@ const (
 const (
 	IDKronos        = 4
 	IDHelios        = 18
-	IDApollo        = 9
-	IDAthena        = 19
 	IDCataPrivate   = 21
 	IDMoPPrivatePvE = 24
 )
@@ -34,8 +30,6 @@ const (
 var canonical = map[string]string{
 	strings.ToLower(Kronos):         Kronos,
 	strings.ToLower(Helios):         Helios,
-	strings.ToLower(Athena):         Athena,
-	strings.ToLower(Apollo):         Apollo,
 	strings.ToLower(CataProudmoore): CataProudmoore,
 	strings.ToLower(MoPPrivatePvE):  MoPPrivatePvE,
 }
@@ -47,24 +41,18 @@ var privateRealms = map[string]bool{
 var toExpansion = map[string]int{
 	Kronos:         ExpansionVanilla,
 	Helios:         ExpansionMoP,
-	Athena:         ExpansionCata,
-	Apollo:         ExpansionCata,
 	CataProudmoore: ExpansionCata,
 	MoPPrivatePvE:  ExpansionMoP,
 }
 
 var toID = map[string]int{
 	Helios:         IDHelios,
-	Athena:         IDAthena,
-	Apollo:         IDApollo,
 	CataProudmoore: IDCataPrivate,
 	MoPPrivatePvE:  IDMoPPrivatePvE,
 	Kronos:         IDKronos,
 }
 
-var mergedTo = map[string]string{
-	Apollo: Athena,
-}
+var mergedTo = map[string]string{}
 
 // Normalize returns the canonical case form, or Helios as a fallback.
 func Normalize(r string) string {
@@ -103,5 +91,5 @@ func IsVanilla(expansion int) bool { return expansion == ExpansionVanilla }
 
 // All canonical realms in a stable order (handy for CLI defaults).
 func All() []string {
-	return []string{Helios, Athena, Apollo, CataProudmoore, MoPPrivatePvE, Kronos}
+	return []string{Helios, CataProudmoore, MoPPrivatePvE, Kronos}
 }

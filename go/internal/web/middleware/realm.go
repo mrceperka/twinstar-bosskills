@@ -9,8 +9,8 @@ import (
 )
 
 // RequireRealm extracts the realm from URL.Path's first segment,
-// canonicalises case, redirects merged realms (e.g. Apollo -> Athena), and
-// rejects unknown realms with 404.
+// canonicalises case, redirects merged realms, and rejects unknown realms
+// with 404.
 //
 // Why URL.Path and not PathValue("realm"): the mux uses literal per-realm
 // patterns ("/Helios/...", "/helios/...") rather than a wildcard, because Go's

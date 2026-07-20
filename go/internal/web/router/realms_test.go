@@ -12,8 +12,6 @@ func TestForEachRealmPrefix(t *testing.T) {
 	})
 	want := []string{
 		"/Helios", "/helios",
-		"/Athena", "/athena",
-		"/Apollo", "/apollo",
 		"/Proudmoore", "/proudmoore",
 		"/MoPPvE", "/moppve",
 		"/Kronos", "/kronos",

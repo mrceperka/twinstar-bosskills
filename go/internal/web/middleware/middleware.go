@@ -97,10 +97,10 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		// echarts may inject a <style>; revisit if it bites).
 		h.Set("Content-Security-Policy",
 			"default-src 'self'; "+
-				"script-src 'self'; "+
+				"script-src 'self' https://eu.umami.is; "+
 				"style-src 'self' 'unsafe-inline'; "+
 				"img-src 'self' data: https://twinstar-api.twinstar-wow.com; "+
-				"connect-src 'self'; "+
+				"connect-src 'self' https://eu.umami.is; "+
 				"frame-ancestors 'none'")
 		next.ServeHTTP(w, r)
 	})

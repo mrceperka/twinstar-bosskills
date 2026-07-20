@@ -301,17 +301,14 @@ func TestLowercaseRealmRedirectsToCanonical(t *testing.T) {
 	}
 }
 
-func TestApolloRedirectsToAthena(t *testing.T) {
+func TestInactiveAthena404(t *testing.T) {
 	srv := newTestServer(t)
-	resp, err := srv.noRedirectClient().Get(srv.URL + "/Apollo/")
+	resp, err := srv.client.Get(srv.URL + "/Athena/")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	requireStatus(t, resp, http.StatusMovedPermanently)
-	if loc := resp.Header.Get("Location"); !strings.HasSuffix(loc, "/Athena/") {
-		t.Errorf("Location: %s", loc)
-	}
+	requireStatus(t, resp, http.StatusNotFound)
 }
 
 func TestUnknownRealm404(t *testing.T) {

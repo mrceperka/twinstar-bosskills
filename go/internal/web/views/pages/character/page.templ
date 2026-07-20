@@ -179,7 +179,7 @@ templ Page(vm ViewModel) {
 					<span class="text-bk-muted text-sm">Loading…</span>
 				</div>
 			</details>
-			@components.Panel("Filters") {
+			@components.CollapsiblePanel("Filters", false) {
 				@killsFilterForm(vm)
 			}
 			<div id="kills-table">
@@ -205,7 +205,7 @@ templ killsFilterForm(vm ViewModel) {
 		</label>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Spec</span>
-			@components.CheckboxFilter("spec", vm.SpecOptions, len(vm.Filter.Specs) > 0, "min-h-24")
+			@components.IconCheckboxFilter("spec", vm.SpecOptions, len(vm.Filter.Specs) > 0, "min-h-24")
 		</label>
 		<input type="hidden" name="sort" value={ vm.Filter.SortBy }/>
 		<input type="hidden" name="dir" value={ vm.Filter.SortDir }/>
