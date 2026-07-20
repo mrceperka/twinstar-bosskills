@@ -32,14 +32,16 @@ import (
 
 	"twinstar-bosskills/internal/api"
 	"twinstar-bosskills/internal/ch"
+	"twinstar-bosskills/internal/config"
 	"twinstar-bosskills/internal/domain"
 	"twinstar-bosskills/internal/realm"
 )
 
 func main() {
+	cfg := config.FromEnv()
 	var (
-		dsn         = flag.String("dsn", os.Getenv("BK_CH_DSN"), "ClickHouse DSN (defaults to $BK_CH_DSN)")
-		baseURL     = flag.String("api-url", envOr("BK_TWINSTAR_API_URL", api.DefaultBaseURL), "Twinstar API base URL")
+		dsn         = flag.String("dsn", cfg.ClickHouse.DSN, "ClickHouse DSN (defaults to $"+config.EnvClickHouseDSN+")")
+		baseURL     = flag.String("api-url", cfg.Twinstar.APIURL, "Twinstar API base URL")
 		realmFlag   = flag.String("realm", "", "single realm name")
 		realmsFlag  = flag.String("realms", "", "comma-separated realms")
 		fromDate    = flag.String("from-date", "", "starting date (YYYY-MM-DD or RFC3339)")
@@ -56,7 +58,7 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	if *dsn == "" {
-		logger.Error("missing DSN; set --dsn or $BK_CH_DSN")
+		logger.Error("missing DSN", "flag", "--dsn", "env", config.EnvClickHouseDSN)
 		os.Exit(2)
 	}
 
@@ -158,13 +160,6 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info("sync done")
-}
-
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }
 
 func pickRealms(single, multi string) []string {

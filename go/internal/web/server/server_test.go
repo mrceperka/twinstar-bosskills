@@ -16,6 +16,7 @@ import (
 
 	"twinstar-bosskills/internal/cache"
 	"twinstar-bosskills/internal/ch"
+	"twinstar-bosskills/internal/config"
 	"twinstar-bosskills/internal/domain"
 	"twinstar-bosskills/internal/wow"
 )
@@ -73,14 +74,15 @@ func TestMain(m *testing.M) {
 // openTestDB returns a CH connection for server integration tests.
 //
 // Tests hit a real ClickHouse so they double as parity checks against the
-// schema + MVs. BK_CH_DSN must point at a running ClickHouse.
+// schema + MVs. The configured ClickHouse DSN must point at a running
+// ClickHouse.
 func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	dsn := os.Getenv("BK_CH_DSN")
-	if dsn == "" {
-		t.Fatal("BK_CH_DSN not set")
+	cfg := config.FromEnv()
+	if cfg.ClickHouse.DSN == "" {
+		t.Fatal(config.EnvClickHouseDSN + " not set")
 	}
-	db, err := ch.Open(ch.Options{DSN: dsn})
+	db, err := ch.Open(ch.Options{DSN: cfg.ClickHouse.DSN})
 	if err != nil {
 		t.Fatalf("ch.Open: %v", err)
 	}
@@ -88,7 +90,7 @@ func openTestDB(t *testing.T) *sql.DB {
 	defer cancel()
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
-		t.Fatalf("ClickHouse unavailable at BK_CH_DSN: %v", err)
+		t.Fatalf("ClickHouse unavailable at %s: %v", config.EnvClickHouseDSN, err)
 	}
 	serverFixtureOnce.Do(func() {
 		serverFixtureErr = insertServerFixture(db)
@@ -174,11 +176,11 @@ func insertServerFixture(db *sql.DB) error {
 }
 
 func cleanupServerFixture() error {
-	dsn := os.Getenv("BK_CH_DSN")
-	if dsn == "" {
-		return fmt.Errorf("BK_CH_DSN not set")
+	cfg := config.FromEnv()
+	if cfg.ClickHouse.DSN == "" {
+		return fmt.Errorf("%s not set", config.EnvClickHouseDSN)
 	}
-	db, err := ch.Open(ch.Options{DSN: dsn})
+	db, err := ch.Open(ch.Options{DSN: cfg.ClickHouse.DSN})
 	if err != nil {
 		return err
 	}

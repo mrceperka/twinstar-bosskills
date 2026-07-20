@@ -4,10 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
 	"regexp"
 	"testing"
 	"time"
+
+	"twinstar-bosskills/internal/config"
 )
 
 // TestDuplicateKillAggregationRegression demonstrates the failure mode that
@@ -15,12 +16,12 @@ import (
 // uniqExactState(remote_id). Materialized views process both inserted rows even
 // when a ReplacingMergeTree later collapses their shared sorting key.
 func TestDuplicateKillAggregationRegression(t *testing.T) {
-	dsn := os.Getenv("BK_CH_DSN")
-	if dsn == "" {
-		t.Skip("BK_CH_DSN not set; ClickHouse integration test")
+	cfg := config.FromEnv()
+	if cfg.ClickHouse.DSN == "" {
+		t.Skip(config.EnvClickHouseDSN + " not set; ClickHouse integration test")
 	}
 
-	db, err := Open(Options{DSN: dsn, MaxOpen: 2})
+	db, err := Open(Options{DSN: cfg.ClickHouse.DSN, MaxOpen: 2})
 	if err != nil {
 		t.Fatal(err)
 	}

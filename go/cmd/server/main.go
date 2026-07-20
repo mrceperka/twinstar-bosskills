@@ -14,6 +14,7 @@ import (
 	"twinstar-bosskills/internal/api"
 	"twinstar-bosskills/internal/cache"
 	"twinstar-bosskills/internal/ch"
+	"twinstar-bosskills/internal/config"
 	"twinstar-bosskills/internal/realm"
 	"twinstar-bosskills/internal/web/server"
 )
@@ -23,18 +24,14 @@ var version = "dev"
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	logger = logger.With("version", version)
+	cfg := config.FromEnv()
 
-	dsn := os.Getenv("BK_CH_DSN")
-	if dsn == "" {
-		logger.Error("missing BK_CH_DSN")
+	if err := cfg.RequireClickHouseDSN(); err != nil {
+		logger.Error("missing config", "err", err)
 		os.Exit(2)
 	}
-	addr := os.Getenv("BK_HTTP_ADDR")
-	if addr == "" {
-		addr = ":3000"
-	}
 
-	db, err := ch.Open(ch.Options{DSN: dsn})
+	db, err := ch.Open(ch.Options{DSN: cfg.ClickHouse.DSN})
 	if err != nil {
 		logger.Error("ch.Open", "err", err)
 		os.Exit(1)
@@ -49,23 +46,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	iconDir := os.Getenv("BK_ICON_DIR")
-	if iconDir == "" {
-		iconDir = "./var/icons"
-	}
-	icons, err := cache.NewIconDisk(iconDir)
+	icons, err := cache.NewIconDisk(cfg.Cache.IconDir)
 	if err != nil {
 		logger.Error("icon cache init", "err", err)
 		os.Exit(1)
 	}
 
-	apiBase := os.Getenv("BK_TWINSTAR_API_URL")
-	apiClient := api.NewClient(apiBase)
-	itemDir := os.Getenv("BK_ITEM_DIR")
-	if itemDir == "" {
-		itemDir = "./var/items"
-	}
-	items, err := cache.NewItemDisk(itemDir, apiClient)
+	apiClient := api.NewClient(cfg.Twinstar.APIURL)
+	items, err := cache.NewItemDisk(cfg.Cache.ItemDir, apiClient)
 	if err != nil {
 		logger.Error("item cache init", "err", err)
 		os.Exit(1)
@@ -81,13 +69,13 @@ func main() {
 		Logger:      logger,
 		Icons:       icons,
 		Items:       items,
-		APIBase:     apiBase,
-		SecretGuild: os.Getenv("SECRET_TOKEN_GUILD"),
-		SecretAdmin: os.Getenv("SECRET_TOKEN_ADMIN"),
+		APIBase:     cfg.Twinstar.APIURL,
+		SecretGuild: cfg.Secrets.GuildToken,
+		SecretAdmin: cfg.Secrets.AdminToken,
 	})
 
 	srv := &http.Server{
-		Addr:              addr,
+		Addr:              cfg.HTTP.Addr,
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
@@ -97,7 +85,7 @@ func main() {
 
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("server listening", "addr", addr)
+		logger.Info("server listening", "addr", cfg.HTTP.Addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}

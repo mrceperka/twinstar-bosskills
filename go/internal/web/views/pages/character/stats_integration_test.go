@@ -2,38 +2,35 @@ package character
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
 	"twinstar-bosskills/internal/api"
 	"twinstar-bosskills/internal/ch"
+	"twinstar-bosskills/internal/config"
 )
 
 func TestStatsInsertClickHouseSmoke(t *testing.T) {
-	if os.Getenv("BK_STATS_INSERT_SMOKE") != "1" {
-		t.Skip("set BK_STATS_INSERT_SMOKE=1 to run")
+	cfg := config.FromEnv()
+	if !cfg.StatsSmoke.Enabled {
+		t.Skip("set " + config.EnvStatsInsertSmoke + "=1 to run")
 	}
-	dsn := os.Getenv("BK_CH_DSN")
-	if dsn == "" {
-		t.Skip("BK_CH_DSN is empty")
+	if cfg.ClickHouse.DSN == "" {
+		t.Skip(config.EnvClickHouseDSN + " is empty")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	db, err := ch.Open(ch.Options{DSN: dsn, MaxOpen: 1})
+	db, err := ch.Open(ch.Options{DSN: cfg.ClickHouse.DSN, MaxOpen: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
 
-	characterName := os.Getenv("BK_STATS_SMOKE_CHARACTER")
-	if characterName == "" {
-		characterName = "Plaguis"
-	}
+	characterName := cfg.StatsSmoke.CharacterName
 
-	cli := api.NewClient(os.Getenv("BK_TWINSTAR_API_URL"))
+	cli := api.NewClient(cfg.Twinstar.APIURL)
 	payload, err := cli.GetCharacterStats(ctx, "Helios", characterName)
 	if err != nil {
 		t.Fatal(err)
@@ -78,18 +75,18 @@ func statsViewHasMetric(vm StatsViewModel, label string) bool {
 }
 
 func TestSpecSummaryClickHouseSmoke(t *testing.T) {
-	if os.Getenv("BK_STATS_INSERT_SMOKE") != "1" {
-		t.Skip("set BK_STATS_INSERT_SMOKE=1 to run")
+	cfg := config.FromEnv()
+	if !cfg.StatsSmoke.Enabled {
+		t.Skip("set " + config.EnvStatsInsertSmoke + "=1 to run")
 	}
-	dsn := os.Getenv("BK_CH_DSN")
-	if dsn == "" {
-		t.Skip("BK_CH_DSN is empty")
+	if cfg.ClickHouse.DSN == "" {
+		t.Skip(config.EnvClickHouseDSN + " is empty")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	db, err := ch.Open(ch.Options{DSN: dsn, MaxOpen: 1})
+	db, err := ch.Open(ch.Options{DSN: cfg.ClickHouse.DSN, MaxOpen: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

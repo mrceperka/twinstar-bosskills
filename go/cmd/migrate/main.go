@@ -16,11 +16,13 @@ import (
 	"syscall"
 
 	"twinstar-bosskills/internal/ch"
+	"twinstar-bosskills/internal/config"
 	"twinstar-bosskills/migrations"
 )
 
 func main() {
-	dsn := flag.String("dsn", os.Getenv("BK_CH_DSN"), "ClickHouse DSN (defaults to $BK_CH_DSN)")
+	cfg := config.FromEnv()
+	dsn := flag.String("dsn", cfg.ClickHouse.DSN, "ClickHouse DSN (defaults to $"+config.EnvClickHouseDSN+")")
 	flag.Parse()
 
 	args := flag.Args()
@@ -32,7 +34,7 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	if *dsn == "" {
-		logger.Error("missing DSN; set --dsn or $BK_CH_DSN")
+		logger.Error("missing DSN", "flag", "--dsn", "env", config.EnvClickHouseDSN)
 		os.Exit(2)
 	}
 
