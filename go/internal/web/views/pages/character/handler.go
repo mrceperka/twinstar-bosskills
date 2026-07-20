@@ -192,13 +192,13 @@ func RankingsHandler(deps Deps) http.HandlerFunc {
 		}
 
 		dpsGroups, hpsGroups := buildBossGroups(rankRows, killDetails, bossMeta, expansion, currentSpec)
+		raidGroups := buildRankingRaidGroups(dpsGroups, hpsGroups, bossMeta)
 		specButtons := buildSpecButtons(rankRows, currentSpec, realmName, name)
 
 		vm := RankingsViewModel{
 			Realm:       realmName,
 			CharName:    name,
-			DPSGroups:   dpsGroups,
-			HPSGroups:   hpsGroups,
+			RaidGroups:  raidGroups,
 			SpecButtons: specButtons,
 			CurrentSpec: currentSpec,
 		}
@@ -464,8 +464,10 @@ func loadBestKillDetails(ctx context.Context, db *sql.DB, realmName string, guid
 }
 
 type bossMeta struct {
-	Name     string
-	Position uint16
+	Name         string
+	RaidName     string
+	Position     uint16
+	RaidPosition uint16
 }
 
 func buildBossGroups(rows []rankRow, details map[bossKey]killDetail, meta map[uint32]bossMeta, expansion int, specFilter int) (dpsGroups, hpsGroups []BossGroup) {
@@ -561,6 +563,80 @@ func buildBossGroups(rows []rankRow, details map[bossKey]killDetail, meta map[ui
 	})
 
 	return dpsGroups, hpsGroups
+}
+
+func buildRankingRaidGroups(dpsGroups, hpsGroups []BossGroup, meta map[uint32]bossMeta) []RankingRaidGroup {
+	type raidBuilder struct {
+		Name     string
+		Position uint16
+		Bosses   map[uint32]*RankingBossGroup
+	}
+
+	raids := map[string]*raidBuilder{}
+	ensureBoss := func(group BossGroup) *RankingBossGroup {
+		m := meta[group.BossID]
+		if m.RaidName == "" {
+			return nil
+		}
+		raid, ok := raids[m.RaidName]
+		if !ok {
+			raid = &raidBuilder{
+				Name:     m.RaidName,
+				Position: m.RaidPosition,
+				Bosses:   map[uint32]*RankingBossGroup{},
+			}
+			raids[m.RaidName] = raid
+		}
+		if raid.Position == 0 {
+			raid.Position = m.RaidPosition
+		}
+		boss, ok := raid.Bosses[group.BossID]
+		if !ok {
+			boss = &RankingBossGroup{
+				BossID: group.BossID,
+				Name:   group.Name,
+			}
+			raid.Bosses[group.BossID] = boss
+		}
+		return boss
+	}
+
+	for _, group := range dpsGroups {
+		if boss := ensureBoss(group); boss != nil {
+			boss.DPSEntries = group.Entries
+		}
+	}
+	for _, group := range hpsGroups {
+		if boss := ensureBoss(group); boss != nil {
+			boss.HPSEntries = group.Entries
+		}
+	}
+
+	out := make([]RankingRaidGroup, 0, len(raids))
+	for _, raid := range raids {
+		bosses := make([]RankingBossGroup, 0, len(raid.Bosses))
+		for _, boss := range raid.Bosses {
+			bosses = append(bosses, *boss)
+		}
+		sort.Slice(bosses, func(i, j int) bool {
+			oi := meta[bosses[i].BossID].Position
+			oj := meta[bosses[j].BossID].Position
+			if oi != oj {
+				return oi < oj
+			}
+			return bosses[i].Name < bosses[j].Name
+		})
+		out = append(out, RankingRaidGroup{Name: raid.Name, Bosses: bosses})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		pi := raids[out[i].Name].Position
+		pj := raids[out[j].Name].Position
+		if pi != pj {
+			return pi > pj
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
 }
 
 func buildSpecButtons(rows []rankRow, currentSpec int, realmName, charName string) []SpecButton {
@@ -1007,16 +1083,24 @@ func loadBossMeta(ctx context.Context, db *sql.DB, realmName string, ids []uint3
 	}
 	args := make([]any, 0, len(ids)+1)
 	args = append(args, realmName)
-	ph := make([]byte, 0, len(ids)*2)
-	for i, id := range ids {
-		if i > 0 {
-			ph = append(ph, ',')
-		}
-		ph = append(ph, '?')
+	ph := sqlutil.Placeholders(len(ids))
+	for _, id := range ids {
 		args = append(args, id)
 	}
-	q := "SELECT remote_id, name, position FROM boss FINAL " +
-		"WHERE realm = ? AND remote_id IN (" + string(ph) + ")"
+	args = append(args, realmName)
+	q := `
+		SELECT b.remote_id, b.name, b.raid_name, b.position, ifNull(r.position, 0)
+		FROM (
+			SELECT remote_id, name, raid_name, position
+			FROM boss FINAL
+			WHERE realm = ? AND remote_id IN (` + ph + `)
+		) AS b
+		LEFT ANY JOIN (
+			SELECT name, position
+			FROM raid FINAL
+			WHERE realm = ?
+		) AS r ON r.name = b.raid_name
+	`
 	rows, err := db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -1024,12 +1108,12 @@ func loadBossMeta(ctx context.Context, db *sql.DB, realmName string, ids []uint3
 	defer rows.Close()
 	for rows.Next() {
 		var id uint32
-		var name string
-		var position uint16
-		if err := rows.Scan(&id, &name, &position); err != nil {
+		var name, raidName string
+		var position, raidPosition uint16
+		if err := rows.Scan(&id, &name, &raidName, &position, &raidPosition); err != nil {
 			return nil, err
 		}
-		out[id] = bossMeta{Name: name, Position: position}
+		out[id] = bossMeta{Name: name, RaidName: raidName, Position: position, RaidPosition: raidPosition}
 	}
 	return out, rows.Err()
 }

@@ -82,8 +82,7 @@ type KillRow struct {
 type RankingsViewModel struct {
 	Realm       string
 	CharName    string
-	DPSGroups   []BossGroup
-	HPSGroups   []BossGroup
+	RaidGroups  []RankingRaidGroup
 	SpecButtons []SpecButton
 	CurrentSpec int
 }
@@ -103,6 +102,18 @@ type BossGroup struct {
 	BossID  uint32
 	Name    string
 	Entries []RankingEntry
+}
+
+type RankingRaidGroup struct {
+	Name   string
+	Bosses []RankingBossGroup
+}
+
+type RankingBossGroup struct {
+	BossID     uint32
+	Name       string
+	DPSEntries []RankingEntry
+	HPSEntries []RankingEntry
 }
 
 type SpecButton struct {
@@ -394,64 +405,94 @@ templ RankingsFragment(vm RankingsViewModel) {
 			}
 		</div>
 	}
-	if len(vm.DPSGroups) == 0 && len(vm.HPSGroups) == 0 {
+	if len(vm.RaidGroups) == 0 {
 		<p class="text-bk-muted text-sm">No ranking data yet.</p>
 	} else {
-		<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-			<div class="space-y-4">
-				<div class="text-xs font-semibold uppercase tracking-wider text-bk-muted">DPS</div>
-				if len(vm.DPSGroups) == 0 {
-					<p class="text-bk-muted text-sm">-</p>
-				} else {
-					for _, bg := range vm.DPSGroups {
-						@rankingBossGroup(vm.Realm, bg)
-					}
-				}
-			</div>
-			<div class="space-y-4">
-				<div class="text-xs font-semibold uppercase tracking-wider text-bk-muted">HPS</div>
-				if len(vm.HPSGroups) == 0 {
-					<p class="text-bk-muted text-sm">-</p>
-				} else {
-					for _, bg := range vm.HPSGroups {
-						@rankingBossGroup(vm.Realm, bg)
-					}
-				}
-			</div>
+		<div class="space-y-2">
+			for _, raid := range vm.RaidGroups {
+				@rankingRaidGroup(vm.Realm, raid)
+			}
 		</div>
 	}
 }
 
-templ rankingBossGroup(realmName string, bg BossGroup) {
-	<div class="space-y-1.5">
-		<div class="text-sm font-medium">
-			<a href={ viewhelpers.BossHref(realmName, bg.BossID) } class="hover:text-bk-accent">{ bg.Name }</a>
-		</div>
-		<div class="space-y-1">
-			for _, e := range bg.Entries {
-				<div class="flex items-center gap-2 text-sm">
-					if e.Rank == 1 {
-						<span class="text-xs font-bold text-yellow-400 w-8">#1</span>
-					} else if e.Rank <= 10 {
-						<span class="text-xs font-semibold text-slate-300 w-8">{ viewhelpers.RankLabel(e.Rank) }</span>
-					} else {
-						<span class="text-xs text-bk-muted w-8">{ viewhelpers.RankLabel(e.Rank) }</span>
-					}
-					<span class="text-bk-muted text-xs w-16">{ e.ModeLabel }</span>
-					<span class="inline-flex items-center gap-1">
-						@components.ClassSpecIcons(realmName, e.Class, e.Spec)
-						if e.KillID != "" {
-							<a href={ viewhelpers.BossKillHref(realmName, e.KillID) } class="font-mono hover:text-bk-accent">{ format.Int64Ctx(ctx, e.Value) }</a>
-						} else {
-							<span class="font-mono">{ format.Int64Ctx(ctx, e.Value) }</span>
-						}
-					</span>
-					if e.Ilvl > 0 {
-						<span class="text-bk-muted text-xs">{ viewhelpers.Ilvl(e.Ilvl) }ilvl</span>
-					}
-				</div>
+templ rankingRaidGroup(realmName string, raid RankingRaidGroup) {
+	<details class="group rounded-lg border border-bk-border bg-black/20">
+		<summary class="sticky top-0 z-30 flex cursor-pointer list-none items-center gap-3 rounded-t-lg bg-bk-bg/95 px-4 py-3 backdrop-blur hover:bg-bk-accent-soft">
+			<img
+				src={ viewhelpers.RaidIconHref(raid.Name) }
+				alt=""
+				loading="lazy"
+				width="36" height="36"
+				class="h-9 w-9 shrink-0 rounded-md border border-bk-border object-cover"
+			/>
+			<div class="min-w-0">
+				<div class="truncate font-semibold text-bk-fg">{ raid.Name }</div>
+				<div class="text-xs text-bk-muted">{ viewhelpers.Itoa(len(raid.Bosses)) } ranked encounters</div>
+			</div>
+			<div class="ml-auto flex items-center gap-3 text-xs text-bk-muted">
+				<span>{ viewhelpers.Itoa(len(raid.Bosses)) }</span>
+				<span class="transition group-open:rotate-180">⌄</span>
+			</div>
+		</summary>
+		<div class="grid gap-3 border-t border-bk-border p-3 md:grid-cols-2 xl:grid-cols-3">
+			for _, boss := range raid.Bosses {
+				@rankingBossGroup(realmName, boss)
 			}
 		</div>
+	</details>
+}
+
+templ rankingBossGroup(realmName string, bg RankingBossGroup) {
+	<div class="overflow-hidden rounded-md border border-bk-border bg-bk-bg/60">
+		<div class="flex flex-wrap items-baseline gap-2 border-b border-bk-border bg-black/20 px-3 py-2">
+			<h3 class="text-sm font-medium">
+				<a href={ viewhelpers.BossHref(realmName, bg.BossID) } class="hover:text-bk-accent">{ bg.Name }</a>
+			</h3>
+		</div>
+		<div class="grid gap-3 p-3 sm:grid-cols-2">
+			<div class="min-w-0 space-y-2">
+				<h4 class="text-xs font-semibold uppercase tracking-wide text-bk-accent">DPS</h4>
+				@rankingEntryList(realmName, bg.DPSEntries)
+			</div>
+			<div class="min-w-0 space-y-2">
+				<h4 class="text-xs font-semibold uppercase tracking-wide text-bk-secondary">HPS</h4>
+				@rankingEntryList(realmName, bg.HPSEntries)
+			</div>
+		</div>
+	</div>
+}
+
+templ rankingEntryList(realmName string, entries []RankingEntry) {
+	if len(entries) == 0 {
+		<p class="text-bk-muted text-sm">-</p>
+	} else {
+		<div class="space-y-1">
+			for _, e := range entries {
+				@rankingEntry(realmName, e)
+			}
+		</div>
+	}
+}
+
+templ rankingEntry(realmName string, e RankingEntry) {
+	<div class="inline-flex w-fit max-w-full items-center gap-1.5 rounded border border-bk-border bg-black/20 px-2 py-1 text-xs">
+		if e.Rank == 1 {
+			<span class="shrink-0 font-bold text-yellow-400">#1</span>
+		} else if e.Rank <= 10 {
+			<span class="shrink-0 font-semibold text-slate-300">{ viewhelpers.RankLabel(e.Rank) }</span>
+		} else {
+			<span class="shrink-0 text-bk-muted">{ viewhelpers.RankLabel(e.Rank) }</span>
+		}
+		<span class="shrink-0 text-bk-muted">{ e.ModeLabel }</span>
+		<span class="inline-flex min-w-0 items-center gap-1">
+			@components.ClassSpecIcons(realmName, e.Class, e.Spec)
+			if e.KillID != "" {
+				<a href={ viewhelpers.BossKillHref(realmName, e.KillID) } class="truncate font-mono hover:text-bk-accent">{ format.Int64Ctx(ctx, e.Value) }</a>
+			} else {
+				<span class="truncate font-mono">{ format.Int64Ctx(ctx, e.Value) }</span>
+			}
+		</span>
 	</div>
 }
 
