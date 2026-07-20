@@ -115,7 +115,8 @@ type SpecButton struct {
 templ Page(vm ViewModel) {
 	@layouts.Root(vm.Meta) {
 		<div class="space-y-6">
-			<header class="flex flex-wrap items-baseline justify-between gap-4">
+			<header class="rounded border border-bk-border bg-bk-panel p-4">
+				<div class="flex flex-wrap items-start justify-between gap-4">
 				<div>
 					<div class="text-xs uppercase tracking-wide text-bk-muted inline-flex items-center gap-1">
 						@components.ClassSpecIcons(vm.Realm, vm.Char.Class, 0)
@@ -148,6 +149,7 @@ templ Page(vm ViewModel) {
 						</dd>
 					}
 				</dl>
+				</div>
 			</header>
 			@StatsPanelShell(vm)
 			@ActivityPanelShell(vm)
@@ -159,7 +161,7 @@ templ Page(vm ViewModel) {
 				hx-swap="innerHTML"
 			>
 				<summary class="flex cursor-pointer select-none items-center gap-2 px-4 py-3 font-semibold">
-					@components.StatsIcon("h-5 w-5 shrink-0 text-bk-accent")
+					@components.RankingsIcon("h-5 w-5 shrink-0 text-bk-accent")
 					<span>Overall rankings by DPS and HPS</span>
 				</summary>
 				<div id="rankings-content" class="px-4 pb-4">

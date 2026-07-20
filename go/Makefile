@@ -137,11 +137,33 @@ rename-repair:
 # server. wgo only restarts on hand-written .go changes (not _templ.go).
 dev: gen
 	@echo "Starting dev: templ + tailwind + wgo. Ctrl-C to stop."
-	@trap 'kill 0' INT; \
-		$(TEMPL) generate --watch & \
-		$(TAILWIND) -i $(INPUT_CSS) -o $(OUTPUT_CSS) --watch & \
-		$(WGO) -file=.go -xfile=_templ.go $(GO) run ./cmd/server & \
-		wait
+	@set -eu; \
+	kill_tree() { \
+		pid="$$1"; \
+		if command -v pgrep >/dev/null 2>&1; then \
+			for child in $$(pgrep -P "$$pid" 2>/dev/null || true); do \
+				kill_tree "$$child"; \
+			done; \
+		fi; \
+		kill "$$pid" 2>/dev/null || true; \
+	}; \
+	cleanup() { \
+		status=$$?; \
+		trap - INT TERM EXIT; \
+		echo "Stopping dev processes..."; \
+		for pid in $${templ_pid:-} $${tailwind_pid:-} $${wgo_pid:-}; do \
+			if [ -n "$$pid" ] && kill -0 "$$pid" 2>/dev/null; then \
+				kill_tree "$$pid"; \
+			fi; \
+		done; \
+		wait 2>/dev/null || true; \
+		exit "$$status"; \
+	}; \
+	trap cleanup INT TERM EXIT; \
+	$(TEMPL) generate --watch & templ_pid=$$!; \
+	$(TAILWIND) -i $(INPUT_CSS) -o $(OUTPUT_CSS) --watch & tailwind_pid=$$!; \
+	$(WGO) -file=.go -xfile=_templ.go $(GO) run ./cmd/server & wgo_pid=$$!; \
+	wait
 
 # ---- quality ----------------------------------------------------------------
 test:

@@ -105,11 +105,14 @@ func TestPageRenderSpecSummaryHighlightsMostPlayed(t *testing.T) {
 	html := sb.String()
 	for _, want := range []string{
 		`type=talent&amp;id=265&amp;realm=Helios`,
+		`<header class="rounded border border-bk-border bg-bk-panel p-4">`,
 		"10",
 		"Most played",
 		"border-bk-accent",
 		`type=talent&amp;id=266&amp;realm=Helios`,
 		"5",
+		"Overall rankings by DPS and HPS",
+		`<path d="M8 4h8v5a4 4 0 0 1-8 0V4z"></path>`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("missing %q in HTML:\n%s", want, html)

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"net/http"
 	"sort"
+	"strconv"
 	"time"
 
 	"twinstar-bosskills/internal/collection"
@@ -79,40 +80,39 @@ func Handler(deps Deps) http.HandlerFunc {
 		now := time.Now().UTC()
 		win := domain.RaidLock(now, offset)
 
-		allRows, err := loadAllRankRows(ctx, deps.DB, realmName, win.Start, win.End, mode, expansion)
+		if r.URL.Query().Get("partial") == "raid" {
+			raidName := r.URL.Query().Get("raid")
+			if raidName == "" {
+				http.Error(w, "missing raid", http.StatusBadRequest)
+				return
+			}
+			content, err := loadRaidRankContent(ctx, deps.DB, realmName, raidName, win, mode, expansion, classMode)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_ = RaidRanksFragment(content).Render(r.Context(), w)
+			return
+		}
+
+		bossIDs, err := loadRankBossIDs(ctx, deps.DB, realmName, win.Start, win.End, mode, expansion)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		// Collect all unique boss IDs and GUIDs.
-		bossIDSet := map[uint32]bool{}
-		guidSet := map[uint64]bool{}
-		for _, r := range allRows {
-			bossIDSet[r.BossID] = true
-			guidSet[r.GUID] = true
-		}
-
-		bossInfos, err := loadBossInfos(ctx, deps.DB, realmName, collection.Keys(bossIDSet))
+		bossInfos, err := loadBossInfos(ctx, deps.DB, realmName, bossIDs)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
-		names, err := loadNames(ctx, deps.DB, realmName, collection.Keys(guidSet))
+		raidCounts, err := loadRaidBossCounts(ctx, deps.DB, realmName, rankRaidNames(bossIDs, bossInfos))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
-		killDetails, err := loadKillDetails(ctx, deps.DB, realmName, win.Start, win.End, mode, expansion, collection.Keys(guidSet))
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		dpsRaids := buildRaidGroups(allRows, bossInfos, killDetails, names, "dps", expansion)
-		hpsRaids := buildRaidGroups(allRows, bossInfos, killDetails, names, "hps", expansion)
+		raids := buildRaidSummaries(bossIDs, bossInfos, raidCounts)
 
 		vm := ViewModel{
 			Meta: layouts.PageMeta{
@@ -129,8 +129,7 @@ func Handler(deps Deps) http.HandlerFunc {
 			Difficulties: buildDifficulties(expansion, classMode),
 			SelectedMode: mode,
 			ModeLabel:    modeLabel(expansion, mode, classMode),
-			DPSRaids:     dpsRaids,
-			HPSRaids:     hpsRaids,
+			Raids:        raids,
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = Page(vm).Render(r.Context(), w)
@@ -156,8 +155,68 @@ func modeLabel(expansion, mode int, classMode bool) string {
 	return wow.Difficulty(expansion, mode)
 }
 
-func loadAllRankRows(ctx context.Context, db *sql.DB, realmName string, lockStart, lockEnd time.Time, mode, expansion int) ([]rawRank, error) {
+func loadRankBossIDs(ctx context.Context, db *sql.DB, realmName string, lockStart, lockEnd time.Time, mode, expansion int) ([]uint32, error) {
 	if realm.IsVanilla(expansion) {
+		q := `
+			SELECT boss_remote_id
+			FROM boss_kill ARRAY JOIN players
+			WHERE realm = ?
+			  AND kill_time >= ? AND kill_time < ?
+			  AND length > 0
+			  AND players.class > 0
+			GROUP BY boss_remote_id
+		`
+		rows, err := db.QueryContext(ctx, q, realmName, lockStart, lockEnd)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		var out []uint32
+		for rows.Next() {
+			var id uint32
+			if err := rows.Scan(&id); err != nil {
+				return nil, err
+			}
+			out = append(out, id)
+		}
+		return out, rows.Err()
+	}
+
+	const q = `
+		SELECT boss_remote_id
+		FROM raid_lock_rankings
+		WHERE realm = ?
+		  AND raid_lock = toDate(?)
+		  AND mode = ?
+		GROUP BY boss_remote_id
+	`
+	rows, err := db.QueryContext(ctx, q, realmName, lockStart, uint8(mode))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []uint32
+	for rows.Next() {
+		var id uint32
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+func loadRankRowsForBosses(ctx context.Context, db *sql.DB, realmName string, lockStart, lockEnd time.Time, mode, expansion int, bossIDs []uint32) ([]rawRank, error) {
+	if len(bossIDs) == 0 {
+		return nil, nil
+	}
+	ph := sqlutil.Placeholders(len(bossIDs))
+	if realm.IsVanilla(expansion) {
+		args := make([]any, 0, len(bossIDs)+3)
+		args = append(args, realmName, lockStart, lockEnd)
+		for _, id := range bossIDs {
+			args = append(args, id)
+		}
 		q := `
 			SELECT boss_remote_id,
 			       players.class,
@@ -169,9 +228,10 @@ func loadAllRankRows(ctx context.Context, db *sql.DB, realmName string, lockStar
 			  AND kill_time >= ? AND kill_time < ?
 			  AND length > 0
 			  AND players.class > 0
+			  AND boss_remote_id IN (` + ph + `)
 			GROUP BY boss_remote_id, players.class, players.guid
 		`
-		rows, err := db.QueryContext(ctx, q, realmName, lockStart, lockEnd)
+		rows, err := db.QueryContext(ctx, q, args...)
 		if err != nil {
 			return nil, err
 		}
@@ -187,7 +247,12 @@ func loadAllRankRows(ctx context.Context, db *sql.DB, realmName string, lockStar
 		return out, rows.Err()
 	}
 
-	const q = `
+	args := make([]any, 0, len(bossIDs)+3)
+	args = append(args, realmName, lockStart, uint8(mode))
+	for _, id := range bossIDs {
+		args = append(args, id)
+	}
+	q := `
 		SELECT boss_remote_id, talent_spec, guid,
 		       maxMerge(dps_state) AS dps,
 		       maxMerge(hps_state) AS hps
@@ -195,9 +260,10 @@ func loadAllRankRows(ctx context.Context, db *sql.DB, realmName string, lockStar
 		WHERE realm = ?
 		  AND raid_lock = toDate(?)
 		  AND mode = ?
+		  AND boss_remote_id IN (` + ph + `)
 		GROUP BY realm, raid_lock, boss_remote_id, mode, talent_spec, guid
 	`
-	rows, err := db.QueryContext(ctx, q, realmName, lockStart, uint8(mode))
+	rows, err := db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -256,6 +322,39 @@ func loadBossInfos(ctx context.Context, db *sql.DB, realmName string, ids []uint
 			BossPosition: bossPos,
 			RaidPosition: raidPos,
 		}
+	}
+	return out, rows.Err()
+}
+
+func loadRaidBossCounts(ctx context.Context, db *sql.DB, realmName string, raidNames []string) (map[string]int, error) {
+	out := map[string]int{}
+	if len(raidNames) == 0 {
+		return out, nil
+	}
+	args := make([]any, 0, len(raidNames)+1)
+	args = append(args, realmName)
+	ph := sqlutil.Placeholders(len(raidNames))
+	for _, name := range raidNames {
+		args = append(args, name)
+	}
+	q := `
+		SELECT raid_name, count()
+		FROM boss FINAL
+		WHERE realm = ? AND raid_name IN (` + ph + `)
+		GROUP BY raid_name
+	`
+	rows, err := db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		var count uint64
+		if err := rows.Scan(&name, &count); err != nil {
+			return nil, err
+		}
+		out[name] = int(count)
 	}
 	return out, rows.Err()
 }
@@ -341,6 +440,155 @@ func loadKillDetails(ctx context.Context, db *sql.DB, realmName string, lockStar
 		}
 	}
 	return out, rows.Err()
+}
+
+func loadRaidRankContent(ctx context.Context, db *sql.DB, realmName, raidName string, win domain.RaidLockWindow, mode, expansion int, classMode bool) (RaidRankContent, error) {
+	content := RaidRankContent{
+		Realm:        realmName,
+		ClassMode:    classMode,
+		SelectedMode: mode,
+		RaidName:     raidName,
+	}
+
+	bossIDs, err := loadRankBossIDs(ctx, db, realmName, win.Start, win.End, mode, expansion)
+	if err != nil {
+		return content, err
+	}
+	bossInfos, err := loadBossInfos(ctx, db, realmName, bossIDs)
+	if err != nil {
+		return content, err
+	}
+	raidCounts, err := loadRaidBossCounts(ctx, db, realmName, rankRaidNames(bossIDs, bossInfos))
+	if err != nil {
+		return content, err
+	}
+	var summary RaidGroup
+	for _, raid := range buildRaidSummaries(bossIDs, bossInfos, raidCounts) {
+		if raid.Name == raidName {
+			summary = raid
+			break
+		}
+	}
+	if len(summary.Bosses) == 0 {
+		return content, nil
+	}
+
+	raidBossIDs := make([]uint32, 0, len(summary.Bosses))
+	for _, boss := range summary.Bosses {
+		raidBossIDs = append(raidBossIDs, boss.BossID)
+	}
+	allRows, err := loadRankRowsForBosses(ctx, db, realmName, win.Start, win.End, mode, expansion, raidBossIDs)
+	if err != nil {
+		return content, err
+	}
+
+	guidSet := map[uint64]bool{}
+	for _, r := range allRows {
+		guidSet[r.GUID] = true
+	}
+	names, err := loadNames(ctx, db, realmName, collection.Keys(guidSet))
+	if err != nil {
+		return content, err
+	}
+	killDetails, err := loadKillDetails(ctx, db, realmName, win.Start, win.End, mode, expansion, collection.Keys(guidSet))
+	if err != nil {
+		return content, err
+	}
+
+	dpsRaids := buildRaidGroups(allRows, bossInfos, killDetails, names, "dps", expansion)
+	hpsRaids := buildRaidGroups(allRows, bossInfos, killDetails, names, "hps", expansion)
+	return buildRaidRankContent(content, summary, dpsRaids, hpsRaids), nil
+}
+
+func rankRaidNames(bossIDs []uint32, bossInfos map[uint32]bossInfoRec) []string {
+	seen := map[string]bool{}
+	for _, bossID := range bossIDs {
+		name := bossInfos[bossID].RaidName
+		if name != "" {
+			seen[name] = true
+		}
+	}
+	return collection.Keys(seen)
+}
+
+func buildRaidSummaries(bossIDs []uint32, bossInfos map[uint32]bossInfoRec, raidCounts map[string]int) []RaidGroup {
+	type raidSummary struct {
+		Name     string
+		Position uint16
+		Bosses   []BossRankGroup
+	}
+	raidMap := map[string]*raidSummary{}
+	for _, bossID := range bossIDs {
+		info := bossInfos[bossID]
+		raidName := info.RaidName
+		if raidName == "" {
+			continue
+		}
+		bossName := info.Name
+		if bossName == "" {
+			bossName = "Boss " + strconv.FormatUint(uint64(bossID), 10)
+		}
+		raid, ok := raidMap[raidName]
+		if !ok {
+			raid = &raidSummary{Name: raidName, Position: info.RaidPosition}
+			raidMap[raidName] = raid
+		}
+		if raid.Position == 0 {
+			raid.Position = info.RaidPosition
+		}
+		raid.Bosses = append(raid.Bosses, BossRankGroup{
+			BossID:   bossID,
+			BossName: bossName,
+		})
+	}
+
+	out := make([]RaidGroup, 0, len(raidMap))
+	for _, raid := range raidMap {
+		sort.Slice(raid.Bosses, func(i, j int) bool {
+			oi := bossInfos[raid.Bosses[i].BossID].BossPosition
+			oj := bossInfos[raid.Bosses[j].BossID].BossPosition
+			if oi != oj {
+				return oi < oj
+			}
+			return raid.Bosses[i].BossID < raid.Bosses[j].BossID
+		})
+		out = append(out, RaidGroup{Name: raid.Name, Bosses: raid.Bosses, TotalBosses: raidCounts[raid.Name]})
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		pi := raidMap[out[i].Name].Position
+		pj := raidMap[out[j].Name].Position
+		if pi != pj {
+			return pi > pj
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+func buildRaidRankContent(base RaidRankContent, summary RaidGroup, dpsRaids, hpsRaids []RaidGroup) RaidRankContent {
+	dpsByBoss := bossRankGroupsByID(dpsRaids)
+	hpsByBoss := bossRankGroupsByID(hpsRaids)
+	base.Bosses = make([]BossRankContent, 0, len(summary.Bosses))
+	for _, boss := range summary.Bosses {
+		base.Bosses = append(base.Bosses, BossRankContent{
+			BossID:     boss.BossID,
+			BossName:   boss.BossName,
+			DPSEntries: dpsByBoss[boss.BossID].Entries,
+			HPSEntries: hpsByBoss[boss.BossID].Entries,
+		})
+	}
+	return base
+}
+
+func bossRankGroupsByID(raids []RaidGroup) map[uint32]BossRankGroup {
+	out := map[uint32]BossRankGroup{}
+	for _, raid := range raids {
+		for _, boss := range raid.Bosses {
+			out[boss.BossID] = boss
+		}
+	}
+	return out
 }
 
 func buildRaidGroups(allRows []rawRank, bossInfos map[uint32]bossInfoRec, killDetails map[killDetailKey]killDetail, names map[uint64]string, metric string, expansion int) []RaidGroup {

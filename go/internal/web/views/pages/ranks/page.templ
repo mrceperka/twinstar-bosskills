@@ -19,8 +19,7 @@ type ViewModel struct {
 	Difficulties []DifficultyChoice
 	SelectedMode int
 	ModeLabel    string
-	DPSRaids     []RaidGroup
-	HPSRaids     []RaidGroup
+	Raids        []RaidGroup
 }
 
 type DifficultyChoice struct {
@@ -29,14 +28,30 @@ type DifficultyChoice struct {
 }
 
 type RaidGroup struct {
-	Name   string
-	Bosses []BossRankGroup
+	Name        string
+	Bosses      []BossRankGroup
+	TotalBosses int
 }
 
 type BossRankGroup struct {
 	BossID   uint32
 	BossName string
 	Entries  []Rank
+}
+
+type RaidRankContent struct {
+	Realm        string
+	ClassMode    bool
+	SelectedMode int
+	RaidName     string
+	Bosses       []BossRankContent
+}
+
+type BossRankContent struct {
+	BossID     uint32
+	BossName   string
+	DPSEntries []Rank
+	HPSEntries []Rank
 }
 
 type Rank struct {
@@ -55,9 +70,14 @@ type Rank struct {
 
 templ Page(vm ViewModel) {
 	@layouts.Root(vm.Meta) {
-		<div class="space-y-8">
-			<header class="flex flex-wrap items-baseline gap-3">
-				<h1 class="text-2xl font-semibold">{ vm.Realm } / Ranks</h1>
+		<div class="space-y-6">
+			<header class="flex flex-wrap items-end gap-4">
+				<div>
+					<h1 class="text-3xl font-semibold">Boss ranks</h1>
+					<p class="mt-1 max-w-2xl text-sm text-bk-muted">
+						Best player performances grouped by raid. Expand only the raid you want to inspect.
+					</p>
+				</div>
 				<div class="ml-auto flex items-center gap-3">
 					<span class="text-xs text-bk-muted">
 						{ vm.LockLabel }
@@ -66,33 +86,14 @@ templ Page(vm ViewModel) {
 					@difficultyTabs(vm)
 				</div>
 			</header>
-			<section class="space-y-6">
-				<h2 class="text-lg font-semibold">Top DPS ranks - { vm.ModeLabel }</h2>
-				if len(vm.DPSRaids) == 0 {
-					@components.EmptyState("No DPS data for this week yet.")
-				} else {
-					for _, raid := range vm.DPSRaids {
-						@raidSection(vm, raid, "DPS")
-					}
-				}
-			</section>
-			<section class="space-y-6">
-				<h2 class="text-lg font-semibold">Top HPS ranks - { vm.ModeLabel }</h2>
-				if len(vm.HPSRaids) == 0 {
-					@components.EmptyState("No HPS data for this week yet.")
-				} else {
-					for _, raid := range vm.HPSRaids {
-						@raidSection(vm, raid, "HPS")
-					}
-				}
-			</section>
+			@raidList(vm)
 		</div>
 	}
 }
 
 templ difficultyTabs(vm ViewModel) {
 	if !vm.ClassMode {
-		<div class="flex gap-1 text-xs">
+		<div class="flex flex-wrap gap-1 text-xs">
 			for _, d := range vm.Difficulties {
 				<a href={ templ.SafeURL(links.Ranks(vm.Realm) + "?difficulty=" + strconv.Itoa(d.Mode) + "&raidlock=" + strconv.Itoa(vm.LockOffset)) }
 				   class={ viewhelpers.TabActiveClass(d.Mode == vm.SelectedMode) }>
@@ -103,17 +104,101 @@ templ difficultyTabs(vm ViewModel) {
 	}
 }
 
-templ raidSection(vm ViewModel, raid RaidGroup, metric string) {
-	<div class="space-y-4">
-		for _, boss := range raid.Bosses {
+templ raidList(vm ViewModel) {
+	<section class="space-y-3">
+		<div class="flex flex-wrap items-center gap-3 text-sm text-bk-muted">
 			<div>
-				<h3 class="mb-2 font-medium">
-					{ raid.Name } -
-					<a href={ rankBossHref(vm, boss.BossID) } class="text-bk-accent hover:underline">{ boss.BossName }</a>
-				</h3>
-				@bossRankTable(vm, boss.Entries, metric)
+				<span class="font-medium text-bk-fg">{ viewhelpers.Itoa(totalBosses(vm.Raids)) }</span>
+				bosses in
+				<span class="font-medium text-bk-fg">{ viewhelpers.Itoa(len(vm.Raids)) }</span>
+				raids · { vm.ModeLabel }
+			</div>
+			<div class="ml-auto flex items-center gap-3 text-xs">
+				<span><span class="text-bk-accent">●</span> DPS</span>
+				<span><span class="text-bk-secondary">●</span> HPS</span>
+			</div>
+		</div>
+		if len(vm.Raids) == 0 {
+			@components.EmptyState("No rank data for this raid lock yet.")
+		} else {
+			<div class="space-y-2">
+				for _, raid := range vm.Raids {
+					@raidSummary(vm, raid)
+				}
 			</div>
 		}
+	</section>
+}
+
+templ raidSummary(vm ViewModel, raid RaidGroup) {
+	<details
+		class="group rounded-lg border border-bk-border bg-black/20"
+		hx-get={ rankRaidFragmentHref(vm, raid.Name) }
+		hx-target={ "#" + raidContentID(raid.Name) }
+		hx-trigger="toggle once"
+		hx-swap="innerHTML"
+	>
+		<summary class="sticky top-0 z-30 flex cursor-pointer list-none items-center gap-3 rounded-t-lg bg-bk-bg/95 px-4 py-3 backdrop-blur hover:bg-bk-accent-soft">
+			<img
+				src={ viewhelpers.RaidIconHref(raid.Name) }
+				alt=""
+				loading="lazy"
+				width="36" height="36"
+				class="h-9 w-9 shrink-0 rounded-md border border-bk-border object-cover"
+			/>
+			<div class="min-w-0">
+				<div class="truncate font-semibold text-bk-fg">{ raid.Name }</div>
+				<div class="text-xs text-bk-muted">
+					{ viewhelpers.Itoa(len(raid.Bosses)) } of { viewhelpers.Itoa(raidTotalBosses(raid)) } encounters
+				</div>
+			</div>
+			<div class="ml-auto flex items-center gap-3 text-xs text-bk-muted">
+				<div class="hidden h-1 w-24 rounded-full bg-bk-border sm:block">
+					<div class="h-1 rounded-full bg-bk-accent" style={ raidProgressStyle(raid) }></div>
+				</div>
+				<span>{ viewhelpers.Itoa(len(raid.Bosses)) } / { viewhelpers.Itoa(raidTotalBosses(raid)) }</span>
+				<span class="transition group-open:rotate-180">⌄</span>
+			</div>
+		</summary>
+		<div id={ raidContentID(raid.Name) } class="border-t border-bk-border">
+			<div class="px-4 py-3 text-sm text-bk-muted">
+				Loading is deferred until this raid is opened.
+				<a href={ rankRaidFragmentHref(vm, raid.Name) } class="ml-1">Load directly</a>
+			</div>
+		</div>
+	</details>
+}
+
+templ RaidRanksFragment(content RaidRankContent) {
+	<div class="space-y-4 p-4">
+		if len(content.Bosses) == 0 {
+			@components.EmptyState("No rank data for this raid.")
+		} else {
+			for _, boss := range content.Bosses {
+				@bossRankBlock(content, boss)
+			}
+		}
+	</div>
+}
+
+templ bossRankBlock(content RaidRankContent, boss BossRankContent) {
+	<div class="space-y-3 rounded-md border border-bk-border bg-bk-bg/60 p-3">
+		<div class="sticky top-16 z-20 -mx-3 -mt-3 flex flex-wrap items-baseline gap-2 border-b border-bk-border bg-bk-bg/95 px-3 py-2 backdrop-blur">
+			<h3 class="font-medium">
+				<a href={ rankContentBossHref(content, boss.BossID) } class="text-bk-accent hover:underline">{ boss.BossName }</a>
+			</h3>
+			<span class="text-xs text-bk-muted">{ content.RaidName }</span>
+		</div>
+		<div class="grid gap-4 xl:grid-cols-2">
+			<div class="min-w-0 space-y-2">
+				<h4 class="text-xs font-semibold uppercase tracking-wide text-bk-accent">DPS</h4>
+				@bossRankTable(rankTableContext(content), boss.DPSEntries, "DPS")
+			</div>
+			<div class="min-w-0 space-y-2">
+				<h4 class="text-xs font-semibold uppercase tracking-wide text-bk-secondary">HPS</h4>
+				@bossRankTable(rankTableContext(content), boss.HPSEntries, "HPS")
+			</div>
+		</div>
 	</div>
 }
 

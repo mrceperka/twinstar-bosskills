@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"twinstar-bosskills/internal/metric"
 	"twinstar-bosskills/internal/wow"
@@ -39,7 +38,7 @@ var curveLevelsCSV = func() string {
 // in a single round trip. Reads from boss_kill directly (no MV) so values
 // are always exact - this is feasible because the per-realm/boss/mode cell
 // rarely exceeds a few thousand rows. See migration 003 for the rationale.
-func loadSpecCurves(ctx context.Context, db *sql.DB, realmName string, id uint32, mode, specFilter, classFilter, expansion int, start, end time.Time) (dps, hps []SpecCurve, err error) {
+func loadSpecCurves(ctx context.Context, db *sql.DB, realmName string, id uint32, mode, specFilter, classFilter, expansion int, lock lockFilter) (dps, hps []SpecCurve, err error) {
 	groupExpr := "players.talent_spec"
 	if expansionIsClassMode(expansion) {
 		groupExpr = "players.class"
@@ -51,8 +50,9 @@ func loadSpecCurves(ctx context.Context, db *sql.DB, realmName string, id uint32
 			quantilesExact(` + curveLevelsCSV + `)(` + metric.SQLFloat64(metric.HealAbsorbArrayJoin) + `) AS hps_curve
 		FROM boss_kill ARRAY JOIN players
 		WHERE realm = ? AND boss_remote_id = ? AND mode = ? AND length > 0
-		  AND kill_time >= ? AND kill_time < ?`
-	args := []any{realmName, id, uint8(mode), start, end}
+	`
+	args := []any{realmName, id, uint8(mode)}
+	q, args = applyLockFilter(q, args, lock)
 	if !expansionIsClassMode(expansion) && specFilter > 0 {
 		q += " AND players.talent_spec = ?"
 		args = append(args, uint16(specFilter))

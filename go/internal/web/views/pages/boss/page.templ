@@ -19,6 +19,7 @@ type ViewModel struct {
 	SelectedMode     int
 	LockLabel        string
 	LockOffset       int
+	LockScoped       bool
 	SelectedSpec     int
 	SelectedClass    int
 	ClassMode        bool
@@ -97,6 +98,11 @@ templ Page(vm ViewModel) {
 	}
 }
 
+templ Fragment(vm ViewModel) {
+	@siblingNav(vm)
+	@Content(vm)
+}
+
 templ Content(vm ViewModel) {
 	@difficultyTabs(vm)
 	@filterRow(vm)
@@ -132,7 +138,7 @@ templ Content(vm ViewModel) {
 
 templ siblingNav(vm ViewModel) {
 	if len(vm.Siblings) > 0 {
-		<nav class="text-sm leading-7">
+		<nav id="boss-sibling-nav" hx-swap-oob="true" class="text-sm leading-7">
 			for i, s := range vm.Siblings {
 				if i > 0 {
 					<span class="mx-1 text-bk-muted">·</span>
@@ -180,14 +186,25 @@ templ difficultyTabs(vm ViewModel) {
 		<a href={ templ.SafeURL(links.Boss(vm.Realm, vm.Boss.RemoteID)) } class="text-bk-muted hover:text-bk-fg">Reset</a>
 		<span class="text-xs text-bk-muted">
 			{ vm.LockLabel }
-			<a
-				hx-get={ string(previousLockHref(vm)) }
-				hx-target="#boss-content"
-				hx-swap="innerHTML"
-				hx-push-url="true"
-				href={ previousLockHref(vm) }
-				class="ml-2 text-bk-accent"
-			>(see previous)</a>
+			if vm.LockScoped {
+				<a
+					hx-get={ string(previousLockHref(vm)) }
+					hx-target="#boss-content"
+					hx-swap="innerHTML"
+					hx-push-url="true"
+					href={ previousLockHref(vm) }
+					class="ml-2 text-bk-accent"
+				>(see previous)</a>
+			} else {
+				<a
+					hx-get={ string(currentLockHref(vm)) }
+					hx-target="#boss-content"
+					hx-swap="innerHTML"
+					hx-push-url="true"
+					href={ currentLockHref(vm) }
+					class="ml-2 text-bk-accent"
+				>(current lock)</a>
+			}
 		</span>
 		for _, d := range vm.Difficulties {
 			<a
@@ -213,7 +230,9 @@ templ percentileForm(vm ViewModel) {
 		class="mb-3 flex items-center gap-3 text-sm"
 	>
 		<input type="hidden" name="difficulty" value={ viewhelpers.Itoa(vm.SelectedMode) }/>
-		<input type="hidden" name="raidlock" value={ viewhelpers.Itoa(vm.LockOffset) }/>
+		if vm.LockScoped {
+			<input type="hidden" name="raidlock" value={ viewhelpers.Itoa(vm.LockOffset) }/>
+		}
 		if !vm.ClassMode && vm.SelectedSpec > 0 {
 			<input type="hidden" name="spec" value={ viewhelpers.Itoa(vm.SelectedSpec) }/>
 		}

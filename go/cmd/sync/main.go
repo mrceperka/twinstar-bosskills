@@ -145,7 +145,11 @@ func main() {
 		go func() {
 			defer wg.Done()
 			if err := syncRealm(ctx, logger, db, cli, ro); err != nil {
-				logger.Error("realm failed", "realm", r, "err", err)
+				if cerr := syncContextError(ctx, err); cerr != nil {
+					logger.Warn("realm sync canceled", "realm", r, "reason", cerr, "err", err)
+				} else {
+					logger.Error("realm failed", "realm", r, "err", err)
+				}
 				errMu.Lock()
 				if anyErr == nil {
 					anyErr = err
@@ -157,6 +161,9 @@ func main() {
 	wg.Wait()
 
 	if anyErr != nil {
+		if cerr := syncContextError(ctx, anyErr); cerr != nil {
+			logger.Warn("sync stopped before completion", "reason", cerr)
+		}
 		os.Exit(1)
 	}
 	logger.Info("sync done")

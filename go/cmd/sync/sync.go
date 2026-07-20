@@ -43,11 +43,17 @@ func syncRealm(ctx context.Context, log *slog.Logger, db *sql.DB, cli *api.Clien
 	log.Info("fetching raids")
 	raids, err := cli.GetRaids(ctx, opts.Realm, expansion)
 	if err != nil {
+		if cerr := syncContextError(ctx, err); cerr != nil {
+			return fmt.Errorf("sync canceled while fetching raids: %w", cerr)
+		}
 		return fmt.Errorf("getRaids: %w", err)
 	}
 
 	log.Info("upserting raid/boss lookups", "raids", len(raids))
 	if err := upsertRaidsAndBosses(ctx, db, opts.Realm, raids); err != nil {
+		if cerr := syncContextError(ctx, err); cerr != nil {
+			return fmt.Errorf("sync canceled while upserting raid/boss lookups: %w", cerr)
+		}
 		return fmt.Errorf("upsertRaidsAndBosses: %w", err)
 	}
 
@@ -60,13 +66,23 @@ func syncRealm(ctx context.Context, log *slog.Logger, db *sql.DB, cli *api.Clien
 	var firstErr error
 	for _, raid := range raids {
 		for _, boss := range raid.Bosses {
+			if cerr := syncContextError(ctx, nil); cerr != nil {
+				return fmt.Errorf("sync canceled before boss %s: %w", boss.Name, cerr)
+			}
 			bossID := uint32(boss.Entry)
 			if len(wantBossIDs) > 0 && !wantBossIDs[bossID] {
 				continue
 			}
 			n, sk, fl, err := syncBoss(ctx, log, db, cli, opts, raid.Map, boss)
 			if err != nil {
-				log.Error("syncBoss", "boss", boss.Name, "err", err)
+				if cerr := syncContextError(ctx, err); cerr != nil {
+					log.Warn("sync canceled while processing boss", "boss", boss.Name, "err", cerr)
+					return fmt.Errorf("sync canceled while processing boss %s: %w", boss.Name, cerr)
+				}
+				log.Error("boss sync failed", "boss", boss.Name, "err", err)
+				if firstErr == nil {
+					firstErr = err
+				}
 			}
 			inserted += n
 			skipped += sk
@@ -128,12 +144,18 @@ func syncBoss(
 		}
 		res, err := cli.GetLatestBossKills(ctx, q)
 		if err != nil {
+			if cerr := syncContextError(ctx, err); cerr != nil {
+				return 0, 0, 0, fmt.Errorf("sync canceled while listing boss kills: %w", cerr)
+			}
 			return 0, 0, 0, err
 		}
 		bosskills = res.Data
 	} else {
 		bs, err := cli.ListAllLatestBossKills(ctx, q, opts.Concurrency)
 		if err != nil {
+			if cerr := syncContextError(ctx, err); cerr != nil {
+				return 0, 0, 0, fmt.Errorf("sync canceled while listing boss kills: %w", cerr)
+			}
 			return 0, 0, 0, err
 		}
 		bosskills = bs
@@ -145,6 +167,9 @@ func syncBoss(
 
 	existingDarkShamanLFR, err := existingDarkShamanLFRSignatures(ctx, db, opts.Realm, bosskills)
 	if err != nil {
+		if cerr := syncContextError(ctx, err); cerr != nil {
+			return inserted, skipped, failed, fmt.Errorf("sync canceled while checking duplicate Dark Shaman kills: %w", cerr)
+		}
 		return 0, 0, 0, err
 	}
 	var duplicateSkipped int
@@ -163,6 +188,9 @@ func syncBoss(
 	}
 	existing, err := existingRemoteIDs(ctx, db, opts.Realm, ids)
 	if err != nil {
+		if cerr := syncContextError(ctx, err); cerr != nil {
+			return inserted, skipped, failed, fmt.Errorf("sync canceled while checking existing boss kills: %w", cerr)
+		}
 		return 0, 0, 0, err
 	}
 
@@ -180,12 +208,18 @@ func syncBoss(
 	}
 
 	for _, bk := range bosskills {
+		if cerr := syncContextError(ctx, nil); cerr != nil {
+			return inserted, skipped, failed, fmt.Errorf("sync canceled before detail fetch: %w", cerr)
+		}
 		if existing[bk.ID] {
 			skipped++
 			continue
 		}
 		detail, derr := cli.GetBossKillDetail(ctx, opts.Realm, bk.ID)
 		if derr != nil {
+			if cerr := syncContextError(ctx, derr); cerr != nil {
+				return inserted, skipped, failed, fmt.Errorf("sync canceled while fetching boss kill detail %s: %w", bk.ID, cerr)
+			}
 			log.Warn("detail fetch failed", "id", bk.ID, "err", derr)
 			failed++
 			continue
@@ -211,14 +245,33 @@ func syncBoss(
 		rows = append(rows, r)
 		if len(rows) >= opts.BatchSize {
 			if err := flush(); err != nil {
+				if cerr := syncContextError(ctx, err); cerr != nil {
+					return inserted, skipped, failed, fmt.Errorf("sync canceled while inserting boss kills: %w", cerr)
+				}
 				return inserted, skipped, failed, err
 			}
 		}
 	}
 	if err := flush(); err != nil {
+		if cerr := syncContextError(ctx, err); cerr != nil {
+			return inserted, skipped, failed, fmt.Errorf("sync canceled while inserting boss kills: %w", cerr)
+		}
 		return inserted, skipped, failed, err
 	}
 	return inserted, skipped, failed, nil
+}
+
+func syncContextError(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	if errors.Is(err, context.Canceled) {
+		return context.Canceled
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return context.DeadlineExceeded
+	}
+	return nil
 }
 
 // insertBossKills batches one INSERT covering len(rows) tuples.

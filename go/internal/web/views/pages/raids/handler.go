@@ -227,7 +227,7 @@ func loadRaids(ctx context.Context, db *sql.DB, realmName, guildFilter string, w
 			}
 			return ra.Bosses[i].RemoteID < ra.Bosses[j].RemoteID
 		})
-		out = append(out, Raid{Name: ra.Name, Bosses: ra.Bosses})
+		out = append(out, Raid{Name: ra.Name, Bosses: ra.Bosses, TotalKills: ra.TotalKills})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		pi := raidMap[out[i].Name].Position

@@ -30,8 +30,9 @@ type DifficultyChoice struct {
 }
 
 type Raid struct {
-	Name   string
-	Bosses []BossRow
+	Name       string
+	Bosses     []BossRow
+	TotalKills int
 }
 
 type BossRow struct {
@@ -54,15 +55,20 @@ templ Page(vm ViewModel) {
 			</header>
 			for _, r := range vm.Raids {
 				<section class="rounded-md border border-bk-border bg-bk-panel">
-					<header class="flex items-center gap-3 border-b border-bk-border px-4 py-2">
-						<img
-							src={ viewhelpers.RaidIconHref(r.Name) }
-							alt=""
-							loading="lazy"
-							width="36" height="36"
-							class="rounded"
-						/>
-						<h2 class="text-sm font-medium uppercase tracking-wide text-bk-muted">{ r.Name }</h2>
+					<header class="flex flex-wrap items-center justify-between gap-3 border-b border-bk-border px-4 py-2">
+						<div class="flex items-center gap-3">
+							<img
+								src={ viewhelpers.RaidIconHref(r.Name) }
+								alt=""
+								loading="lazy"
+								width="36" height="36"
+								class="rounded"
+							/>
+							<h2 class="text-sm font-medium uppercase tracking-wide text-bk-muted">{ r.Name }</h2>
+						</div>
+						<div class="text-xs text-bk-muted">
+							total <span class="font-mono text-bk-accent">{ format.IntCtx(ctx, r.TotalKills) }</span> kills
+						</div>
 					</header>
 					<div class="p-4">
 						@raidTable(vm.Realm, r, vm.Difficulties)
