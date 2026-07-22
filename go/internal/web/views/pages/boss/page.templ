@@ -480,7 +480,7 @@ templ topTable(vm ViewModel, rows []Ranking, metric string) {
 	if len(rows) == 0 {
 		@components.EmptyState("No data for this difficulty yet.")
 	} else {
-		@components.Table() {
+		@components.CappedTable("max-h-[70vh]") {
 			<thead>
 				<tr>
 					<th>#</th>

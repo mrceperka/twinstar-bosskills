@@ -28,7 +28,7 @@ type Deps struct {
 }
 
 const (
-	topRowLimit = 25
+	topRowLimit = 200
 )
 
 type lockFilter struct {

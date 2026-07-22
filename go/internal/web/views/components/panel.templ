@@ -59,6 +59,18 @@ templ Table() {
 	</div>
 }
 
+// CappedTable is Table with a vertical height cap so long leaderboards
+// scroll inside the container instead of stretching the page. The sticky
+// thead (see input.css) keeps the header pinned while scrolling.
+// maxHeightClass is a Tailwind max-h utility, e.g. "max-h-[70vh]".
+templ CappedTable(maxHeightClass string) {
+	<div class={ "bk-table-wrap", maxHeightClass }>
+		<table class="w-full text-sm">
+			{ children... }
+		</table>
+	</div>
+}
+
 // SortableTable is Table with `data-sortable` so the small client-side
 // sorter in static/bk-sortable.js (when present) can attach. Use for player
 // rows on the bosskill detail page, etc.
