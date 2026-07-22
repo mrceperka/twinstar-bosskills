@@ -534,15 +534,21 @@ func fillPercentiles(ctx context.Context, db *sql.DB, realmName string, bossID u
 	return nil
 }
 
-// percentileRank returns the percent of samples in `sorted` that are strictly
-// less than `v` (so a player tied with the top sample gets 99-ish, not 100).
-// Sorted must be ascending.
+// percentileRank returns v's rank among `sorted` as 0-100, where 0 is last
+// place and 100 is rank one. `v` is always itself one of the samples, so the
+// count of samples strictly less than v is divided by len(sorted)-1, not
+// len(sorted) - otherwise the top sample could never reach 100. A single
+// sample is rank one of one, so it returns 100. Sorted must be ascending.
 func percentileRank(sorted []uint64, v uint64) float64 {
-	if len(sorted) == 0 {
+	n := len(sorted)
+	if n == 0 {
 		return -1
 	}
-	n := sort.Search(len(sorted), func(i int) bool { return sorted[i] >= v })
-	return float64(n) * 100.0 / float64(len(sorted))
+	if n == 1 {
+		return 100
+	}
+	lt := sort.Search(n, func(i int) bool { return sorted[i] >= v })
+	return float64(lt) * 100.0 / float64(n-1)
 }
 
 // buildTimelineJSON renders a multi-series line chart matching the existing

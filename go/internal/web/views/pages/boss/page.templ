@@ -1,6 +1,7 @@
 package boss
 
 import (
+	"twinstar-bosskills/internal/api"
 	"twinstar-bosskills/internal/format"
 	"twinstar-bosskills/internal/links"
 	"twinstar-bosskills/internal/web/views/components"
@@ -30,9 +31,26 @@ type ViewModel struct {
 	HPSCurveJSON     []byte
 	DPSBoxJSON       []byte
 	HPSBoxJSON       []byte
+	DPSRows          int
+	HPSRows          int
 	AtPercentile     []SpecAtPercentile
 	TopDPS           []Ranking
 	TopHPS           []Ranking
+	Loot             []LootDrop
+}
+
+// LootDrop is one distinct item that dropped from this boss on the selected
+// difficulty, with its aggregate drop chance across all kills of that mode.
+type LootDrop struct {
+	ItemID uint32
+	// DropChanceLabel is "3 of 12 ~ 25.00%" style text - computed in handler.
+	DropChanceLabel string
+	// Tier is the difficulty / forged label parsed from the item tooltip
+	// ("Heroic", "Warforged", "Heroic Warforged", ...); empty for normal items.
+	Tier string
+	// ItemLevel is parsed from the item tooltip; 0 when unknown.
+	ItemLevel int
+	Item      *api.Item
 }
 
 type BossInfo struct {
@@ -86,9 +104,10 @@ templ Page(vm ViewModel) {
 		<section class="space-y-3">
 			<h1 class="text-2xl font-semibold">Boss { vm.Boss.Name }</h1>
 			@siblingNav(vm)
-			@narrative(vm)
-			@durations(vm)
+			@bossHeaderStats(vm)
 		</section>
+		@bossFilters(vm)
+		@bossLoot(vm)
 		<section class="mt-6 space-y-3">
 			<h2 class="text-lg font-semibold">Top stats by { groupLabel(vm) }</h2>
 			<div id="boss-content" class="space-y-6">
@@ -100,12 +119,108 @@ templ Page(vm ViewModel) {
 
 templ Fragment(vm ViewModel) {
 	@siblingNav(vm)
+	@bossHeaderStats(vm)
+	@bossFilters(vm)
+	@bossLoot(vm)
 	@Content(vm)
 }
 
+// bossFilters is the opened filter card holding the difficulty tabs and the
+// spec/class filter row. Rendered above the loot section. Uses hx-swap-oob so
+// clicking a tab/filter (which swaps #boss-content) also refreshes the active
+// states here even though the card lives outside that container.
+templ bossFilters(vm ViewModel) {
+	<section id="boss-filters" hx-swap-oob="true" class="mt-6">
+		@components.CollapsiblePanel("Filters", true) {
+			<div class="space-y-3">
+				@difficultyTabs(vm)
+				@filterRow(vm)
+			</div>
+		}
+	</section>
+}
+
+// bossLoot renders the collapsed loot disclosure. The table is fetched lazily
+// on first expand (hx-trigger="toggle once"). It uses hx-swap-oob so
+// difficulty-tab / lock changes (which swap #boss-content) also replace this
+// section with a fresh collapsed shell carrying the new difficulty in its URL.
+templ bossLoot(vm ViewModel) {
+	<section id="boss-loot" hx-swap-oob="true" class="mt-6">
+		<details
+			class="border border-bk-border"
+			hx-get={ string(lootHref(vm)) }
+			hx-trigger="toggle once"
+			hx-target="#boss-loot-body"
+			hx-swap="innerHTML"
+		>
+			<summary class="flex cursor-pointer select-none items-center gap-2 px-4 py-3 font-semibold">
+				@components.LootIcon("h-5 w-5 shrink-0 text-bk-accent")
+				<span>Loot</span>
+			</summary>
+			<div id="boss-loot-body" class="px-4 pb-4">
+				<span class="text-sm text-bk-muted">Loading…</span>
+			</div>
+		</details>
+	</section>
+}
+
+// LootTable is the lazily-loaded fragment: one row per distinct item that
+// dropped on the selected difficulty, sorted by drop chance descending.
+templ LootTable(vm ViewModel) {
+	if len(vm.Loot) == 0 {
+		<div class="py-2 text-sm text-bk-muted">No loot recorded for this difficulty yet.</div>
+	} else {
+		@components.Table() {
+			<thead>
+				<tr>
+					<th>Item</th>
+					<th>Name</th>
+					<th>Tier</th>
+					<th>iLvl</th>
+					<th>Drop chance</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, l := range vm.Loot {
+					<tr class="bk-tip-row" data-tooltip-url={ viewhelpers.ItemTooltipURL(vm.Realm, l.ItemID) }>
+						<td>
+							<img src={ viewhelpers.ItemIconHref(l.ItemID) } alt="" loading="lazy" width="24" height="24" class="border border-bk-border"/>
+						</td>
+						<td>
+							if l.Item != nil {
+								<a href={ templ.SafeURL(links.TwinheadItem(vm.Realm, l.ItemID)) } target="_blank" rel="noopener" style={ "color: " + api.QualityColor(l.Item.Quality) } tabindex="0">{ l.Item.Name }</a>
+							} else {
+								<a href={ templ.SafeURL(links.TwinheadItem(vm.Realm, l.ItemID)) } target="_blank" rel="noopener" class="text-bk-muted">Item { viewhelpers.Uitoa(uint64(l.ItemID)) }</a>
+							}
+							<span class="bk-tip">
+								if l.Item != nil && l.Item.Tooltip != "" {
+									@templ.Raw(l.Item.Tooltip)
+								}
+							</span>
+						</td>
+						<td>
+							if l.Tier != "" {
+								<span class="text-bk-accent">{ l.Tier }</span>
+							} else {
+								<span class="text-bk-muted">-</span>
+							}
+						</td>
+						<td>
+							if l.ItemLevel > 0 {
+								{ viewhelpers.Itoa(l.ItemLevel) }
+							} else {
+								<span class="text-bk-muted">-</span>
+							}
+						</td>
+						<td class="text-bk-accent">{ l.DropChanceLabel }</td>
+					</tr>
+				}
+			</tbody>
+		}
+	}
+}
+
 templ Content(vm ViewModel) {
-	@difficultyTabs(vm)
-	@filterRow(vm)
 	<div class="grid gap-6 lg:grid-cols-2">
 		@components.Panel("Top DPS") {
 			@topTable(vm, vm.TopDPS, "DPS")
@@ -117,7 +232,7 @@ templ Content(vm ViewModel) {
 	<section class="mt-6">
 		<h2 class="mb-2 text-lg font-semibold">DPS by { groupTitle(vm) }</h2>
 		if len(vm.DPSBoxJSON) > 2 {
-			@components.ChartFromJSON("block w-full h-[44rem]", vm.DPSBoxJSON)
+			@components.ChartFromJSONStyled("block w-full", boxChartStyle(vm.DPSRows), vm.DPSBoxJSON)
 		} else {
 			@emptyChart()
 		}
@@ -125,7 +240,7 @@ templ Content(vm ViewModel) {
 	<section class="mt-6">
 		<h2 class="mb-2 text-lg font-semibold">HPS by { groupTitle(vm) }</h2>
 		if len(vm.HPSBoxJSON) > 2 {
-			@components.ChartFromJSON("block w-full h-[44rem]", vm.HPSBoxJSON)
+			@components.ChartFromJSONStyled("block w-full", boxChartStyle(vm.HPSRows), vm.HPSBoxJSON)
 		} else {
 			@emptyChart()
 		}
@@ -138,19 +253,26 @@ templ Content(vm ViewModel) {
 
 templ siblingNav(vm ViewModel) {
 	if len(vm.Siblings) > 0 {
-		<nav id="boss-sibling-nav" hx-swap-oob="true" class="text-sm leading-7">
-			for i, s := range vm.Siblings {
-				if i > 0 {
-					<span class="mx-1 text-bk-muted">·</span>
-				}
+		<nav id="boss-sibling-nav" hx-swap-oob="true" class="flex flex-wrap items-center gap-1.5 text-xs">
+			for _, s := range vm.Siblings {
 				if s.Current {
-					<span class="font-semibold underline">{ s.Name }</span>
+					<span class="inline-flex items-center border border-bk-accent px-2 py-0.5 font-medium text-bk-accent" aria-current="page">{ s.Name }</span>
 				} else {
-					<a href={ siblingHref(vm, s.RemoteID) }>{ s.Name }</a>
+					<a href={ siblingHref(vm, s.RemoteID) } class="inline-flex items-center border border-bk-border px-2 py-0.5 text-bk-muted hover:border-bk-accent hover:text-bk-accent">{ s.Name }</a>
 				}
 			}
 		</nav>
 	}
+}
+
+// bossHeaderStats wraps the mode-dependent kills/wipes narrative and the
+// duration line. hx-swap-oob keeps them in sync when a difficulty/lock change
+// swaps #boss-content, since they live in the static page header.
+templ bossHeaderStats(vm ViewModel) {
+	<div id="boss-header-stats" hx-swap-oob="true" class="space-y-3">
+		@narrative(vm)
+		@durations(vm)
+	</div>
 }
 
 templ narrative(vm ViewModel) {
@@ -183,7 +305,14 @@ templ durations(vm ViewModel) {
 
 templ difficultyTabs(vm ViewModel) {
 	<div class="flex flex-wrap items-center gap-3 text-sm">
-		<a href={ templ.SafeURL(links.Boss(vm.Realm, vm.Boss.RemoteID)) } class="text-bk-muted hover:text-bk-fg">Reset</a>
+		<a
+			hx-get={ resetDifficultyHref(vm) }
+			hx-target="#boss-content"
+			hx-swap="innerHTML"
+			hx-push-url="true"
+			href={ templ.SafeURL(resetDifficultyHref(vm)) }
+			class="text-bk-muted hover:text-bk-fg"
+		>Reset</a>
 		<span class="text-xs text-bk-muted">
 			{ vm.LockLabel }
 			if vm.LockScoped {
@@ -240,7 +369,7 @@ templ percentileForm(vm ViewModel) {
 			<input type="hidden" name="class" value={ viewhelpers.Itoa(vm.SelectedClass) }/>
 		}
 		<label class="text-bk-muted">Show value at percentile</label>
-		<input type="number" name="p" min="1" max="99" value={ viewhelpers.Itoa(vm.SelectedPctile) } class="w-20 rounded border border-bk-accent bg-bk-bg p-1 text-bk-fg"/>
+		<input type="number" name="p" min="1" max="99" value={ viewhelpers.Itoa(vm.SelectedPctile) } class="w-20 border border-bk-accent bg-bk-bg p-1 text-bk-fg"/>
 		<span class="text-xs text-bk-muted">Exact, not bucketed</span>
 	</form>
 }
@@ -295,14 +424,13 @@ templ filterRow(vm ViewModel) {
 		<div class="space-y-2 text-sm">
 			if vm.ClassMode && len(vm.AvailableClasses) > 0 {
 				<div class="flex flex-wrap items-center gap-2">
-					<span class="text-bk-muted">Class:</span>
 					<a
 						hx-get={ filterHref(vm, 0, 0) }
 						hx-target="#boss-content"
 						hx-swap="innerHTML"
 						hx-push-url="true"
 						href={ templ.SafeURL(filterHref(vm, 0, 0)) }
-						class={ "px-2 py-1 rounded", filterCellClass(vm.SelectedClass == 0) }
+						class={ "px-2 py-1", filterCellClass(vm.SelectedClass == 0) }
 					>Reset</a>
 					for _, c := range vm.AvailableClasses {
 						<a
@@ -314,21 +442,20 @@ templ filterRow(vm ViewModel) {
 							title={ wow.Class(c) }
 							class={ "inline-flex items-center justify-center p-1", filterCellClass(vm.SelectedClass == c) }
 						>
-							<img src={ templ.SafeURL(links.ClassIcon(c)) } alt={ wow.Class(c) } width="22" height="22" class="rounded"/>
+							<img src={ templ.SafeURL(links.ClassIcon(c)) } alt={ wow.Class(c) } width="22" height="22"/>
 						</a>
 					}
 				</div>
 			}
 			if !vm.ClassMode && len(vm.AvailableSpecs) > 0 {
 				<div class="flex flex-wrap items-center gap-2">
-					<span class="text-bk-muted">Spec:</span>
 					<a
 						hx-get={ filterHref(vm, 0, 0) }
 						hx-target="#boss-content"
 						hx-swap="innerHTML"
 						hx-push-url="true"
 						href={ templ.SafeURL(filterHref(vm, 0, 0)) }
-						class={ "px-2 py-1 rounded", filterCellClass(vm.SelectedSpec == 0) }
+						class={ "px-2 py-1", filterCellClass(vm.SelectedSpec == 0) }
 					>Reset</a>
 					for _, s := range vm.AvailableSpecs {
 						<a
@@ -340,7 +467,7 @@ templ filterRow(vm ViewModel) {
 							title={ wow.SpecForRealm(vm.Realm, s) }
 							class={ "inline-flex items-center justify-center p-1", filterCellClass(vm.SelectedSpec == s) }
 						>
-							<img src={ templ.SafeURL(links.TalentIcon(vm.Realm, s)) } alt={ wow.SpecForRealm(vm.Realm, s) } width="22" height="22" class="rounded"/>
+							<img src={ templ.SafeURL(links.TalentIcon(vm.Realm, s)) } alt={ wow.SpecForRealm(vm.Realm, s) } width="22" height="22"/>
 						</a>
 					}
 				</div>

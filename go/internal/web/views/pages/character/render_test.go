@@ -105,7 +105,7 @@ func TestPageRenderSpecSummaryHighlightsMostPlayed(t *testing.T) {
 	html := sb.String()
 	for _, want := range []string{
 		`type=talent&amp;id=265&amp;realm=Helios`,
-		`<header class="rounded border border-bk-border bg-bk-panel p-4">`,
+		`<header class="space-y-4 border border-bk-border bg-bk-panel p-4">`,
 		"10",
 		"Most played",
 		"border-bk-accent",
@@ -113,12 +113,14 @@ func TestPageRenderSpecSummaryHighlightsMostPlayed(t *testing.T) {
 		"5",
 		"Overall rankings by DPS and HPS",
 		`<path d="M8 4h8v5a4 4 0 0 1-8 0V4z"></path>`,
+		">Specs<",
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("missing %q in HTML:\n%s", want, html)
 		}
 	}
-	for _, hidden := range []string{">Specs<", ">Affliction<", ">Demonology<"} {
+	// Spec names stay icon-only; only the "Specs" label is text.
+	for _, hidden := range []string{">Affliction<", ">Demonology<"} {
 		if strings.Contains(html, hidden) {
 			t.Fatalf("visible spec summary text %q in HTML:\n%s", hidden, html)
 		}
@@ -148,8 +150,39 @@ func TestPageRendersStatsAndActivityCollapsedAndLazy(t *testing.T) {
 			t.Fatalf("missing %q in HTML:\n%s", want, html)
 		}
 	}
-	if strings.Contains(html, `<details open`) || strings.Contains(html, `hx-trigger="load"`) {
-		t.Fatalf("stats and activity should start collapsed and load only when opened. HTML:\n%s", html)
+	if strings.Contains(html, `<details open`) {
+		t.Fatalf("stats and activity should start collapsed. HTML:\n%s", html)
+	}
+	// Stats and activity must load only when their panel is opened, never eagerly.
+	for _, eager := range []string{
+		`/Helios/character/Foo/stats" hx-trigger="load"`,
+		`/Helios/character/Foo/activity" hx-trigger="load"`,
+	} {
+		if strings.Contains(html, eager) {
+			t.Fatalf("stats/activity must use toggle-once, not eager load. HTML:\n%s", html)
+		}
+	}
+}
+
+func TestPageAllStarBadgeLazyLoads(t *testing.T) {
+	vm := ViewModel{Realm: "Helios", Char: CharacterInfo{Name: "Foo"}}
+
+	var sb strings.Builder
+	if err := Page(vm).Render(context.Background(), &sb); err != nil {
+		t.Fatal(err)
+	}
+	html := sb.String()
+	// The all-star badge is a header element, so it auto-loads on page load
+	// (unlike the collapsible stats/activity panels).
+	for _, want := range []string{
+		`id="allstar-badge"`,
+		`hx-get="/Helios/character/Foo/allstar?raid="`,
+		`hx-trigger="load"`,
+		`hx-swap="outerHTML"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("missing %q in all-star shell. HTML:\n%s", want, html)
+		}
 	}
 }
 

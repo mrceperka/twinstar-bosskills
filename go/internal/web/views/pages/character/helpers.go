@@ -53,6 +53,11 @@ func specSummaryClass(mostPlayed bool) string {
 	return "border-bk-border text-bk-muted"
 }
 
+// fmtAvg formats an all-star average (points per boss) to one decimal.
+func fmtAvg(v float64) string {
+	return strconv.FormatFloat(v, 'f', 1, 64)
+}
+
 func fmtTrendPct(v float64) string {
 	if v == 0 {
 		return "0"

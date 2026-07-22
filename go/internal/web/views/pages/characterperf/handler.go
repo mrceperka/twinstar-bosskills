@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"twinstar-bosskills/internal/collection"
+	"twinstar-bosskills/internal/links"
 	"twinstar-bosskills/internal/metric"
 	"twinstar-bosskills/internal/realm"
 	"twinstar-bosskills/internal/web/middleware"
@@ -387,9 +388,12 @@ func loadSpecOptions(ctx context.Context, db *sql.DB, realmName string, guid uin
 		if err := rows.Scan(&spec); err != nil {
 			return nil, err
 		}
+		label := wow.SpecForExpansion(expansion, int(spec))
 		out = append(out, Option{
-			Value: strconv.Itoa(int(spec)),
-			Label: wow.SpecForExpansion(expansion, int(spec)),
+			Value:   strconv.Itoa(int(spec)),
+			Label:   label,
+			IconURL: links.TalentIcon(realmName, int(spec)),
+			IconAlt: label,
 		})
 	}
 	return out, rows.Err()

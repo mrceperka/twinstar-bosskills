@@ -1,7 +1,6 @@
 package characterperf
 
 import (
-	"twinstar-bosskills/internal/format"
 	"twinstar-bosskills/internal/links"
 	"twinstar-bosskills/internal/web/views/components"
 	"twinstar-bosskills/internal/web/views/layouts"
@@ -42,25 +41,8 @@ type Option = components.CheckboxOption
 templ Page(vm ViewModel) {
 	@layouts.Root(vm.Meta) {
 		<div class="space-y-6">
-			<header class="flex flex-wrap items-baseline justify-between gap-4">
-				<div>
-					<div class="text-xs uppercase tracking-wide text-bk-muted inline-flex items-center gap-1">
-						@components.ClassSpecIcons(vm.Realm, vm.Char.Class, 0)
-						<span>Performance</span>
-					</div>
-					<h1 class="text-2xl font-semibold">
-						<a href={ viewhelpers.CharacterHref(vm.Realm, vm.CharName) } class="hover:text-bk-accent">{ vm.CharName }</a>
-					</h1>
-					<a href={ templ.SafeURL(links.TwinstarArmory(vm.Realm, vm.CharName)) } target="_blank" rel="noopener" class="text-xs text-bk-muted hover:text-bk-accent">Armory ↗</a>
-				</div>
-				<dl class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-					<dt class="text-bk-muted">Kills</dt>
-					<dd class="font-mono">{ format.IntCtx(ctx, vm.Char.KillCount) }</dd>
-					<dt class="text-bk-muted">Last seen</dt>
-					<dd class="font-mono">{ vm.Char.LastSeen }</dd>
-				</dl>
-			</header>
-			@components.Panel("Filters") {
+			@components.CharacterHeader(vm.Realm, vm.CharName, vm.Char.Class, "performance")
+			@components.CollapsiblePanel("Filters", false) {
 				@filterForm(vm)
 			}
 			if len(vm.Charts) == 0 {
@@ -68,7 +50,7 @@ templ Page(vm ViewModel) {
 			} else {
 				<div class="space-y-6">
 					for _, chart := range vm.Charts {
-						<section class="rounded-md border border-bk-border bg-bk-panel">
+						<section class="border border-bk-border bg-bk-panel">
 							<header class="border-b border-bk-border px-4 py-2 text-sm font-medium">
 								Performance on
 								<a href={ viewhelpers.BossWithDifficultyHref(vm.Realm, chart.BossID, chart.Mode) } class="hover:text-bk-accent">
@@ -98,7 +80,7 @@ templ filterForm(vm ViewModel) {
 		</label>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Spec</span>
-			@components.CheckboxFilter("spec", vm.SpecOptions, len(vm.Filter.Specs) > 0, "min-h-32")
+			@components.IconCheckboxFilter("spec", vm.SpecOptions, len(vm.Filter.Specs) > 0, "min-h-32")
 		</label>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Difficulty</span>
@@ -106,11 +88,11 @@ templ filterForm(vm ViewModel) {
 		</label>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Min iLvl</span>
-			<input name="ilvl_min" type="number" min="0" value={ viewhelpers.EmptyItoa(vm.Filter.IlvlMin) } class="rounded border border-bk-border bg-bk-bg p-2"/>
+			<input name="ilvl_min" type="number" min="0" value={ viewhelpers.EmptyItoa(vm.Filter.IlvlMin) } class="border border-bk-border bg-bk-bg p-2"/>
 		</label>
 		<label class="flex flex-col gap-1 text-sm">
 			<span class="text-bk-muted">Max iLvl</span>
-			<input name="ilvl_max" type="number" min="0" value={ viewhelpers.EmptyItoa(vm.Filter.IlvlMax) } class="rounded border border-bk-border bg-bk-bg p-2"/>
+			<input name="ilvl_max" type="number" min="0" value={ viewhelpers.EmptyItoa(vm.Filter.IlvlMax) } class="border border-bk-border bg-bk-bg p-2"/>
 		</label>
 	}
 }

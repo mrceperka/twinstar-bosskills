@@ -165,7 +165,7 @@ templ bossLoot(vm ViewModel) {
 			<ul class="space-y-1">
 				for _, l := range vm.Loot {
 					<li class="bk-tip-row flex items-center gap-2 text-sm" data-tooltip-url={ viewhelpers.ItemTooltipURL(vm.Realm, l.ItemID) }>
-						<img src={ viewhelpers.ItemIconHref(l.ItemID) } alt="" loading="lazy" width="24" height="24" class="rounded border border-bk-border"/>
+						<img src={ viewhelpers.ItemIconHref(l.ItemID) } alt="" loading="lazy" width="24" height="24" class="border border-bk-border"/>
 						if l.Item != nil {
 							<a href={ templ.SafeURL(links.TwinheadItem(vm.Realm, l.ItemID)) } target="_blank" rel="noopener" style={ "color: " + api.QualityColor(l.Item.Quality) } tabindex="0">{ l.Item.Name }</a>
 						} else {
@@ -191,7 +191,7 @@ templ statsTable(vm ViewModel) {
 		<thead>
 			<tr>
 					<th>@components.SortHeader(statsSortHeaderProps(vm, "name", "Name"))</th>
-				<th>%ile</th>
+				<th>Rank %</th>
 				<th class="bk-class-spec-column">Class</th>
 					<th>@components.SortHeader(statsSortHeaderProps(vm, "dps", "DPS"))</th>
 					<th>@components.SortHeader(statsSortHeaderProps(vm, "dmg_done", "Dmg Done"))</th>
@@ -241,7 +241,7 @@ func statsSortHeaderProps(vm ViewModel, col, label string) components.SortHeader
 	return components.SortHeaderProps{Label: label, URL: statsSortURL(vm, col), HTMXTarget: "#stats-table", Active: vm.SortBy == col, Direction: vm.SortDir}
 }
 
-// percentileCell renders one half of the "%ile" cell with a metric-tinted
+// percentileCell renders one half of the "Rank %" cell with a metric-tinted
 // color. `kind` is "dmg" or "heal" so the color matches SvelteKit's
 // TextColorDamage / TextColorHealing components.
 templ percentileCell(p float64, kind string) {

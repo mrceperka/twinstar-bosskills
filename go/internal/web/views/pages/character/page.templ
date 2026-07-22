@@ -126,46 +126,39 @@ type SpecButton struct {
 templ Page(vm ViewModel) {
 	@layouts.Root(vm.Meta) {
 		<div class="space-y-6">
-			<header class="rounded border border-bk-border bg-bk-panel p-4">
-				<div class="flex flex-wrap items-start justify-between gap-4">
-				<div>
-					<div class="text-xs uppercase tracking-wide text-bk-muted inline-flex items-center gap-1">
-						@components.ClassSpecIcons(vm.Realm, vm.Char.Class, 0)
+			@components.CharacterHeader(vm.Realm, vm.Char.Name, vm.Char.Class, "overview") {
+				<div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
+					<div class="min-w-0 lg:flex-1">
+						@AllStarShell(vm.Realm, vm.Char.Name)
 					</div>
-					<h1 class="text-2xl font-semibold">{ vm.Char.Name }</h1>
-					<div class="flex items-center gap-3">
-						<a href={ viewhelpers.CharacterPerformanceHref(vm.Realm, vm.Char.Name) } class="text-xs text-bk-muted hover:text-bk-accent">Performance →</a>
-						<a href={ templ.SafeURL(links.TwinstarArmory(vm.Realm, vm.Char.Name)) } target="_blank" rel="noopener" class="text-xs text-bk-muted hover:text-bk-accent">Armory ↗</a>
-					</div>
+					<dl class="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-6 gap-y-1 text-sm lg:shrink-0">
+						<dt class="text-bk-muted">Kills tracked</dt>
+						<dd class="font-mono">{ format.IntCtx(ctx, vm.Char.KillCount) }</dd>
+						<dt class="text-bk-muted">First seen</dt>
+						<dd class="font-mono">{ vm.Char.FirstSeen }</dd>
+						<dt class="text-bk-muted">Last seen</dt>
+						<dd class="font-mono">{ vm.Char.LastSeen }</dd>
+						if len(vm.SpecSummary) > 0 {
+							<dt class="text-bk-muted">Specs</dt>
+							<dd class="flex flex-wrap gap-1 sm:gap-1.5">
+								for _, spec := range vm.SpecSummary {
+									<span class={ "inline-flex items-center gap-1 border px-1 py-0.5 text-xs sm:px-1.5", specSummaryClass(spec.IsMostPlayed) }>
+										@components.ClassSpecIcons(vm.Realm, 0, spec.Spec)
+										<span class="font-mono">{ format.IntCtx(ctx, spec.KillCount) }</span>
+										if spec.IsMostPlayed {
+											<span class="sr-only">Most played</span>
+										}
+									</span>
+								}
+							</dd>
+						}
+					</dl>
 				</div>
-				<dl class="grid w-full grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm sm:w-auto sm:grid-cols-3 sm:gap-x-6">
-					<dt class="text-bk-muted">Kills tracked</dt>
-					<dd class="text-right font-mono sm:col-span-2 sm:text-left">{ format.IntCtx(ctx, vm.Char.KillCount) }</dd>
-					<dt class="text-bk-muted">First seen</dt>
-					<dd class="text-right font-mono sm:col-span-2 sm:text-left">{ vm.Char.FirstSeen }</dd>
-					<dt class="text-bk-muted">Last seen</dt>
-					<dd class="text-right font-mono sm:col-span-2 sm:text-left">{ vm.Char.LastSeen }</dd>
-					if len(vm.SpecSummary) > 0 {
-						<dt aria-hidden="true"></dt>
-						<dd class="flex flex-wrap justify-end gap-1 sm:col-span-2 sm:gap-1.5">
-							for _, spec := range vm.SpecSummary {
-								<span class={ "inline-flex items-center gap-1 rounded border px-1 py-0.5 text-xs sm:px-1.5", specSummaryClass(spec.IsMostPlayed) }>
-									@components.ClassSpecIcons(vm.Realm, 0, spec.Spec)
-									<span class="font-mono">{ format.IntCtx(ctx, spec.KillCount) }</span>
-									if spec.IsMostPlayed {
-										<span class="sr-only">Most played</span>
-									}
-								</span>
-							}
-						</dd>
-					}
-				</dl>
-				</div>
-			</header>
+			}
 			@StatsPanelShell(vm)
 			@ActivityPanelShell(vm)
 			<details
-				class="rounded border border-bk-border"
+				class="border border-bk-border"
 				hx-get={ rankingsHref(vm.Realm, vm.Char.Name, 0) }
 				hx-trigger="toggle once"
 				hx-target="#rankings-content"
@@ -187,6 +180,89 @@ templ Page(vm ViewModel) {
 			</div>
 		</div>
 	}
+}
+
+// AllStarShell is the lazy placeholder rendered in the header; it fetches the
+// all-star badge fragment on load and swaps itself out.
+templ AllStarShell(realmName, charName string) {
+	<div
+		id="allstar-badge"
+		class="w-full"
+		hx-get={ allStarHref(realmName, charName, "", -1) }
+		hx-trigger="load"
+		hx-swap="outerHTML"
+	>
+		<div class="text-xs text-bk-muted">Loading all-star…</div>
+	</div>
+}
+
+// AllStarBadge is the "how good is this player at a glance" summary: summed
+// all-star points (WCL-style) for the selected raid + difficulty, with raid and
+// difficulty selectors. It swaps itself via htmx when a selection changes.
+templ AllStarBadge(vm AllStarViewModel) {
+	<div id="allstar-badge" class="w-full">
+		if len(vm.Raids) > 0 {
+			<div class="flex w-full flex-col gap-2 border border-bk-border bg-black/20 px-3 py-2">
+				<div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+					<div class="flex min-w-0 items-center gap-2">
+						<img src={ viewhelpers.RaidIconHref(vm.RaidName) } alt="" loading="lazy" width="24" height="24" class="h-6 w-6 shrink-0 border border-bk-border object-cover"/>
+						<span class="truncate text-[11px] font-semibold uppercase tracking-wide text-bk-muted">
+							All-Star · { vm.RaidName }
+							if vm.DifficultyLabel != "" {
+								<span class="text-bk-fg">· { vm.DifficultyLabel }</span>
+							}
+						</span>
+					</div>
+					<div class="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1.5">
+						if len(vm.Difficulties) > 1 {
+							<div class="flex items-center gap-1">
+								for _, d := range vm.Difficulties {
+									if d.Selected {
+										<a hx-get={ d.Href } hx-target="#allstar-badge" hx-swap="outerHTML" href={ templ.SafeURL(d.Href) } class="border border-bk-accent px-1.5 py-0.5 text-[11px] font-medium text-bk-accent">{ d.Label }</a>
+									} else {
+										<a hx-get={ d.Href } hx-target="#allstar-badge" hx-swap="outerHTML" href={ templ.SafeURL(d.Href) } class="border border-bk-border px-1.5 py-0.5 text-[11px] text-bk-muted hover:text-bk-fg">{ d.Label }</a>
+									}
+								}
+							</div>
+						}
+						if len(vm.Raids) > 1 {
+							<div class="flex items-center gap-1">
+								for _, raid := range vm.Raids {
+									if raid.Selected {
+										<a hx-get={ raid.Href } hx-target="#allstar-badge" hx-swap="outerHTML" href={ templ.SafeURL(raid.Href) } title={ raid.Name } class="border border-bk-accent p-0.5">
+											<img src={ viewhelpers.RaidIconHref(raid.Name) } alt={ raid.Name } loading="lazy" width="28" height="28" class="h-7 w-7 object-cover"/>
+										</a>
+									} else {
+										<a hx-get={ raid.Href } hx-target="#allstar-badge" hx-swap="outerHTML" href={ templ.SafeURL(raid.Href) } title={ raid.Name } class="border border-bk-border p-0.5 hover:border-bk-muted">
+											<img src={ viewhelpers.RaidIconHref(raid.Name) } alt={ raid.Name } loading="lazy" width="28" height="28" class="h-7 w-7 object-cover"/>
+										</a>
+									}
+								}
+							</div>
+						}
+					</div>
+				</div>
+				if vm.HasDPS || vm.HasHPS {
+					<div class="grid grid-cols-[auto_auto_auto_1fr] items-baseline gap-x-2 gap-y-1">
+						if vm.HasDPS {
+							<span class="self-center text-[11px] font-semibold uppercase text-bk-accent">DPS</span>
+							<span class={ "font-mono text-lg font-bold leading-none", vm.DPSGradeClass }>{ viewhelpers.Itoa(vm.DPSPoints) }</span>
+							<span class={ "text-[11px] font-semibold uppercase tracking-wide", vm.DPSGradeClass }>{ vm.DPSGrade }</span>
+							<span class="text-xs text-bk-muted">{ fmtAvg(vm.DPSAvg) }/120 avg · { viewhelpers.Itoa(vm.DPSBosses) } bosses</span>
+						}
+						if vm.HasHPS {
+							<span class="self-center text-[11px] font-semibold uppercase text-bk-secondary">HPS</span>
+							<span class={ "font-mono text-lg font-bold leading-none", vm.HPSGradeClass }>{ viewhelpers.Itoa(vm.HPSPoints) }</span>
+							<span class={ "text-[11px] font-semibold uppercase tracking-wide", vm.HPSGradeClass }>{ vm.HPSGrade }</span>
+							<span class="text-xs text-bk-muted">{ fmtAvg(vm.HPSAvg) }/120 avg · { viewhelpers.Itoa(vm.HPSBosses) } bosses</span>
+						}
+					</div>
+				} else {
+					<span class="text-xs text-bk-muted">No ranking data for this raid.</span>
+				}
+			</div>
+		}
+	</div>
 }
 
 templ killsFilterForm(vm ViewModel) {
@@ -214,7 +290,7 @@ templ killsFilterForm(vm ViewModel) {
 
 templ ActivityPanelShell(vm ViewModel) {
 	<details
-		class="rounded border border-bk-border"
+		class="border border-bk-border"
 		hx-get={ activityHref(vm.Realm, vm.Char.Name) }
 		hx-trigger="toggle once"
 		hx-target="#activity-feed"
@@ -232,7 +308,7 @@ templ ActivityPanelShell(vm ViewModel) {
 
 templ StatsPanelShell(vm ViewModel) {
 	<details
-		class="rounded border border-bk-border"
+		class="border border-bk-border"
 		hx-get={ statsHref(vm.Realm, vm.Char.Name) }
 		hx-trigger="toggle once"
 		hx-target="#character-stats"
@@ -314,7 +390,7 @@ templ ActivityFragment(vm ActivityViewModel) {
 						if row.ItemID > 0 {
 							<div class="bk-tip-row py-2 flex items-start gap-3 text-sm" data-tooltip-url={ viewhelpers.ItemTooltipURL(vm.Realm, row.ItemID) }>
 								<div class="w-28 shrink-0 font-mono text-xs text-bk-muted">{ row.EventTime }</div>
-								<img src={ viewhelpers.ItemIconHref(row.ItemID) } alt="" loading="lazy" width="24" height="24" class="rounded border border-bk-border"/>
+								<img src={ viewhelpers.ItemIconHref(row.ItemID) } alt="" loading="lazy" width="24" height="24" class="border border-bk-border"/>
 								<div class="min-w-0 flex-1">
 									<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
 										<span class="text-xs uppercase tracking-wide text-bk-muted">{ row.EventKind }</span>
@@ -350,7 +426,7 @@ templ ActivityFragment(vm ActivityViewModel) {
 							hx-get={ vm.NextHref }
 							hx-target="#activity-feed"
 							hx-swap="outerHTML"
-							class="rounded border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-accent"
+							class="border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-accent"
 						>Load more</button>
 					</div>
 				}
@@ -369,7 +445,7 @@ templ RankingsFragment(vm RankingsViewModel) {
 					hx-target="#rankings-content"
 					hx-swap="innerHTML"
 					href={ templ.SafeURL(rankingsHref(vm.Realm, vm.CharName, 0)) }
-					class="px-2 py-0.5 text-xs rounded border border-bk-accent text-bk-accent"
+					class="px-2 py-0.5 text-xs border border-bk-accent text-bk-accent"
 				>All</a>
 			} else {
 				<a
@@ -377,7 +453,7 @@ templ RankingsFragment(vm RankingsViewModel) {
 					hx-target="#rankings-content"
 					hx-swap="innerHTML"
 					href={ templ.SafeURL(rankingsHref(vm.Realm, vm.CharName, 0)) }
-					class="px-2 py-0.5 text-xs rounded border border-bk-border text-bk-muted hover:text-bk-fg"
+					class="px-2 py-0.5 text-xs border border-bk-border text-bk-muted hover:text-bk-fg"
 				>All</a>
 			}
 			for _, btn := range vm.SpecButtons {
@@ -387,7 +463,7 @@ templ RankingsFragment(vm RankingsViewModel) {
 						hx-target="#rankings-content"
 						hx-swap="innerHTML"
 						href={ templ.SafeURL(btn.Href) }
-						class="p-0.5 rounded border border-bk-accent"
+						class="p-0.5 border border-bk-accent"
 					>
 						@components.ClassSpecIcons(vm.Realm, btn.Class, btn.Spec)
 					</a>
@@ -397,7 +473,7 @@ templ RankingsFragment(vm RankingsViewModel) {
 						hx-target="#rankings-content"
 						hx-swap="innerHTML"
 						href={ templ.SafeURL(btn.Href) }
-						class="p-0.5 rounded border border-bk-border hover:border-bk-muted"
+						class="p-0.5 border border-bk-border hover:border-bk-muted"
 					>
 						@components.ClassSpecIcons(vm.Realm, btn.Class, btn.Spec)
 					</a>
@@ -417,14 +493,14 @@ templ RankingsFragment(vm RankingsViewModel) {
 }
 
 templ rankingRaidGroup(realmName string, raid RankingRaidGroup) {
-	<details class="group rounded-lg border border-bk-border bg-black/20">
-		<summary class="sticky top-0 z-30 flex cursor-pointer list-none items-center gap-3 rounded-t-lg bg-bk-bg/95 px-4 py-3 backdrop-blur hover:bg-bk-accent-soft">
+	<details class="group border border-bk-border bg-black/20">
+		<summary class="sticky top-0 z-30 flex cursor-pointer list-none items-center gap-3 bg-bk-bg/95 px-4 py-3 backdrop-blur hover:bg-bk-accent-soft">
 			<img
 				src={ viewhelpers.RaidIconHref(raid.Name) }
 				alt=""
 				loading="lazy"
 				width="36" height="36"
-				class="h-9 w-9 shrink-0 rounded-md border border-bk-border object-cover"
+				class="h-9 w-9 shrink-0 border border-bk-border object-cover"
 			/>
 			<div class="min-w-0">
 				<div class="truncate font-semibold text-bk-fg">{ raid.Name }</div>
@@ -444,7 +520,7 @@ templ rankingRaidGroup(realmName string, raid RankingRaidGroup) {
 }
 
 templ rankingBossGroup(realmName string, bg RankingBossGroup) {
-	<div class="overflow-hidden rounded-md border border-bk-border bg-bk-bg/60">
+	<div class="overflow-hidden border border-bk-border bg-bk-bg/60">
 		<div class="flex flex-wrap items-baseline gap-2 border-b border-bk-border bg-black/20 px-3 py-2">
 			<h3 class="text-sm font-medium">
 				<a href={ viewhelpers.BossHref(realmName, bg.BossID) } class="hover:text-bk-accent">{ bg.Name }</a>
@@ -476,7 +552,7 @@ templ rankingEntryList(realmName string, entries []RankingEntry) {
 }
 
 templ rankingEntry(realmName string, e RankingEntry) {
-	<div class="inline-flex w-fit max-w-full items-center gap-1.5 rounded border border-bk-border bg-black/20 px-2 py-1 text-xs">
+	<div class="inline-flex w-fit max-w-full items-center gap-1.5 border border-bk-border bg-black/20 px-2 py-1 text-xs">
 		if e.Rank == 1 {
 			<span class="shrink-0 font-bold text-yellow-400">#1</span>
 		} else if e.Rank <= 10 {

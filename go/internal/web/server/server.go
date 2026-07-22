@@ -69,7 +69,7 @@ func New(cfg Config) http.Handler {
 	changelog.Mount(mux, changelog.Deps{CSSHash: cssHash, JSHash: jsHash})
 	dashboard.Mount(mux, dashboard.Deps{DB: cfg.DB, CSSHash: cssHash, JSHash: jsHash})
 	raids.Mount(mux, raids.Deps{DB: cfg.DB, CSSHash: cssHash, JSHash: jsHash})
-	boss.Mount(mux, boss.Deps{DB: cfg.DB, CSSHash: cssHash, JSHash: jsHash})
+	boss.Mount(mux, boss.Deps{DB: cfg.DB, Items: cfg.Items, CSSHash: cssHash, JSHash: jsHash})
 	bosskills.Mount(mux, bosskills.Deps{DB: cfg.DB, CSSHash: cssHash, JSHash: jsHash})
 	bosskill.Mount(mux, bosskill.Deps{DB: cfg.DB, Items: cfg.Items, CSSHash: cssHash, JSHash: jsHash})
 	ranks.Mount(mux, ranks.Deps{DB: cfg.DB, CSSHash: cssHash, JSHash: jsHash})

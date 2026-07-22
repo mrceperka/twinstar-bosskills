@@ -82,10 +82,19 @@ templ Page(vm ViewModel) {
 		<section class="space-y-2">
 			<h1 class="text-2xl font-semibold">Twinstar Bosskills</h1>
 		</section>
-		@currentPerformersSection(vm.Realm, vm.CurrentPerformerRaid, vm.PerformerLock, vm.PerformerLockOffset, vm.PerformerDifficulties, vm.SelectedPerformerMode, vm.PerformerLimit, vm.CurrentPerformers)
+		@PerformersShell(vm)
 		@lockSection(vm.Realm, "Current raid lockout bosskills", vm.CurrentLock)
 		@lockSection(vm.Realm, "Previous raid lockout bosskills", vm.PreviousLock)
 	}
+}
+
+// PerformersShell wraps the top-performers section in a stable #perf-shell
+// container so htmx can swap it in place. The handler renders this templ
+// directly for HX-Request navigation.
+templ PerformersShell(vm ViewModel) {
+	<div id="perf-shell">
+		@currentPerformersSection(vm.Realm, vm.CurrentPerformerRaid, vm.PerformerLock, vm.PerformerLockOffset, vm.PerformerDifficulties, vm.SelectedPerformerMode, vm.PerformerLimit, vm.CurrentPerformers)
+	</div>
 }
 
 templ currentPerformersSection(realmName string, raidName string, lock LockSummary, lockOffset int, difficulties []DifficultyChoice, selectedMode int, performerLimit int, bosses []BossPerformers) {
@@ -97,20 +106,35 @@ templ currentPerformersSection(realmName string, raidName string, lock LockSumma
 				}
 				<span>top { viewhelpers.Itoa(performerLimit) } DPS and HPS per boss between { lock.StartLabel } and { lock.EndLabel }</span>
 			</div>
-			<nav class="mb-3 flex flex-wrap gap-2 text-sm" aria-label="Raid lock">
+			<nav class="mb-3 flex flex-wrap items-center gap-3 text-sm" aria-label="Raid lock">
+				<span class="text-xs text-bk-muted">{ lock.StartLabel } → { lock.EndLabel }</span>
 				<a
-						href={ performerLockHref(realmName, 0, selectedMode, performerLimit, bosses) }
-					class={ viewhelpers.TabActiveClass(lockOffset == 0) }
-				>Current lock</a>
-				<a
-						href={ performerLockHref(realmName, 1, selectedMode, performerLimit, bosses) }
-					class={ viewhelpers.TabActiveClass(lockOffset == 1) }
-				>Previous lock</a>
+					hx-get={ string(performerLockHref(realmName, lockOffset+1, selectedMode, performerLimit, bosses)) }
+					hx-target="#perf-shell"
+					hx-swap="outerHTML"
+					hx-push-url="true"
+					href={ performerLockHref(realmName, lockOffset+1, selectedMode, performerLimit, bosses) }
+					class="text-bk-accent"
+				>(see previous)</a>
+				if lockOffset > 0 {
+					<a
+						hx-get={ string(performerLockHref(realmName, lockOffset-1, selectedMode, performerLimit, bosses)) }
+						hx-target="#perf-shell"
+						hx-swap="outerHTML"
+						hx-push-url="true"
+						href={ performerLockHref(realmName, lockOffset-1, selectedMode, performerLimit, bosses) }
+						class="text-bk-accent"
+					>(see newer)</a>
+				}
 			</nav>
 			if len(difficulties) > 0 {
 				<nav class="mb-3 flex flex-wrap gap-2 text-sm" aria-label="Difficulty">
 					for _, d := range difficulties {
 						<a
+							hx-get={ string(performerDifficultyHref(realmName, lockOffset, d.Mode, performerLimit, bosses)) }
+							hx-target="#perf-shell"
+							hx-swap="outerHTML"
+							hx-push-url="true"
 							href={ performerDifficultyHref(realmName, lockOffset, d.Mode, performerLimit, bosses) }
 							class={ viewhelpers.TabActiveClass(d.Mode == selectedMode) }
 						>{ d.Label }</a>
@@ -123,6 +147,10 @@ templ currentPerformersSection(realmName string, raidName string, lock LockSumma
 				<nav class="mb-4 flex flex-wrap gap-2 text-sm" role="tablist">
 					for _, b := range bosses {
 						<a
+							hx-get={ string(performerBossHref(realmName, lockOffset, selectedMode, performerLimit, b.BossID)) }
+							hx-target="#perf-shell"
+							hx-swap="outerHTML"
+							hx-push-url="true"
 							href={ performerBossHref(realmName, lockOffset, selectedMode, performerLimit, b.BossID) }
 							class={ viewhelpers.TabActiveClass(b.Active) }
 							role="tab"
@@ -150,7 +178,14 @@ templ currentPerformersSection(realmName string, raidName string, lock LockSumma
 							</div>
 							if b.HasMore && performerLimit < topPerformerMaxLimit {
 								<div class="mt-4">
-									<a href={ performerLoadMoreHref(realmName, lockOffset, selectedMode, performerLimit, b.BossID) } class="inline-flex rounded border border-bk-border px-2 py-1 text-sm text-bk-muted hover:text-bk-fg">
+									<a
+										hx-get={ string(performerLoadMoreHref(realmName, lockOffset, selectedMode, performerLimit, b.BossID)) }
+										hx-target="#perf-shell"
+										hx-swap="outerHTML"
+										hx-push-url="true"
+										href={ performerLoadMoreHref(realmName, lockOffset, selectedMode, performerLimit, b.BossID) }
+										class="inline-flex border border-bk-border px-2 py-1 text-sm text-bk-muted hover:text-bk-fg"
+									>
 										Load more
 									</a>
 								</div>
@@ -198,7 +233,7 @@ templ performerList(realmName string, rows []Performer, metric string) {
 }
 
 func performerLockHref(realmName string, lockOffset, mode, limit int, bosses []BossPerformers) templ.SafeURL {
-	href := "/?perf_raidlock=" + viewhelpers.Itoa(lockOffset) + "&difficulty=" + viewhelpers.Itoa(mode) + "&perf_limit=" + viewhelpers.Itoa(limit)
+	href := "/?raidlock=" + viewhelpers.Itoa(lockOffset) + "&difficulty=" + viewhelpers.Itoa(mode) + "&perf_limit=" + viewhelpers.Itoa(limit)
 	for _, b := range bosses {
 		if b.Active {
 			href += "&perf_boss=" + viewhelpers.Itoa(int(b.BossID))
@@ -213,7 +248,7 @@ func performerDifficultyHref(realmName string, lockOffset, mode, limit int, boss
 }
 
 func performerBossHref(realmName string, lockOffset, mode, limit int, bossID uint32) templ.SafeURL {
-	return viewhelpers.RealmPathHref(realmName, "/?perf_raidlock="+viewhelpers.Itoa(lockOffset)+"&difficulty="+viewhelpers.Itoa(mode)+"&perf_limit="+viewhelpers.Itoa(limit)+"&perf_boss="+viewhelpers.Itoa(int(bossID)))
+	return viewhelpers.RealmPathHref(realmName, "/?raidlock="+viewhelpers.Itoa(lockOffset)+"&difficulty="+viewhelpers.Itoa(mode)+"&perf_limit="+viewhelpers.Itoa(limit)+"&perf_boss="+viewhelpers.Itoa(int(bossID)))
 }
 
 func performerLoadMoreHref(realmName string, lockOffset, mode, limit int, bossID uint32) templ.SafeURL {

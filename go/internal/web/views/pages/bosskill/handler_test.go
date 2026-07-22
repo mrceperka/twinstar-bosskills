@@ -46,6 +46,31 @@ func TestBuildTimelineJSONUsesCategoryAxis(t *testing.T) {
 	}
 }
 
+func TestPercentileRank(t *testing.T) {
+	tests := []struct {
+		name   string
+		sorted []uint64
+		v      uint64
+		want   float64
+	}{
+		{"empty is N/A", nil, 100, -1},
+		{"single sample is rank one", []uint64{50}, 50, 100},
+		{"worst of many is 0", []uint64{10, 20, 30, 40, 50}, 10, 0},
+		{"best of many is 100", []uint64{10, 20, 30, 40, 50}, 50, 100},
+		{"middle of five is 50", []uint64{10, 20, 30, 40, 50}, 30, 50},
+		{"second worst of five is 25", []uint64{10, 20, 30, 40, 50}, 20, 25},
+		{"ties take the lower rank", []uint64{10, 30, 30, 50}, 30, 100.0 / 3.0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := percentileRank(tt.sorted, tt.v)
+			if got != tt.want {
+				t.Fatalf("percentileRank(%v, %d) = %v, want %v", tt.sorted, tt.v, got, tt.want)
+			}
+		})
+	}
+}
+
 func seriesData(timeline map[string]any, name string) any {
 	for _, raw := range timeline["series"].([]any) {
 		series := raw.(map[string]any)

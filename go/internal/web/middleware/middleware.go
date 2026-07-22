@@ -18,6 +18,7 @@ type ctxKey int
 const (
 	keyRequestID ctxKey = iota + 1
 	keyRealm
+	keyRaidLock
 )
 
 // RequestID returns the value attached by Recover/RequestID. Empty if missing.
@@ -133,15 +134,25 @@ func Chain(log *slog.Logger, h http.Handler) http.Handler {
 		Recover(log)(
 			Logger(log)(
 				SecurityHeaders(
-					AttachLocale(h),
+					AttachLocale(
+						AttachRaidLock(h),
+					),
 				),
 			),
 		),
 	)
 }
 
-// IsHTMX reports whether the request came from htmx.
+// IsHTMX reports whether the request came from htmx and expects a fragment.
+//
+// History-restore requests (back/forward with hx-history="false") also carry
+// HX-Request: true, but htmx swaps them into the whole history element and
+// expects a full page. Treat those as non-htmx so handlers render the full
+// layout instead of a bare fragment.
 func IsHTMX(r *http.Request) bool {
+	if r.Header.Get("HX-History-Restore-Request") == "true" {
+		return false
+	}
 	return r.Header.Get("HX-Request") == "true"
 }
 

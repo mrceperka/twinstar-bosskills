@@ -10,3 +10,11 @@ package components
 templ ChartFromJSON(class string, jsonBytes []byte) {
 	<bk-chart class={ class } data-config={ string(jsonBytes) }></bk-chart>
 }
+
+// ChartFromJSONStyled is ChartFromJSON with an inline style (e.g. a computed
+// "height: 960px") for charts whose height must scale with their data - the
+// height cannot be a runtime-computed Tailwind arbitrary value because those
+// are only generated at build time from source.
+templ ChartFromJSONStyled(class, style string, jsonBytes []byte) {
+	<bk-chart class={ class } style={ style } data-config={ string(jsonBytes) }></bk-chart>
+}

@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 )
 
 // Item is the trimmed shape used by the bosskill detail page.
@@ -105,6 +107,73 @@ func (c *Client) GetItem(ctx context.Context, id int) (*Item, error) {
 		Name:    raw.ItemSparse.Name,
 		Quality: raw.ItemSparse.Quality,
 	}, nil
+}
+
+// spanTextRe matches the inner text of each <span> in a tooltip body.
+var spanTextRe = regexp.MustCompile(`(?is)<span[^>]*>(.*?)</span>`)
+
+// tierKeywordRe matches difficulty / forged tier keywords. Twinstar renders
+// the tier as a short standalone span between the item name and "Item Level"
+// (e.g. "Heroic", "Warforged", "Heroic Thunderforged").
+var tierKeywordRe = regexp.MustCompile(`(?i)\b(raid finder|flexible|heroic|mythic|warforged|thunderforged)\b`)
+
+// itemLevelRe extracts the numeric item level from a tooltip body.
+var itemLevelRe = regexp.MustCompile(`(?i)Item Level\s+(\d+)`)
+
+// ItemTier parses the difficulty / forged tier label ("Heroic",
+// "Warforged", "Heroic Warforged", ...) from a tooltip body, or "" when the
+// item has no tier line (normal, unforged items).
+func ItemTier(tooltipHTML string) string {
+	for _, m := range spanTextRe.FindAllStringSubmatch(tooltipHTML, -1) {
+		txt := strings.TrimSpace(m[1])
+		if txt == "" || len(txt) > 40 {
+			continue
+		}
+		if !tierKeywordRe.MatchString(txt) {
+			continue
+		}
+		// Skip lines that merely mention a keyword inside prose (stats,
+		// "Item Level", set bonuses); the tier line is only the keywords.
+		if strings.Contains(txt, "Item Level") || strings.ContainsAny(txt, ":+") {
+			continue
+		}
+		return txt
+	}
+	return ""
+}
+
+// ItemLevelFromTooltip parses the item level from a tooltip body, or 0 when
+// absent.
+func ItemLevelFromTooltip(tooltipHTML string) int {
+	m := itemLevelRe.FindStringSubmatch(tooltipHTML)
+	if m == nil {
+		return 0
+	}
+	n, _ := strconv.Atoi(m[1])
+	return n
+}
+
+// QualityName returns the WoW item rarity label for a quality id.
+func QualityName(q int) string {
+	switch q {
+	case 0:
+		return "Poor"
+	case 1:
+		return "Common"
+	case 2:
+		return "Uncommon"
+	case 3:
+		return "Rare"
+	case 4:
+		return "Epic"
+	case 5:
+		return "Legendary"
+	case 6:
+		return "Artifact"
+	case 7:
+		return "Heirloom"
+	}
+	return "Unknown"
 }
 
 // QualityColor returns a hex color matching WoW item rarity.

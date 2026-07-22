@@ -72,10 +72,7 @@ func Handler(deps Deps) http.HandlerFunc {
 				mode = v
 			}
 		}
-		offset := 0
-		if v, ok := query.RaidLock(r.URL.Query()); ok {
-			offset = v
-		}
+		offset, _ := middleware.RaidLock(r.Context())
 
 		now := time.Now().UTC()
 		win := domain.RaidLock(now, offset)

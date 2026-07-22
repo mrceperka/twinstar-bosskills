@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"twinstar-bosskills/internal/api"
+	"twinstar-bosskills/internal/cache"
 	"twinstar-bosskills/internal/domain"
 	"twinstar-bosskills/internal/metric"
 	"twinstar-bosskills/internal/realm"
@@ -20,6 +22,7 @@ import (
 
 type Deps struct {
 	DB      *sql.DB
+	Items   *cache.ItemDisk
 	CSSHash string
 	JSHash  string
 }
@@ -70,7 +73,7 @@ func Handler(deps Deps) http.HandlerFunc {
 		mode := selectMode(requestedMode, hasRequestedMode, avail, expansion)
 		lockOffset := 0
 		lock := lockFilter{}
-		if v, ok := query.RaidLock(r.URL.Query()); ok {
+		if v, ok := middleware.RaidLock(r.Context()); ok {
 			lockOffset = v
 			window := domain.RaidLock(time.Now().UTC(), lockOffset)
 			lock = lockFilter{Enabled: true, Start: window.Start, End: window.End}
@@ -162,6 +165,8 @@ func Handler(deps Deps) http.HandlerFunc {
 			HPSCurveJSON:     hpsCurveJSON,
 			DPSBoxJSON:       dpsBoxJSON,
 			HPSBoxJSON:       hpsBoxJSON,
+			DPSRows:          len(dpsCurves),
+			HPSRows:          len(hpsCurves),
 			AtPercentile:     atP,
 			TopDPS:           topDPS,
 			TopHPS:           topHPS,
@@ -577,10 +582,145 @@ func humanizeAgo(now, t time.Time) string {
 	return strconv.Itoa(years) + " years ago"
 }
 
+// LootHandler renders the lazily-loaded loot table fragment for a boss on a
+// given difficulty (?difficulty=N, optional &raidlock=Y). Fetched on first
+// expand of the collapsed loot disclosure on the boss page.
+func LootHandler(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		realmName := middleware.Realm(r.Context())
+
+		idStr := r.PathValue("id")
+		id, err := strconv.ParseUint(idStr, 10, 32)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		bossID := uint32(id)
+
+		ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
+		defer cancel()
+
+		expansion := realm.Expansion(realmName)
+
+		avail, err := loadAvailableModes(ctx, deps.DB, realmName, bossID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		requestedMode, hasRequestedMode := query.Difficulty(r.URL.Query())
+		mode := selectMode(requestedMode, hasRequestedMode, avail, expansion)
+
+		lock := lockFilter{}
+		if v, ok := query.RaidLock(r.URL.Query()); ok {
+			window := domain.RaidLock(time.Now().UTC(), v)
+			lock = lockFilter{Enabled: true, Start: window.Start, End: window.End}
+		}
+
+		loot, err := loadBossLoot(ctx, deps.DB, realmName, bossID, mode, lock)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// Hydrate loot rows with item metadata (name, quality, tooltip).
+		if deps.Items != nil && len(loot) > 0 {
+			ids := make([]int, 0, len(loot))
+			for _, l := range loot {
+				ids = append(ids, int(l.ItemID))
+			}
+			ictx, icancel := context.WithTimeout(r.Context(), 4*time.Second)
+			items := deps.Items.GetMany(ictx, ids)
+			icancel()
+			for i := range loot {
+				if it, ok := items[int(loot[i].ItemID)]; ok {
+					loot[i].Item = it
+					loot[i].Tier = api.ItemTier(it.Tooltip)
+					loot[i].ItemLevel = api.ItemLevelFromTooltip(it.Tooltip)
+				}
+			}
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_ = LootTable(ViewModel{Realm: realmName, Loot: loot}).Render(r.Context(), w)
+	}
+}
+
+// loadBossLoot returns every distinct item that dropped from this boss on the
+// given mode, with its aggregate drop chance = (kills where the item dropped) /
+// (total kills of that mode), respecting the raid-lock window. Rows are sorted
+// by drop chance descending. Item metadata is hydrated by the caller.
+func loadBossLoot(ctx context.Context, db *sql.DB, realmName string, id uint32, mode int, lock lockFilter) ([]LootDrop, error) {
+	totalQ := `
+		SELECT count()
+		FROM boss_kill
+		WHERE realm = ? AND boss_remote_id = ? AND mode = ?
+	`
+	targs := []any{realmName, id, uint8(mode)}
+	totalQ, targs = applyLockFilter(totalQ, targs, lock)
+	var total uint64
+	if err := db.QueryRowContext(ctx, totalQ, targs...).Scan(&total); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if total == 0 {
+		return nil, nil
+	}
+
+	dropQ := `
+		SELECT loot.item_id AS item_id, uniqExact(remote_id) AS drops
+		FROM boss_kill
+		ARRAY JOIN loot
+		WHERE realm = ? AND boss_remote_id = ? AND mode = ?
+	`
+	dargs := []any{realmName, id, uint8(mode)}
+	dropQ, dargs = applyLockFilter(dropQ, dargs, lock)
+	dropQ += " GROUP BY loot.item_id"
+	rows, err := db.QueryContext(ctx, dropQ, dargs...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type drop struct {
+		ItemID uint32
+		Count  uint64
+	}
+	var drops []drop
+	for rows.Next() {
+		var d drop
+		if err := rows.Scan(&d.ItemID, &d.Count); err != nil {
+			return nil, err
+		}
+		if d.ItemID == 0 {
+			continue
+		}
+		drops = append(drops, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.Slice(drops, func(i, j int) bool { return drops[i].Count > drops[j].Count })
+
+	out := make([]LootDrop, 0, len(drops))
+	for _, d := range drops {
+		pct := float64(d.Count) * 100.0 / float64(total)
+		out = append(out, LootDrop{
+			ItemID: d.ItemID,
+			DropChanceLabel: strconv.FormatUint(d.Count, 10) + " of " +
+				strconv.FormatUint(total, 10) + " ~ " +
+				strconv.FormatFloat(pct, 'f', 2, 64) + "%",
+		})
+	}
+	return out, nil
+}
+
 func Mount(mux *http.ServeMux, deps Deps) {
 	h := middleware.RequireRealm(Handler(deps))
+	lh := middleware.RequireRealm(LootHandler(deps))
 	router.ForEachRealmPrefix(func(prefix string) {
 		mux.Handle("GET "+prefix+"/boss/{id}", h)
 		mux.Handle("GET "+prefix+"/boss/{id}/history", h)
+		mux.Handle("GET "+prefix+"/boss/{id}/loot", lh)
 	})
 }

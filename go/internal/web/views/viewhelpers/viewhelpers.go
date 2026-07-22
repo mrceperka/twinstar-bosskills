@@ -137,9 +137,9 @@ func ItemTooltipURL(realmName string, itemID uint32) string {
 // inactive. Used by boss / boss-history / ranks pages - same look for all.
 func TabActiveClass(active bool) string {
 	if active {
-		return "rounded border border-bk-accent bg-bk-accent/20 px-2 py-1 text-bk-accent font-semibold"
+		return "border border-bk-accent bg-bk-accent/20 px-2 py-1 text-bk-accent font-semibold"
 	}
-	return "rounded border border-bk-border px-2 py-1 text-bk-muted hover:text-bk-fg"
+	return "border border-bk-border px-2 py-1 text-bk-muted hover:text-bk-fg"
 }
 
 func CheckboxFilterClass(active bool) string {

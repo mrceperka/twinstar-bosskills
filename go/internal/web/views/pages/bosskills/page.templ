@@ -73,7 +73,7 @@ templ Page(vm ViewModel) {
 // partial response when the user changes filters or pagination.
 templ TableFragment(vm ViewModel) {
 	if len(vm.Rows) == 0 {
-		<div class="rounded-md border border-bk-border bg-bk-panel p-6 text-center text-bk-muted">
+		<div class="border border-bk-border bg-bk-panel p-6 text-center text-bk-muted">
 			No kills match your filters.
 		</div>
 	} else {

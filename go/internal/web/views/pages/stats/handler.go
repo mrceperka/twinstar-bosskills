@@ -11,7 +11,6 @@ import (
 	"twinstar-bosskills/internal/domain"
 	"twinstar-bosskills/internal/realm"
 	"twinstar-bosskills/internal/web/middleware"
-	"twinstar-bosskills/internal/web/query"
 	"twinstar-bosskills/internal/web/router"
 	"twinstar-bosskills/internal/web/sqlutil"
 	"twinstar-bosskills/internal/web/views/layouts"
@@ -40,10 +39,7 @@ func Handler(deps Deps) http.HandlerFunc {
 		defer cancel()
 
 		expansion := realm.Expansion(realmName)
-		offset := 0
-		if v, ok := query.RaidLock(r.URL.Query()); ok {
-			offset = v
-		}
+		offset, _ := middleware.RaidLock(r.Context())
 		selectedModes := parseDifficulties(r.URL.Query())
 		canFilterDifficulty := expansion != realm.ExpansionVanilla
 		if !canFilterDifficulty {

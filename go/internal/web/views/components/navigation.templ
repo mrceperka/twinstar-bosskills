@@ -64,7 +64,7 @@ templ paginationLink(label, url, target string) {
 		hx-target={ target }
 		hx-push-url="true"
 		href={ templ.SafeURL(url) }
-		class="rounded border border-bk-border px-2 py-1 hover:text-bk-accent cursor-pointer"
+		class="border border-bk-border px-2 py-1 hover:text-bk-accent cursor-pointer"
 	>{ label }</a>
 }
 
@@ -100,8 +100,8 @@ templ FilterForm(p FilterFormProps) {
 
 templ FilterActions(resetURL string) {
 	<div class="sm:col-span-2 lg:col-span-4 flex justify-end gap-2">
-		<a href={ templ.SafeURL(resetURL) } class="rounded border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-text">Reset</a>
-		<button type="submit" class="rounded bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Apply</button>
+		<a href={ templ.SafeURL(resetURL) } class="border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-text">Reset</a>
+		<button type="submit" class="bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Apply</button>
 	</div>
 }
 

@@ -45,9 +45,9 @@ templ Page(vm ViewModel) {
 						value={ vm.Query }
 						placeholder="Type a name…"
 						autofocus
-						class="flex-1 rounded border border-bk-border bg-bk-bg p-2 font-mono"
+						class="flex-1 border border-bk-border bg-bk-bg p-2 font-mono"
 					/>
-					<button type="submit" class="rounded bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Search</button>
+					<button type="submit" class="bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Search</button>
 				</form>
 				<div id="matches" class="mt-4">
 					@Matches(vm)

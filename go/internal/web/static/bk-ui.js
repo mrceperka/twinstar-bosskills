@@ -124,13 +124,40 @@
     });
   }
 
+  // The .bk-tip currently shown/hovered, tracked so scroll/resize can keep it
+  // anchored to its row (position: fixed does not scroll with the page).
+  var activeTipRow;
+
   function closeAllTooltips() {
     document.querySelectorAll('.bk-tip-row.bk-tip-open').forEach(function (r) {
       r.classList.remove('bk-tip-open');
     });
+    activeTipRow = null;
+  }
+
+  // placeItemTip anchors row's .bk-tip below the row, flipping above when it
+  // would overflow the viewport bottom, and clamps it horizontally. The tip is
+  // position: fixed and kept in layout while hidden, so it is measurable here.
+  function placeItemTip(row) {
+    if (!row) return;
+    var tip = row.querySelector('.bk-tip');
+    if (!tip) return;
+    var rect = row.getBoundingClientRect();
+    var tr = tip.getBoundingClientRect();
+    var left = Math.min(Math.max(rect.left, 8), window.innerWidth - tr.width - 8);
+    if (left < 8) left = 8;
+    var top = rect.bottom + 6;
+    if (top + tr.height > window.innerHeight - 8) {
+      top = rect.top - tr.height - 6;
+    }
+    if (top < 8) top = 8;
+    tip.style.left = left + 'px';
+    tip.style.top = top + 'px';
   }
 
   function loadTooltip(row) {
+    activeTipRow = row;
+    placeItemTip(row);
     var tip = row.querySelector('.bk-tip');
     if (!tip || tip._bkLoaded) return;
     var tooltipUrl = row.dataset.tooltipUrl;
@@ -148,6 +175,8 @@
       })
       .then(function (html) {
         tip.innerHTML = html;
+        // Content changes size; re-anchor if this row is still the active one.
+        if (activeTipRow === row) placeItemTip(row);
       })
       .catch(function () {
         tip._bkLoaded = false; // allow retry on next hover
@@ -161,6 +190,11 @@
       // Load on first hover (desktop) or first focus-within (keyboard nav).
       row.addEventListener('mouseenter', function () { loadTooltip(row); });
       row.addEventListener('focusin', function () { loadTooltip(row); });
+      row.addEventListener('mouseleave', function () {
+        if (activeTipRow === row && !row.classList.contains('bk-tip-open')) {
+          activeTipRow = null;
+        }
+      });
       // Toggle open/close on tap (touch devices); load at same time.
       row.addEventListener('click', function (e) {
         // Let link clicks navigate; tooltip tap targets are icon/row background.
@@ -170,6 +204,8 @@
         closeAllTooltips();
         if (!wasOpen) {
           row.classList.add('bk-tip-open');
+          activeTipRow = row;
+          placeItemTip(row);
           e.stopPropagation();
         }
       });
@@ -242,7 +278,13 @@
       hideTableFullText();
     }
   });
-  window.addEventListener('scroll', function () { hideTableFullText(); }, true);
+  window.addEventListener('scroll', function () {
+    hideTableFullText();
+    if (activeTipRow) placeItemTip(activeTipRow);
+  }, true);
+  window.addEventListener('resize', function () {
+    if (activeTipRow) placeItemTip(activeTipRow);
+  });
   window.addEventListener('resize', function () {
     hideTableFullText();
     initStickyTableCells(document);

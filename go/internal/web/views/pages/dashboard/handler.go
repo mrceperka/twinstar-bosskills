@@ -46,26 +46,13 @@ func Handler(deps Deps) http.HandlerFunc {
 
 		expansion := realm.Expansion(realmName)
 		now := time.Now().UTC()
-		curWin := domain.RaidLock(now, 0)
-		prevWin := domain.RaidLock(now, 1)
 
-		curr, err := loadLockSummary(ctx, deps.DB, realmName, guildFilter, curWin, expansion)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
 		var selectedPerformerBoss uint32
 		if v, err := strconv.ParseUint(r.URL.Query().Get("perf_boss"), 10, 32); err == nil {
 			selectedPerformerBoss = uint32(v)
 		}
-		selectedPerformerLockOffset, _ := query.Int(r.URL.Query(), 0, "perf_raidlock")
-		if selectedPerformerLockOffset > 1 {
-			selectedPerformerLockOffset = 1
-		}
-		performerWin := curWin
-		if selectedPerformerLockOffset == 1 {
-			performerWin = prevWin
-		}
+		selectedPerformerLockOffset, _ := middleware.RaidLock(r.Context())
+		performerWin := domain.RaidLock(now, selectedPerformerLockOffset)
 		performerLimit := topPerformerDefaultLimit
 		if requestedPerformerLimit, ok := query.Int(r.URL.Query(), 1, "perf_limit"); ok && requestedPerformerLimit > performerLimit {
 			performerLimit = requestedPerformerLimit
@@ -75,11 +62,6 @@ func Handler(deps Deps) http.HandlerFunc {
 		}
 		requestedPerformerMode, hasRequestedPerformerMode := query.Difficulty(r.URL.Query())
 		performerRaid, performerDifficulties, selectedPerformerMode, performers, err := loadCurrentLockPerformers(ctx, deps.DB, realmName, guildFilter, performerWin, expansion, selectedPerformerBoss, requestedPerformerMode, hasRequestedPerformerMode, performerLimit)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		prev, err := loadLockSummary(ctx, deps.DB, realmName, guildFilter, prevWin, expansion)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -94,7 +76,6 @@ func Handler(deps Deps) http.HandlerFunc {
 				NeedsChart: true,
 			},
 			Realm:                 realmName,
-			CurrentLock:           curr,
 			PerformerLock:         lockSummaryLabels(performerWin),
 			PerformerLockOffset:   selectedPerformerLockOffset,
 			CurrentPerformerRaid:  performerRaid,
@@ -102,9 +83,30 @@ func Handler(deps Deps) http.HandlerFunc {
 			SelectedPerformerMode: selectedPerformerMode,
 			PerformerLimit:        performerLimit,
 			CurrentPerformers:     performers,
-			PreviousLock:          prev,
 		}
+
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		// Performer navigation is driven by htmx: swap just the #perf-shell
+		// fragment instead of re-rendering the whole dashboard (and re-running
+		// the two lockout-summary query sets below).
+		if middleware.IsHTMX(r) {
+			_ = PerformersShell(vm).Render(r.Context(), w)
+			return
+		}
+
+		// Full page also needs the current + previous lockout summaries.
+		curr, err := loadLockSummary(ctx, deps.DB, realmName, guildFilter, domain.RaidLock(now, 0), expansion)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		prev, err := loadLockSummary(ctx, deps.DB, realmName, guildFilter, domain.RaidLock(now, 1), expansion)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		vm.CurrentLock = curr
+		vm.PreviousLock = prev
 		_ = Page(vm).Render(r.Context(), w)
 	}
 }

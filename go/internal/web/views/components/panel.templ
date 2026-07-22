@@ -13,7 +13,10 @@ type CheckboxOption struct {
 }
 
 templ Panel(title string) {
-	<section class="rounded-md border border-bk-border bg-bk-panel">
+	// min-w-0: as a flex/grid item this must be allowed to shrink below its
+	// content width so an inner .bk-table-wrap scrolls instead of overflowing
+	// (the page clips overflow-x, so overflow would hide columns).
+	<section class="min-w-0 border border-bk-border bg-bk-panel">
 		if title != "" {
 			<header class="border-b border-bk-border px-4 py-2 text-sm font-medium uppercase tracking-wide text-bk-muted">
 				{ title }
@@ -26,7 +29,7 @@ templ Panel(title string) {
 }
 
 templ CollapsiblePanel(title string, open bool) {
-	<details class="rounded-md border border-bk-border bg-bk-panel" open?={ open }>
+	<details class="border border-bk-border bg-bk-panel" open?={ open }>
 		<summary class="cursor-pointer select-none border-b border-bk-border px-4 py-2 text-sm font-medium uppercase tracking-wide text-bk-muted">
 			{ title }
 		</summary>
@@ -69,7 +72,7 @@ templ SortableTable() {
 
 // TablePanel is a shortcut for `@Panel(title) { @Table() { ... } }`.
 templ TablePanel(title string) {
-	<section class="rounded-md border border-bk-border bg-bk-panel">
+	<section class="min-w-0 border border-bk-border bg-bk-panel">
 		if title != "" {
 			<header class="border-b border-bk-border px-4 py-2 text-sm font-medium uppercase tracking-wide text-bk-muted">
 				{ title }
@@ -100,10 +103,10 @@ templ CheckboxFilter(name string, options []CheckboxOption, active bool, minHeig
 			<label class="bk-checkbox-option">
 				<input type="checkbox" name={ name } value={ o.Value } checked?={ o.Selected }/>
 				if o.IconURL != "" {
-					<img src={ templ.SafeURL(o.IconURL) } alt={ o.IconAlt } width="20" height="20" class="rounded"/>
+					<img src={ templ.SafeURL(o.IconURL) } alt={ o.IconAlt } width="20" height="20"/>
 				}
 				if o.IconURL2 != "" {
-					<img src={ templ.SafeURL(o.IconURL2) } alt={ o.IconAlt2 } width="20" height="20" class="rounded"/>
+					<img src={ templ.SafeURL(o.IconURL2) } alt={ o.IconAlt2 } width="20" height="20"/>
 				}
 				<span>{ o.Label }</span>
 			</label>
@@ -119,10 +122,10 @@ templ IconCheckboxFilter(name string, options []CheckboxOption, active bool, min
 			<label class="bk-checkbox-option bk-icon-filter-option" data-label={ o.Label } title={ o.Label }>
 				<input type="checkbox" name={ name } value={ o.Value } checked?={ o.Selected } aria-label={ o.Label }/>
 				if o.IconURL != "" {
-					<img src={ templ.SafeURL(o.IconURL) } alt="" width="20" height="20" class="rounded"/>
+					<img src={ templ.SafeURL(o.IconURL) } alt="" width="20" height="20"/>
 				}
 				if o.IconURL2 != "" {
-					<img src={ templ.SafeURL(o.IconURL2) } alt="" width="20" height="20" class="rounded"/>
+					<img src={ templ.SafeURL(o.IconURL2) } alt="" width="20" height="20"/>
 				}
 			</label>
 		}

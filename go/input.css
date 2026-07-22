@@ -91,7 +91,6 @@ a:hover {
   -webkit-overflow-scrolling: touch;
   padding: 0.25rem;
   border: 1px solid var(--color-bk-border);
-  border-radius: 0.25rem;
   background: var(--color-bk-bg);
 }
 .bk-checkbox-list.active {
@@ -103,7 +102,6 @@ a:hover {
   gap: 0.5rem;
   min-height: 44px;
   padding: 0.45rem 0.5rem;
-  border-radius: 0.25rem;
   color: var(--color-bk-fg);
   cursor: pointer;
   touch-action: manipulation;
@@ -137,7 +135,6 @@ a:hover {
   width: max-content;
   padding: 0.25rem 0.4rem;
   border: 1px solid var(--color-bk-border);
-  border-radius: 0.25rem;
   background: var(--color-bk-bg);
   color: var(--color-bk-fg);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
@@ -286,7 +283,6 @@ a:hover {
   max-width: min(18rem, calc(100vw - 1rem));
   padding: 0.3rem 0.5rem;
   border: 1px solid var(--color-bk-border);
-  border-radius: 0.25rem;
   background: var(--color-bk-bg);
   color: var(--color-bk-fg);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
@@ -519,23 +515,27 @@ h2 { font-size: 1.15rem; margin: 0.5rem 0; }
  * or tap (focus-within covers mobile when the link gets focus).
  * --------------------------------------------------------------------*/
 .bk-tip-row { position: relative; }
+/* Fixed positioning so the popover escapes any ancestor's overflow clipping
+ * (e.g. .bk-table-wrap's overflow-x: auto). Coordinates are set by bk-ui.js,
+ * which also flips it above the row near the viewport bottom. Kept in layout
+ * while hidden (visibility, not display:none) so JS can measure it. */
 .bk-tip {
-  position: absolute;
-  display: none;
+  position: fixed;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
   z-index: 50;
-  top: 100%;
+  top: 0;
   left: 0;
-  margin-top: 0.4rem;
   max-width: min(28rem, calc(100vw - 1rem));
   padding: 0.5rem 0.75rem;
   background-color: rgba(0, 0, 0, 0.94);
   border: 1px solid var(--color-bk-accent);
-  border-radius: 0.25rem;
   color: var(--color-bk-fg);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   white-space: normal;
 }
 .bk-tip-row:hover .bk-tip,
 .bk-tip-row:focus-within .bk-tip,
-.bk-tip-row.bk-tip-open .bk-tip { display: block; }
+.bk-tip-row.bk-tip-open .bk-tip { visibility: visible; opacity: 1; pointer-events: auto; }
 .bk-tip a { color: var(--color-bk-accent); }

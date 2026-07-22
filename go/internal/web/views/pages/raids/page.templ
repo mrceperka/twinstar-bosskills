@@ -54,7 +54,7 @@ templ Page(vm ViewModel) {
 				</div>
 			</header>
 			for _, r := range vm.Raids {
-				<section class="rounded-md border border-bk-border bg-bk-panel">
+				<section class="border border-bk-border bg-bk-panel">
 					<header class="flex flex-wrap items-center justify-between gap-3 border-b border-bk-border px-4 py-2">
 						<div class="flex items-center gap-3">
 							<img
@@ -62,7 +62,7 @@ templ Page(vm ViewModel) {
 								alt=""
 								loading="lazy"
 								width="36" height="36"
-								class="rounded"
+								class=""
 							/>
 							<h2 class="text-sm font-medium uppercase tracking-wide text-bk-muted">{ r.Name }</h2>
 						</div>
@@ -76,7 +76,7 @@ templ Page(vm ViewModel) {
 				</section>
 			}
 			if len(vm.Raids) == 0 {
-				<div class="rounded-md border border-bk-border bg-bk-panel p-6 text-center text-bk-muted">
+				<div class="border border-bk-border bg-bk-panel p-6 text-center text-bk-muted">
 					No kills recorded in this raid lock yet.
 				</div>
 			}

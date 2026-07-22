@@ -209,6 +209,44 @@ func RankingsHandler(deps Deps) http.HandlerFunc {
 	}
 }
 
+// AllStarHandler handles GET /{realm}/character/{name}/allstar?raid=... and
+// returns the all-star badge fragment for the selected raid.
+func AllStarHandler(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		realmName := middleware.Realm(r.Context())
+		if middleware.GatePrivateRealm(w, r) {
+			return
+		}
+		name := r.PathValue("name")
+		if name == "" {
+			http.NotFound(w, r)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		guid, _, _, _, _, err := lookupCharacter(ctx, deps.DB, realmName, name)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if guid == 0 {
+			http.NotFound(w, r)
+			return
+		}
+
+		vm, err := loadAllStar(ctx, deps.DB, realmName, name, guid, realm.Expansion(realmName), r.URL.Query().Get("raid"), query.IntOr(r.URL.Query().Get("diff"), -1))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_ = AllStarBadge(vm).Render(r.Context(), w)
+	}
+}
+
 func ActivityHandler(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		realmName := middleware.Realm(r.Context())
@@ -334,6 +372,11 @@ type rankRow struct {
 	HPS       int64
 	DPSRank   int
 	HPSRank   int
+	// All-star inputs: top parse value and peer-pool size per metric in this bracket.
+	DPSRank1 int64
+	HPSRank1 int64
+	DPSN     int
+	HPSN     int
 }
 
 type bossKey struct {
@@ -1127,10 +1170,12 @@ func Mount(mux *http.ServeMux, deps Deps) {
 	rh := middleware.RequireRealm(RankingsHandler(deps))
 	ah := middleware.RequireRealm(ActivityHandler(deps))
 	sh := middleware.RequireRealm(StatsHandler(deps))
+	ash := middleware.RequireRealm(AllStarHandler(deps))
 	router.ForEachRealmPrefix(func(prefix string) {
 		mux.Handle("GET "+prefix+"/character/{name}", h)
 		mux.Handle("GET "+prefix+"/character/{name}/rankings", rh)
 		mux.Handle("GET "+prefix+"/character/{name}/activity", ah)
 		mux.Handle("GET "+prefix+"/character/{name}/stats", sh)
+		mux.Handle("GET "+prefix+"/character/{name}/allstar", ash)
 	})
 }

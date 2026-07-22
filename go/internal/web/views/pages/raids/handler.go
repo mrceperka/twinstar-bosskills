@@ -10,7 +10,6 @@ import (
 	"twinstar-bosskills/internal/domain"
 	"twinstar-bosskills/internal/realm"
 	"twinstar-bosskills/internal/web/middleware"
-	"twinstar-bosskills/internal/web/query"
 	"twinstar-bosskills/internal/web/router"
 	"twinstar-bosskills/internal/web/sqlutil"
 	"twinstar-bosskills/internal/web/views/layouts"
@@ -34,12 +33,9 @@ func Handler(deps Deps) http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 
-		// Default to current raid lock; accept Node's ?raidlock=N and the
-		// older Go ?offset=N alias for previous locks.
-		offset := 0
-		if n, ok := query.RaidLock(r.URL.Query()); ok {
-			offset = n
-		}
+		// Default to current raid lock; ?raidlock=N (and the ?offset=N alias)
+		// are resolved once by middleware.AttachRaidLock.
+		offset, _ := middleware.RaidLock(r.Context())
 		win := domain.RaidLock(time.Now().UTC(), offset)
 
 		raidList, difficulties, err := loadRaids(ctx, deps.DB, realmName, guildFilter, win)

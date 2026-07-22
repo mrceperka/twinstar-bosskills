@@ -38,7 +38,7 @@ templ Root(meta PageMeta) {
 				<script src={ jsURL(meta, "bk-chart.js") } defer></script>
 			}
 		</head>
-		<body class={ bodyClass(meta) }>
+		<body class={ bodyClass(meta) } hx-history="false">
 			@topbar(meta)
 			<main>
 				{ children... }
