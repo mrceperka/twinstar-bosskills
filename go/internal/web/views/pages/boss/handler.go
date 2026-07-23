@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -89,6 +90,34 @@ func Handler(deps Deps) http.HandlerFunc {
 			class = 0
 		}
 
+		// Collect available spec / class IDs for the filter row (specs/classes
+		// that actually have kills at this difficulty + raid-lock window).
+		availSpecs, availClasses, err := loadAvailableSpecsClasses(ctx, deps.DB, realmName, bossID, mode, expansion, lock)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// If a spec filter is requested but that spec has no kills at the
+		// selected difficulty, the filtered view would render empty. Redirect
+		// to the same URL without the spec so the user sees the difficulty's
+		// data instead of a blank table.
+		if spec > 0 && !slices.Contains(availSpecs, spec) {
+			q := r.URL.Query()
+			q.Del("spec")
+			target := r.URL.Path
+			if enc := q.Encode(); enc != "" {
+				target += "?" + enc
+			}
+			if r.Header.Get("HX-Request") == "true" {
+				w.Header().Set("HX-Redirect", target)
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			http.Redirect(w, r, target, http.StatusFound)
+			return
+		}
+
 		stats, err := loadHeaderStats(ctx, deps.DB, realmName, bossID, mode, expansion, lock)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -129,13 +158,6 @@ func Handler(deps Deps) http.HandlerFunc {
 		diffChoices := make([]DifficultyChoice, 0, len(avail))
 		for _, m := range avail {
 			diffChoices = append(diffChoices, DifficultyChoice{Mode: m, Label: wow.Difficulty(expansion, m)})
-		}
-
-		// Collect available spec / class IDs for the filter row.
-		availSpecs, availClasses, err := loadAvailableSpecsClasses(ctx, deps.DB, realmName, bossID, mode, expansion, lock)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
 		}
 
 		vm := ViewModel{
