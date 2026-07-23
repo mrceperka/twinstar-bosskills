@@ -62,13 +62,11 @@ func bossHrefWithFilters(vm ViewModel, remoteID uint32, mode, spec, class int, i
 }
 
 // resetDifficultyHref reverts the difficulty to the server default (no
-// ?difficulty param) while preserving the spec/class/percentile/lock filters,
-// so resetting difficulty does not also clear the spec selection.
+// ?difficulty param) and the raid lock back to overall (no ?raidlock param),
+// while preserving the spec/class/percentile filters so resetting does not
+// also clear the spec selection.
 func resetDifficultyHref(vm ViewModel) string {
 	href := links.Boss(vm.Realm, vm.Boss.RemoteID) + "?p=" + strconv.Itoa(vm.SelectedPctile)
-	if vm.LockScoped {
-		href += "&raidlock=" + strconv.Itoa(vm.LockOffset)
-	}
 	if !vm.ClassMode && vm.SelectedSpec > 0 {
 		href += "&spec=" + strconv.Itoa(vm.SelectedSpec)
 	}
