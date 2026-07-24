@@ -140,7 +140,7 @@ func TestBuildAllStarViewModelSetsGradesAndDifficulty(t *testing.T) {
 	scores := map[int]AllStarScore{
 		4: {DPSPoints: 300, DPSBosses: 3}, // avg 100 => Gold
 	}
-	vm := buildAllStarViewModel("Helios", "Foo", 4, "Raid", []raidActivity{{Name: "Raid"}}, scores, 4)
+	vm := buildAllStarViewModel("Helios", "Foo", 4, "Raid", []raidActivity{{Name: "Raid"}}, scores, 4, 0)
 	if vm.DPSGrade != "Gold" || vm.DPSGradeClass != "text-yellow-400" {
 		t.Fatalf("dps grade = %q/%q, want Gold/text-yellow-400", vm.DPSGrade, vm.DPSGradeClass)
 	}
@@ -158,7 +158,7 @@ func TestBuildAllStarViewModelComputesAveragesAndFlags(t *testing.T) {
 		4: {DPSPoints: 245.5, DPSBosses: 3},
 		5: {DPSPoints: 100, DPSBosses: 1},
 	}
-	vm := buildAllStarViewModel("Helios", "Foo", 4, "Throne of Thunder", raids, scores, 4)
+	vm := buildAllStarViewModel("Helios", "Foo", 4, "Throne of Thunder", raids, scores, 4, 0)
 	if vm.RaidName != "Throne of Thunder" {
 		t.Fatalf("RaidName = %q", vm.RaidName)
 	}
@@ -197,7 +197,7 @@ func TestBuildAllStarViewModelComputesAveragesAndFlags(t *testing.T) {
 }
 
 func TestBuildAllStarViewModelEmptyWhenNoRaids(t *testing.T) {
-	vm := buildAllStarViewModel("Helios", "Foo", 4, "", nil, nil, -1)
+	vm := buildAllStarViewModel("Helios", "Foo", 4, "", nil, nil, -1, 0)
 	if vm.HasDPS || vm.HasHPS || len(vm.Raids) != 0 || len(vm.Difficulties) != 0 {
 		t.Fatalf("empty should have no metrics, raids or difficulties: %#v", vm)
 	}

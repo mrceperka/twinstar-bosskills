@@ -59,6 +59,15 @@ type AllStarDiffOption struct {
 	Href     string
 }
 
+// AllStarSpecOption is one selectable spec in the badge. Spec 0 is the "All
+// specs" option (best-per-boss across every spec).
+type AllStarSpecOption struct {
+	Spec     int
+	Class    int
+	Selected bool
+	Href     string
+}
+
 // AllStarViewModel is the header badge showing the character's all-star score
 // for the selected raid + difficulty, plus the raid and difficulty selectors.
 type AllStarViewModel struct {
@@ -66,9 +75,11 @@ type AllStarViewModel struct {
 	CharName        string
 	RaidName        string
 	Mode            int
+	Spec            int
 	DifficultyLabel string
 	Raids           []AllStarRaidOption
 	Difficulties    []AllStarDiffOption
+	Specs           []AllStarSpecOption
 	HasDPS          bool
 	DPSPoints       int
 	DPSBosses       int
@@ -102,7 +113,7 @@ func allStarGrade(avg float64) (label, class string) {
 // When selectedRaid is empty it defaults to the last active raid, falling back
 // to the most active raid if the last active one scores nothing. Returns a
 // zero-value (empty) viewmodel when the character has no ranked kills.
-func loadAllStar(ctx context.Context, db *sql.DB, realmName, charName string, guid uint64, expansion int, selectedRaid string, selectedMode int) (AllStarViewModel, error) {
+func loadAllStar(ctx context.Context, db *sql.DB, realmName, charName string, guid uint64, expansion int, selectedRaid string, selectedMode, selectedSpec int) (AllStarViewModel, error) {
 	raids, err := loadCharacterRaids(ctx, db, realmName, guid)
 	if err != nil {
 		return AllStarViewModel{}, err
@@ -122,26 +133,57 @@ func loadAllStar(ctx context.Context, db *sql.DB, realmName, charName string, gu
 		raidName = raidByLastKill(raids)
 	}
 
-	scores, err := scoreRaid(ctx, db, realmName, guid, raidName)
+	rows, err := loadRaidRankRows(ctx, db, realmName, guid, raidName)
 	if err != nil {
 		return AllStarViewModel{}, err
 	}
 	// When falling back to the default raid and it has no ranking data, try the
 	// most active raid instead.
-	if usingDefault && len(scores) == 0 {
+	if usingDefault && len(rows) == 0 {
 		if mostActive := raidByKillCount(raids); mostActive != raidName {
 			raidName = mostActive
-			scores, err = scoreRaid(ctx, db, realmName, guid, raidName)
+			rows, err = loadRaidRankRows(ctx, db, realmName, guid, raidName)
 			if err != nil {
 				return AllStarViewModel{}, err
 			}
 		}
 	}
-	return buildAllStarViewModel(realmName, charName, expansion, raidName, raids, scores, selectedMode), nil
+
+	// Specs the character has ranked data for in this raid. The score is always
+	// for a single spec; when none is requested (or the requested one has no
+	// data) default to the spec with the most ranked bosses. spec stays 0 only on
+	// pre-MoP realms where talent_spec is unset.
+	specSet := map[int]bool{}
+	for _, r := range rows {
+		if r.Spec > 0 {
+			specSet[r.Spec] = true
+		}
+	}
+	if selectedSpec != 0 && !specSet[selectedSpec] {
+		selectedSpec = 0
+	}
+	if selectedSpec == 0 && len(specSet) > 0 {
+		selectedSpec = defaultAllStarSpec(rows)
+	}
+
+	scoreRows := rows
+	if selectedSpec != 0 {
+		scoreRows = nil
+		for _, r := range rows {
+			if r.Spec == selectedSpec {
+				scoreRows = append(scoreRows, r)
+			}
+		}
+	}
+
+	vm := buildAllStarViewModel(realmName, charName, expansion, raidName, raids, computeAllStar(scoreRows), selectedMode, selectedSpec)
+	vm.Specs = buildAllStarSpecOptions(realmName, charName, raidName, expansion, specSet, selectedSpec, vm.Mode)
+	return vm, nil
 }
 
-// scoreRaid computes the all-star score per difficulty for one raid.
-func scoreRaid(ctx context.Context, db *sql.DB, realmName string, guid uint64, raidName string) (map[int]AllStarScore, error) {
+// loadRaidRankRows returns the character's best-per-(boss, mode, spec) rank rows
+// for one raid.
+func loadRaidRankRows(ctx context.Context, db *sql.DB, realmName string, guid uint64, raidName string) ([]rankRow, error) {
 	bossIDs, err := loadRaidBossIDs(ctx, db, realmName, raidName)
 	if err != nil {
 		return nil, err
@@ -149,11 +191,52 @@ func scoreRaid(ctx context.Context, db *sql.DB, realmName string, guid uint64, r
 	if len(bossIDs) == 0 {
 		return nil, nil
 	}
-	rows, err := loadAllStarRankRows(ctx, db, realmName, guid, bossIDs)
-	if err != nil {
-		return nil, err
+	return loadAllStarRankRows(ctx, db, realmName, guid, bossIDs)
+}
+
+// defaultAllStarSpec picks the spec to show when none is requested: the one
+// with the most ranked bosses, breaking ties toward the lower spec id.
+func defaultAllStarSpec(rows []rankRow) int {
+	counts := map[int]int{}
+	for _, r := range rows {
+		if r.Spec > 0 {
+			counts[r.Spec]++
+		}
 	}
-	return computeAllStar(rows), nil
+	best, bestN := 0, -1
+	for spec, n := range counts {
+		if n > bestN || (n == bestN && spec < best) {
+			best, bestN = spec, n
+		}
+	}
+	return best
+}
+
+// buildAllStarSpecOptions builds the spec selector, one option per ranked spec.
+// Returns nil only when there is no spec data at all (pre-MoP realms); a single
+// spec still renders so the selector never vanishes when switching raids. mode
+// is the currently resolved difficulty, preserved so switching spec keeps the
+// difficulty when it exists.
+func buildAllStarSpecOptions(realmName, charName, raidName string, expansion int, specSet map[int]bool, selectedSpec, mode int) []AllStarSpecOption {
+	if len(specSet) == 0 {
+		return nil
+	}
+	specs := make([]int, 0, len(specSet))
+	for s := range specSet {
+		specs = append(specs, s)
+	}
+	sort.Ints(specs)
+
+	out := make([]AllStarSpecOption, 0, len(specs))
+	for _, s := range specs {
+		out = append(out, AllStarSpecOption{
+			Spec:     s,
+			Class:    wow.ClassFromSpecForExpansion(expansion, s),
+			Selected: s == selectedSpec,
+			Href:     allStarHref(realmName, charName, raidName, mode, s),
+		})
+	}
+	return out
 }
 
 func loadCharacterRaids(ctx context.Context, db *sql.DB, realmName string, guid uint64) ([]raidActivity, error) {
@@ -205,12 +288,16 @@ func raidByKillCount(raids []raidActivity) string {
 	return best
 }
 
-// allStarHref builds the fragment URL for a raid + difficulty. A negative mode
-// omits the difficulty param, letting the server pick the default difficulty.
-func allStarHref(realmName, charName, raidName string, mode int) string {
+// allStarHref builds the fragment URL for a raid + difficulty + spec. A negative
+// mode omits the difficulty param, letting the server pick the default; spec 0
+// omits the spec param, meaning "all specs".
+func allStarHref(realmName, charName, raidName string, mode, spec int) string {
 	href := links.Character(realmName, charName) + "/allstar?raid=" + url.QueryEscape(raidName)
 	if mode >= 0 {
 		href += "&diff=" + strconv.Itoa(mode)
+	}
+	if spec > 0 {
+		href += "&spec=" + strconv.Itoa(spec)
 	}
 	return href
 }
@@ -323,10 +410,11 @@ func loadAllStarRankRows(ctx context.Context, db *sql.DB, realmName string, guid
 	return out, rows.Err()
 }
 
-func buildAllStarViewModel(realmName, charName string, expansion int, raidName string, raids []raidActivity, scores map[int]AllStarScore, selectedMode int) AllStarViewModel {
-	vm := AllStarViewModel{Realm: realmName, CharName: charName, RaidName: raidName}
+func buildAllStarViewModel(realmName, charName string, expansion int, raidName string, raids []raidActivity, scores map[int]AllStarScore, selectedMode, selectedSpec int) AllStarViewModel {
+	vm := AllStarViewModel{Realm: realmName, CharName: charName, RaidName: raidName, Spec: selectedSpec}
 
-	// Raid selector, most-recently-active first.
+	// Raid selector, most-recently-active first. Switching raid resets both the
+	// difficulty and the spec, since neither is guaranteed to exist in the new raid.
 	names := make([]raidActivity, len(raids))
 	copy(names, raids)
 	sort.Slice(names, func(i, j int) bool { return names[i].LastKill.After(names[j].LastKill) })
@@ -334,7 +422,7 @@ func buildAllStarViewModel(realmName, charName string, expansion int, raidName s
 		vm.Raids = append(vm.Raids, AllStarRaidOption{
 			Name:     r.Name,
 			Selected: r.Name == raidName,
-			Href:     allStarHref(realmName, charName, r.Name, -1),
+			Href:     allStarHref(realmName, charName, r.Name, -1, 0),
 		})
 	}
 
@@ -360,7 +448,7 @@ func buildAllStarViewModel(realmName, charName string, expansion int, raidName s
 			Mode:     m,
 			Label:    wow.Difficulty(expansion, m),
 			Selected: m == selectedMode,
-			Href:     allStarHref(realmName, charName, raidName, m),
+			Href:     allStarHref(realmName, charName, raidName, m, selectedSpec),
 		})
 	}
 

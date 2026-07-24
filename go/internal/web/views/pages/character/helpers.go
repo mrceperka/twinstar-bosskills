@@ -47,9 +47,6 @@ func statsHref(realmName, charName string) string {
 }
 
 func specSummaryClass(mostPlayed bool) string {
-	if mostPlayed {
-		return "border-bk-accent bg-bk-accent/10 text-bk-accent"
-	}
 	return "border-bk-border text-bk-muted"
 }
 

@@ -236,7 +236,7 @@ func AllStarHandler(deps Deps) http.HandlerFunc {
 			return
 		}
 
-		vm, err := loadAllStar(ctx, deps.DB, realmName, name, guid, realm.Expansion(realmName), r.URL.Query().Get("raid"), query.IntOr(r.URL.Query().Get("diff"), -1))
+		vm, err := loadAllStar(ctx, deps.DB, realmName, name, guid, realm.Expansion(realmName), r.URL.Query().Get("raid"), query.IntOr(r.URL.Query().Get("diff"), -1), query.IntOr(r.URL.Query().Get("spec"), 0))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
