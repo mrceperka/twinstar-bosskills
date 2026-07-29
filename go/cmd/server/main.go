@@ -31,7 +31,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	db, err := ch.Open(ch.Options{DSN: cfg.ClickHouse.DSN})
+	db, err := ch.Open(ch.Options{DSN: cfg.ClickHouse.DSN, QueryCache: true})
 	if err != nil {
 		logger.Error("ch.Open", "err", err)
 		os.Exit(1)

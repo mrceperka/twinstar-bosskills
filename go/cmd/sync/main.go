@@ -160,6 +160,16 @@ func main() {
 	}
 	wg.Wait()
 
+	// The web server reads through ClickHouse's query cache with a 1h TTL, so
+	// new kills stay invisible until the cache is flushed. Runs even on partial
+	// failure - some realms may have inserted. Its own context: ctx may already
+	// be canceled by a signal.
+	dropCtx, dropCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if _, err := db.ExecContext(dropCtx, "SYSTEM DROP QUERY CACHE"); err != nil {
+		logger.Warn("drop query cache failed, stale pages until TTL expires", "err", err)
+	}
+	dropCancel()
+
 	if anyErr != nil {
 		if cerr := syncContextError(ctx, anyErr); cerr != nil {
 			logger.Warn("sync stopped before completion", "reason", cerr)

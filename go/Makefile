@@ -35,7 +35,7 @@ INPUT_CSS  := input.css
 OUTPUT_CSS := $(STATIC_DIR)/app.css
 
 # Commands (one binary per ./cmd/<name>)
-COMMANDS := server sync migrate rename-repair
+COMMANDS := server sync migrate rename-repair ch-health
 BINS     := $(addprefix $(BIN_DIR)/,$(COMMANDS))
 
 # Build flags
@@ -52,7 +52,7 @@ ARGS ?=
 .DEFAULT_GOAL := help
 
 .PHONY: help setup tidy gen gen-templ gen-css build clean \
-        dev server sync migrate rename-repair \
+        dev server sync migrate rename-repair ch-health \
         test fmt vet check \
         docker-up docker-down env
 
@@ -67,6 +67,7 @@ help:
 	@echo "  make migrate ARGS=up"
 	@echo "  make sync ARGS=\"--realm Helios --from-date YYYY-MM-DD\""
 	@echo "  make rename-repair ARGS=\"--realm Helios --dry-run\""
+	@echo "  make ch-health    ClickHouse diagnostics (ARGS=\"--list\" for sections)"
 	@echo "  make check        gen-templ + vet + tests"
 	@echo "  make docker-up    bring up ClickHouse via docker compose"
 	@echo "  make env          print loaded .env values"
@@ -131,6 +132,9 @@ migrate:
 
 rename-repair:
 	$(GO) run ./cmd/rename-repair $(ARGS)
+
+ch-health:
+	@$(GO) run ./cmd/ch-health $(ARGS)
 
 # ---- dev --------------------------------------------------------------------
 # Three parallel watchers: templ generate, tailwind --watch, wgo-restarted
