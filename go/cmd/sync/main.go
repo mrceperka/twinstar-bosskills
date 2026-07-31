@@ -19,6 +19,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -160,6 +161,16 @@ func main() {
 	}
 	wg.Wait()
 
+	// Refresh the name lookup before dropping the query cache, so a request
+	// that misses cache right after this run doesn't recompute against a
+	// stale index. Runs even on partial failure - some realms may have
+	// inserted.
+	refreshCtx, refreshCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	if err := refreshCharacterNameIndex(refreshCtx, db, realms); err != nil {
+		logger.Warn("refresh character name index failed, stale name lookups until next sync", "err", err)
+	}
+	refreshCancel()
+
 	// The web server reads through ClickHouse's query cache with a 1h TTL, so
 	// new kills stay invisible until the cache is flushed. Runs even on partial
 	// failure - some realms may have inserted. Its own context: ctx may already
@@ -177,6 +188,34 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info("sync done")
+}
+
+// refreshCharacterNameIndex rebuilds character_name_index for the given
+// realms from the (already cheap, ~thousands of rows) `character` table.
+// ReplacingMergeTree on (realm, name, guid) means unchanged rows just
+// collapse back into the same version; renames leave the old name's row
+// stale until it's cleaned up the same way boss_kill's is, via rename-repair.
+func refreshCharacterNameIndex(ctx context.Context, db *sql.DB, realms []string) error {
+	const q = `
+		INSERT INTO character_name_index (realm, name, guid, class, first_seen, last_seen, kills)
+		SELECT
+			realm,
+			argMaxMerge(name_state)          AS name,
+			guid,
+			argMaxMerge(class_state)         AS class,
+			minMerge(first_seen_state)       AS first_seen,
+			maxMerge(last_seen_state)        AS last_seen,
+			uniqExactMerge(kill_count_state) AS kills
+		FROM character
+		WHERE realm = ?
+		GROUP BY realm, guid
+	`
+	for _, r := range realms {
+		if _, err := db.ExecContext(ctx, q, r); err != nil {
+			return fmt.Errorf("refresh character_name_index for realm %q: %w", r, err)
+		}
+	}
+	return nil
 }
 
 func pickRealms(single, multi string) []string {

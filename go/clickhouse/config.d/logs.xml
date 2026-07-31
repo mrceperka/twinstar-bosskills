@@ -9,6 +9,12 @@
         <level>warning</level>
     </logger>
 
+    <!-- remove="1" only stops NEW writes. If a table already has rows from
+         before this config was applied, they stay on disk forever - ClickHouse
+         doesn't retroactively drop it. Seen 2026-07-31: processors_profile_log
+         (and every table below) still had weeks of pre-fix data despite
+         already being remove="1"'d. Fix: DROP TABLE system.<name> SYNC once,
+         by hand; nothing to change here. -->
     <text_log remove="1"/>
     <trace_log remove="1"/>
     <processors_profile_log remove="1"/>

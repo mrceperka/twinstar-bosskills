@@ -121,6 +121,29 @@ var sections = []section{
 		hours: true,
 	},
 	{
+		name:  "cache-misses",
+		title: "Query patterns missing cache (grouped; high misses + few/no hits = bad cache key or too-short TTL for how often it repeats)",
+		// query_cache_usage: 'Read' = served from cache, 'Write' = ran and got
+		// cached (a miss), 'None' = never touched the cache system at all
+		// (that pool didn't opt in, or ran below query_cache_min_query_duration)
+		// - excluded here, or every non-web-server query would drown this out.
+		// normalized_query_hash groups the same query shape regardless of
+		// literal parameters, so "same query, different guid/name each call"
+		// collapses into one row instead of one per distinct argument.
+		sql: "SELECT toString(normalized_query_hash) AS query_hash, toString(count()) AS calls," +
+			" toString(countIf(query_cache_usage = 'Write')) AS misses," +
+			" toString(countIf(query_cache_usage = 'Read')) AS hits," +
+			" toString(round(100 * countIf(query_cache_usage = 'Read') / greatest(count(), 1), 1)) AS hit_pct," +
+			" toString(round(avg(query_duration_ms))) AS avg_ms," +
+			" substring(replaceRegexpAll(any(query), '\\\\s+', ' '), 1, 80) AS query" +
+			" FROM system.query_log" +
+			" WHERE event_time > now() - toIntervalHour(%d) AND type = 'QueryFinish'" +
+			" AND query_cache_usage IN ('Write', 'Read')" +
+			" GROUP BY normalized_query_hash ORDER BY misses DESC LIMIT %d",
+		hours: true,
+		limit: true,
+	},
+	{
 		name:  "errors",
 		title: "Server errors since startup",
 		sql: "SELECT name, toString(value) AS count, toString(last_error_time) AS last_seen," +

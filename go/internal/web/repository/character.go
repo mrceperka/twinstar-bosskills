@@ -15,19 +15,18 @@ type Character struct {
 	KillCount int
 }
 
-// CharacterByName resolves the latest identity and exact kill count from the
-// derived ClickHouse character aggregate.
+// CharacterByName resolves the latest identity and exact kill count via
+// character_name_index, a point lookup refreshed from the character
+// aggregate at the end of every sync run (cmd/sync's
+// refreshCharacterNameIndex). Avoids grouping the whole realm's character
+// table per request just to filter by name in HAVING - that used to take
+// ~1.2s/189MB per call and barely benefited from the query cache, since each
+// distinct name is a distinct cache key.
 func CharacterByName(ctx context.Context, db *sql.DB, realmName, name string) (Character, error) {
 	const q = `
-		SELECT guid,
-		       argMaxMerge(class_state) AS class,
-		       minMerge(first_seen_state) AS first_seen,
-		       maxMerge(last_seen_state) AS last_seen,
-		       uniqExactMerge(kill_count_state) AS kills
-		FROM character
-		WHERE realm = ?
-		GROUP BY realm, guid
-		HAVING argMaxMerge(name_state) = ?
+		SELECT guid, class, first_seen, last_seen, kills
+		FROM character_name_index FINAL
+		WHERE realm = ? AND name = ?
 		ORDER BY kills DESC
 		LIMIT 1
 	`
