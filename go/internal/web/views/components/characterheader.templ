@@ -1,0 +1,54 @@
+package components
+
+import (
+	"twinstar-bosskills/internal/links"
+	"twinstar-bosskills/internal/web/views/viewhelpers"
+)
+
+// CharacterHeader is the shared identity + navigation block for every
+// character/{name}/* page. `active` marks the current tab ("overview" or
+// "performance"). Page-specific content (stats, badges, …) is passed as
+// children and rendered below the nav.
+templ CharacterHeader(realmName, name string, class int, active string) {
+	<header class="space-y-4 border border-bk-border bg-bk-panel p-4">
+		<div>
+			<div class="flex items-center gap-2.5">
+				<span class="inline-flex shrink-0 items-center">
+					@ClassSpecIcons(realmName, class, 0)
+				</span>
+				<h1 class="text-2xl font-semibold leading-none">{ name }</h1>
+			</div>
+			<nav class="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+				@characterTab(viewhelpers.CharacterHref(realmName, name), "Overview", active == "overview", false) {
+					@OverviewIcon("h-3.5 w-3.5")
+				}
+				@characterTab(viewhelpers.CharacterPerformanceHref(realmName, name), "Performance", active == "performance", false) {
+					@PerformanceIcon("h-3.5 w-3.5")
+				}
+				@characterTab(templ.SafeURL(links.TwinstarArmory(realmName, name)), "Armory", false, true) {
+					@ExternalLinkIcon("h-3.5 w-3.5")
+				}
+			</nav>
+		</div>
+		{ children... }
+	</header>
+}
+
+templ characterTab(href templ.SafeURL, label string, active, external bool) {
+	if active {
+		<span class="inline-flex items-center gap-1 border border-bk-accent px-2 py-0.5 font-medium text-bk-accent" aria-current="page">
+			{ children... }
+			{ label }
+		</span>
+	} else if external {
+		<a href={ href } target="_blank" rel="noopener" class="inline-flex items-center gap-1 border border-bk-border px-2 py-0.5 text-bk-muted hover:border-bk-accent hover:text-bk-accent">
+			{ children... }
+			{ label }
+		</a>
+	} else {
+		<a href={ href } class="inline-flex items-center gap-1 border border-bk-border px-2 py-0.5 text-bk-muted hover:border-bk-accent hover:text-bk-accent">
+			{ children... }
+			{ label }
+		</a>
+	}
+}

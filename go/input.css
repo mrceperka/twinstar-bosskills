@@ -1,0 +1,541 @@
+@import "tailwindcss";
+
+@source "./internal/web/views/**/*.templ";
+@source "./internal/web/views/**/*_templ.go";
+
+/* ----------------------------------------------------------------------
+ * Color palette and design tokens
+ *
+ * Mirrors packages/sveltekit/src/routes/+layout.svelte so the Go rewrite
+ * looks like the existing app (https://bosskills.twinstar-wow.com).
+ * --------------------------------------------------------------------*/
+@theme {
+  /* Fonts - Tailwind v4's preflight applies `font-family: var(--default-font-family)`
+   * to <html> and the default resolves via --font-sans. Overriding --font-sans
+   * here unifies the whole app on Helvetica/Arial to match the SvelteKit app.
+   * Tables get monospace via .bk-table-wrap tbody below (kept as an override). */
+  --font-sans: 'Helvetica', 'Arial', sans-serif;
+  --font-mono: monospace;
+  --default-font-family: 'Helvetica', 'Arial', sans-serif;
+  --default-mono-font-family: monospace;
+
+  --color-bk-bg: #1b1b1b;          /* page background - rgb(27,27,27) */
+  --color-bk-row: #000000bf;        /* zebra-stripe row (75% black) */
+  --color-bk-fg: #f5f5f5;           /* whitesmoke */
+  --color-bk-muted: #c5c5c5;
+  --color-bk-border: rgba(0, 0, 0, 0.3);
+  --color-bk-accent: #daa520;       /* goldenrod */
+  --color-bk-accent-soft: rgba(218, 165, 32, 0.18);
+  --color-bk-secondary: hsl(43 89% 50% / 1);
+
+  /* WoW item quality colors */
+  --color-q0: #9d9d9d;
+  --color-q1: #ffffff;
+  --color-q2: #1eff00;
+  --color-q3: #0070dd;
+  --color-q4: #a335ee;
+  --color-q5: #ff8000;
+  --color-q6: #e5cc80;
+  --color-q7: #e5cc80;
+
+  /* WoW class colors (1=Warrior … 11=Druid) */
+  --color-c1:  #c69b6d;
+  --color-c2:  #f48cba;
+  --color-c3:  #aad372;
+  --color-c4:  #fff468;
+  --color-c5:  #ffffff;
+  --color-c6:  #c41e3b;
+  --color-c7:  #2359ff;
+  --color-c8:  #68ccef;
+  --color-c9:  #9382c9;
+  --color-c10: #00ff96;
+  --color-c11: #ff7c0a;
+}
+
+/* ----------------------------------------------------------------------
+ * Base body styles. Mirrors the SvelteKit body: Helvetica/Arial 14px,
+ * 1920px max width, 0.5rem padding, whitesmoke on dark gray.
+ * --------------------------------------------------------------------*/
+html, body {
+  background-color: var(--color-bk-bg);
+  color: var(--color-bk-fg);
+  font-family: 'Helvetica', 'Arial', sans-serif;
+  font-size: 14px;
+  -webkit-text-size-adjust: 100%;
+  overflow-x: clip;
+}
+body {
+  max-width: 1920px;
+  margin: 0 auto;
+  padding: 0.5rem;
+  min-height: 100vh;
+}
+
+/* Gold links (matches the old app). */
+a {
+  color: var(--color-bk-accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* Mobile-friendly multi-select filters. Native <select multiple> is cramped on
+ * touch screens, so filter forms render repeated checkbox inputs instead. */
+.bk-checkbox-list {
+  display: grid;
+  gap: 0.125rem;
+  max-height: 13rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.25rem;
+  border: 1px solid var(--color-bk-border);
+  background: var(--color-bk-bg);
+}
+.bk-checkbox-list.active {
+  border-color: var(--color-bk-accent);
+}
+.bk-checkbox-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.45rem 0.5rem;
+  color: var(--color-bk-fg);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.bk-checkbox-option:hover,
+.bk-checkbox-option:focus-within {
+  background: var(--color-bk-accent-soft);
+}
+.bk-checkbox-option input {
+  flex: 0 0 auto;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  accent-color: var(--color-bk-accent);
+}
+.bk-checkbox-option img {
+  flex: 0 0 auto;
+}
+.bk-icon-filter-option {
+  position: relative;
+  width: fit-content;
+}
+.bk-icon-filter-option::after {
+  content: attr(data-label);
+  position: absolute;
+  display: none;
+  z-index: 60;
+  left: calc(100% + 0.4rem);
+  top: 50%;
+  transform: translateY(-50%);
+  width: max-content;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--color-bk-border);
+  background: var(--color-bk-bg);
+  color: var(--color-bk-fg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  pointer-events: none;
+}
+.bk-icon-filter-option:hover::after,
+.bk-icon-filter-option:focus-within::after {
+  display: block;
+}
+.bk-checkbox-option span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Scrollbar - gold track, dark thumb */
+* {
+  scrollbar-color: rgba(0, 0, 0, 0.75) var(--color-bk-accent);
+}
+::-webkit-scrollbar      { width: 0.75rem; height: 0.75rem; }
+::-webkit-scrollbar-track { background: var(--color-bk-accent); }
+::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.75); }
+::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 1); }
+
+/* ----------------------------------------------------------------------
+ * Tables
+ *
+ * Wrap each <table> in a `.bk-table-wrap` for sticky header / first
+ * column + horizontal scroll. Inside, tables are flat (no rounded
+ * corners), gold-headed, with zebra-striped rows - same as the SvelteKit
+ * app's :global(table) rules.
+ * --------------------------------------------------------------------*/
+.bk-table-wrap {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+.bk-table-wrap table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: max-content;
+  white-space: nowrap;
+}
+.bk-table-wrap th {
+  color: var(--color-bk-accent);
+  text-align: left;
+  font-weight: normal;
+  background-color: var(--color-bk-bg);
+}
+.bk-table-wrap th,
+.bk-table-wrap td {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-bk-border);
+}
+/* Whole-table monospace (headers included) so a single table doesn't mix
+ * fonts between thead and tbody. The rest of the app uses Helvetica via
+ * --default-font-family in @theme above. */
+.bk-table-wrap table {
+  font-family: monospace;
+}
+.bk-table-wrap .bk-class-spec-column {
+  width: 64px;
+  white-space: nowrap;
+}
+.bk-table-wrap tbody tr:nth-child(even) {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* Sticky header + first column. Disabled on very narrow screens. */
+.bk-table-wrap thead th {
+  position: -webkit-sticky;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.bk-table-wrap tbody td:first-child,
+.bk-table-wrap thead th:first-child {
+  position: -webkit-sticky;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background-color: var(--color-bk-bg);
+  box-shadow: 2px 0 4px -1px rgba(0, 0, 0, 0.4);
+}
+.bk-table-wrap thead th:first-child { z-index: 3; }
+.bk-table-wrap tbody tr:nth-child(even) td:first-child {
+  background-color: #1f1f1f; /* zebra-tinted, still solid for sticky */
+}
+.bk-table-wrap tbody td:first-child,
+.bk-table-wrap thead th:first-child {
+  max-width: 30vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bk-table-wrap tbody td:first-child > *,
+.bk-table-wrap thead th:first-child > * {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+.bk-table-wrap tbody td:first-child > a,
+.bk-table-wrap thead th:first-child > a,
+.bk-table-wrap tbody td:first-child > span,
+.bk-table-wrap thead th:first-child > span {
+  display: inline-block;
+}
+/* Icon-label cells intentionally use inline-flex for alignment and spacing.
+ * Keep that layout instead of letting the sticky-column fallback above
+ * flatten them to inline-block. */
+.bk-table-wrap tbody td:first-child > span.inline-flex,
+.bk-table-wrap thead th:first-child > span.inline-flex {
+  display: inline-flex;
+}
+.bk-table-wrap .bk-table-truncated {
+  cursor: help;
+}
+
+/* Class/spec names stay available on hover and keyboard/touch focus without
+ * repeating text beside icons throughout compact tables. */
+.bk-class-spec-icons {
+  position: relative;
+  flex: 0 0 auto;
+  overflow: visible !important;
+  cursor: help;
+  outline: none;
+}
+.bk-table-wrap tbody td:first-child:has(> .bk-class-spec-icons) {
+  overflow: visible;
+}
+.bk-class-spec-icons::after {
+  content: attr(data-label);
+  position: absolute;
+  display: none;
+  z-index: 60;
+  left: 50%;
+  bottom: calc(100% + 0.35rem);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(18rem, calc(100vw - 1rem));
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--color-bk-border);
+  background: var(--color-bk-bg);
+  color: var(--color-bk-fg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  font-family: var(--default-font-family);
+  font-size: 0.75rem;
+  font-weight: normal;
+  line-height: 1rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.bk-class-spec-icons:hover::after,
+.bk-class-spec-icons:focus::after {
+  display: block;
+}
+.bk-details-summary-content {
+  display: inline-flex;
+  width: calc(100% - 1.25rem);
+  vertical-align: middle;
+}
+.bk-table-fulltext-tip {
+  position: fixed;
+  z-index: 1000;
+  max-width: min(36rem, calc(100vw - 1rem));
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--color-bk-border);
+  background: var(--color-bk-bg);
+  color: var(--color-bk-text);
+  box-shadow: 0 0.5rem 1.25rem rgba(0, 0, 0, 0.45);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-family: monospace;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  pointer-events: none;
+}
+@media (max-width: 360px) {
+  .bk-table-wrap thead th,
+  .bk-table-wrap tbody td:first-child,
+  .bk-table-wrap thead th:first-child {
+    position: static;
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+/* ----------------------------------------------------------------------
+ * Top realm bar + primary navigation
+ * --------------------------------------------------------------------*/
+.bk-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 2px solid var(--color-bk-accent);
+}
+.bk-desktop-nav {
+  margin-left: auto;
+}
+.bk-desktop-nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.bk-primary-link.active {
+  color: var(--color-bk-fg);
+}
+.bk-realm-picker {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.125rem;
+}
+.bk-realm-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 2px solid transparent;
+}
+.bk-realm-link:hover {
+  border-color: rgba(218, 165, 32, 0.55);
+  text-decoration: none;
+}
+.bk-realm-link.active {
+  border-color: var(--color-bk-accent);
+}
+.bk-realm-link img {
+  display: block;
+  width: 32px;
+  height: 32px;
+}
+.bk-mobile-nav {
+  display: none;
+}
+@media (max-width: 640px) {
+  body.bk-has-mobile-nav {
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  }
+  .bk-topbar {
+    flex-direction: column;
+    align-items: stretch;
+    margin-left: -0.5rem;
+    margin-right: -0.5rem;
+    width: calc(100% + 1rem);
+    padding: 0 0.5rem 0.5rem;
+    background: rgba(12, 12, 12, 0.94);
+    backdrop-filter: blur(10px);
+  }
+  .bk-realm-picker {
+    width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .bk-desktop-nav {
+    display: none;
+  }
+  .bk-mobile-nav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 60;
+    display: block;
+    padding: 0.35rem max(0.5rem, env(safe-area-inset-left)) calc(0.35rem + env(safe-area-inset-bottom)) max(0.5rem, env(safe-area-inset-right));
+    background: rgba(12, 12, 12, 0.94);
+    border-top: 1px solid var(--color-bk-accent);
+    box-shadow: 0 -0.5rem 1.5rem rgba(0, 0, 0, 0.35);
+    transform: translateY(0);
+    transition: transform 180ms ease;
+    will-change: transform;
+    backdrop-filter: blur(10px);
+  }
+  .bk-mobile-nav.bk-mobile-nav-hidden {
+    transform: translateY(calc(100% + env(safe-area-inset-bottom)));
+  }
+  .bk-mobile-nav ul {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(3.5rem, 1fr));
+    gap: 0.25rem;
+    max-width: 34rem;
+    margin: 0 auto;
+    padding: 0;
+    list-style: none;
+  }
+  .bk-mobile-nav li {
+    min-width: 0;
+  }
+  .bk-mobile-nav .bk-primary-link {
+    display: flex;
+    min-width: 0;
+    min-height: 3.75rem;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    padding: 0.25rem 0.125rem;
+    border: 1px solid transparent;
+    color: var(--color-bk-muted);
+    font-size: 0.625rem;
+    line-height: 1;
+    text-align: center;
+    text-decoration: none;
+    touch-action: manipulation;
+  }
+  .bk-mobile-nav .bk-primary-link.active,
+  .bk-mobile-nav .bk-primary-link:hover,
+  .bk-mobile-nav .bk-primary-link:focus-visible {
+    border-color: rgba(218, 165, 32, 0.55);
+    background: var(--color-bk-accent-soft);
+    color: var(--color-bk-fg);
+  }
+  .bk-mobile-nav svg {
+    width: 1.45rem;
+    height: 1.45rem;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .bk-mobile-nav span {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+@media (max-width: 380px) {
+  .bk-mobile-nav .bk-primary-link {
+    font-size: 0.58rem;
+  }
+}
+
+/* ----------------------------------------------------------------------
+ * Footer
+ * --------------------------------------------------------------------*/
+.bk-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem;
+  margin-top: 1.5rem;
+  font-size: 80%;
+  color: var(--color-bk-muted);
+  border-top: 1px solid var(--color-bk-border);
+}
+@media (max-width: 640px) {
+  .bk-footer { flex-direction: column; text-align: center; }
+}
+
+/* ----------------------------------------------------------------------
+ * Headings, small typography tweaks
+ * --------------------------------------------------------------------*/
+h1 { font-size: 1.5rem; margin: 0.75rem 0; }
+h2 { font-size: 1.15rem; margin: 0.5rem 0; }
+
+/* ----------------------------------------------------------------------
+ * Item tooltip popovers. Wrap a list item with `.bk-tip-row` and include a
+ * `.bk-tip` element holding the upstream HTML; it appears on hover, focus,
+ * or tap (focus-within covers mobile when the link gets focus).
+ * --------------------------------------------------------------------*/
+.bk-tip-row { position: relative; }
+/* Fixed positioning so the popover escapes any ancestor's overflow clipping
+ * (e.g. .bk-table-wrap's overflow-x: auto). Coordinates are set by bk-ui.js,
+ * which also flips it above the row near the viewport bottom. Kept in layout
+ * while hidden (visibility, not display:none) so JS can measure it. */
+.bk-tip {
+  position: fixed;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  max-width: min(28rem, calc(100vw - 1rem));
+  padding: 0.5rem 0.75rem;
+  background-color: rgba(0, 0, 0, 0.94);
+  border: 1px solid var(--color-bk-accent);
+  color: var(--color-bk-fg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  white-space: normal;
+}
+.bk-tip-row:hover .bk-tip,
+.bk-tip-row:focus-within .bk-tip,
+.bk-tip-row.bk-tip-open .bk-tip { visibility: visible; opacity: 1; pointer-events: auto; }
+.bk-tip a { color: var(--color-bk-accent); }

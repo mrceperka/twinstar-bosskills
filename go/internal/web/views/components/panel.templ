@@ -1,0 +1,145 @@
+package components
+
+import "twinstar-bosskills/internal/web/views/viewhelpers"
+
+type CheckboxOption struct {
+	Value       string
+	Label       string
+	Selected    bool
+	IconURL     string
+	IconAlt     string
+	IconURL2    string
+	IconAlt2    string
+}
+
+templ Panel(title string) {
+	// min-w-0: as a flex/grid item this must be allowed to shrink below its
+	// content width so an inner .bk-table-wrap scrolls instead of overflowing
+	// (the page clips overflow-x, so overflow would hide columns).
+	<section class="min-w-0 border border-bk-border bg-bk-panel">
+		if title != "" {
+			<header class="border-b border-bk-border px-4 py-2 text-sm font-medium uppercase tracking-wide text-bk-muted">
+				{ title }
+			</header>
+		}
+		<div class="p-4">
+			{ children... }
+		</div>
+	</section>
+}
+
+templ CollapsiblePanel(title string, open bool) {
+	<details class="border border-bk-border bg-bk-panel" open?={ open }>
+		<summary class="cursor-pointer select-none border-b border-bk-border px-4 py-2 text-sm font-medium uppercase tracking-wide text-bk-muted">
+			{ title }
+		</summary>
+		<div class="p-4">
+			{ children... }
+		</div>
+	</details>
+}
+
+// Table wraps its children in a horizontally-scrollable container with the
+// sticky-header / sticky-first-column behaviour defined in input.css. Use
+// this everywhere you'd otherwise write `<div class="bk-table-wrap"><table
+// class="w-full text-sm">...`:
+//
+//   @components.Table() {
+//       <thead><tr>...</tr></thead>
+//       <tbody>...</tbody>
+//   }
+//
+// On mobile the wrapper scrolls; the first column and header row stay
+// pinned so users keep their bearings.
+templ Table() {
+	<div class="bk-table-wrap">
+		<table class="w-full text-sm">
+			{ children... }
+		</table>
+	</div>
+}
+
+// CappedTable is Table with a vertical height cap so long leaderboards
+// scroll inside the container instead of stretching the page. The sticky
+// thead (see input.css) keeps the header pinned while scrolling.
+// maxHeightClass is a Tailwind max-h utility, e.g. "max-h-[70vh]".
+templ CappedTable(maxHeightClass string) {
+	<div class={ "bk-table-wrap", maxHeightClass }>
+		<table class="w-full text-sm">
+			{ children... }
+		</table>
+	</div>
+}
+
+// SortableTable is Table with `data-sortable` so the small client-side
+// sorter in static/bk-sortable.js (when present) can attach. Use for player
+// rows on the bosskill detail page, etc.
+templ SortableTable() {
+	<div class="bk-table-wrap">
+		<table class="w-full text-sm" data-sortable>
+			{ children... }
+		</table>
+	</div>
+}
+
+// TablePanel is a shortcut for `@Panel(title) { @Table() { ... } }`.
+templ TablePanel(title string) {
+	<section class="min-w-0 border border-bk-border bg-bk-panel">
+		if title != "" {
+			<header class="border-b border-bk-border px-4 py-2 text-sm font-medium uppercase tracking-wide text-bk-muted">
+				{ title }
+			</header>
+		}
+		<div class="bk-table-wrap max-h-[70vh]">
+			<table class="w-full text-sm">
+				{ children... }
+			</table>
+		</div>
+	</section>
+}
+
+templ StatRow(label, value string) {
+	<div class="flex items-baseline justify-between gap-4 py-1">
+		<span class="text-bk-muted">{ label }</span>
+		<span class="font-mono">{ value }</span>
+	</div>
+}
+
+templ EmptyState(msg string) {
+	<div class="py-4 text-center text-sm text-bk-muted">{ msg }</div>
+}
+
+templ CheckboxFilter(name string, options []CheckboxOption, active bool, minHeightClass string) {
+	<div class={ viewhelpers.CheckboxFilterClass(active), minHeightClass }>
+		for _, o := range options {
+			<label class="bk-checkbox-option">
+				<input type="checkbox" name={ name } value={ o.Value } checked?={ o.Selected }/>
+				if o.IconURL != "" {
+					<img src={ templ.SafeURL(o.IconURL) } alt={ o.IconAlt } width="20" height="20"/>
+				}
+				if o.IconURL2 != "" {
+					<img src={ templ.SafeURL(o.IconURL2) } alt={ o.IconAlt2 } width="20" height="20"/>
+				}
+				<span>{ o.Label }</span>
+			</label>
+		}
+	</div>
+}
+
+// IconCheckboxFilter is the compact class/spec filter variant. Option names
+// remain available on hover, keyboard focus, and tap without visible labels.
+templ IconCheckboxFilter(name string, options []CheckboxOption, active bool, minHeightClass string) {
+	<div class={ viewhelpers.CheckboxFilterClass(active), minHeightClass }>
+		for _, o := range options {
+			<label class="bk-checkbox-option bk-icon-filter-option" data-label={ o.Label } title={ o.Label }>
+				<input type="checkbox" name={ name } value={ o.Value } checked?={ o.Selected } aria-label={ o.Label }/>
+				if o.IconURL != "" {
+					<img src={ templ.SafeURL(o.IconURL) } alt="" width="20" height="20"/>
+				}
+				if o.IconURL2 != "" {
+					<img src={ templ.SafeURL(o.IconURL2) } alt="" width="20" height="20"/>
+				}
+			</label>
+		}
+	</div>
+}

@@ -1,0 +1,325 @@
+package dashboard
+
+import (
+	"twinstar-bosskills/internal/format"
+	"twinstar-bosskills/internal/web/views/components"
+	"twinstar-bosskills/internal/web/views/layouts"
+	"twinstar-bosskills/internal/web/views/viewhelpers"
+)
+
+type ViewModel struct {
+	Meta                 layouts.PageMeta
+	Realm                string
+	CurrentLock          LockSummary
+	PerformerLock        LockSummary
+	PerformerLockOffset  int
+	CurrentPerformerRaid string
+	PerformerDifficulties []DifficultyChoice
+	SelectedPerformerMode int
+	PerformerLimit        int
+	CurrentPerformers    []BossPerformers
+	PreviousLock         LockSummary
+}
+
+type LockSummary struct {
+	StartLabel  string
+	EndLabel    string
+	TotalKills  int
+	TotalWipes  int
+	WipeChance  float64
+	TopKills    []BossCount
+	TopWipes    []BossCount
+	ByDayJSON   []byte
+	ByHourJSON  []byte
+	TopDayName  string
+	TopHourName string
+}
+
+type BossCount struct {
+	Count     int
+	BossID    uint32
+	BossName  string
+	Mode      uint8
+	ModeLabel string
+}
+
+type DifficultyChoice struct {
+	Mode  int
+	Label string
+}
+
+type BossPerformers struct {
+	BossID    uint32
+	BossName  string
+	RaidName  string
+	Position  int
+	Active    bool
+	HasMore   bool
+	TopDPS    []Performer
+	TopHPS    []Performer
+}
+
+type Performer struct {
+	Rank      int
+	Name      string
+	RemoteID  string
+	Spec      int
+	SpecLabel string
+	Class     int
+	Mode      int
+	ModeLabel string
+	DPS       int64
+	HPS       int64
+	DmgDone   int64
+	HealDone  int64
+	LengthSec int
+	KilledAt  string
+	ItemLevel float64
+}
+
+templ Page(vm ViewModel) {
+	@layouts.Root(vm.Meta) {
+		<section class="space-y-2">
+			<h1 class="text-2xl font-semibold">Twinstar Bosskills</h1>
+		</section>
+		@PerformersShell(vm)
+		@lockSection(vm.Realm, "Current raid lockout bosskills", vm.CurrentLock)
+		@lockSection(vm.Realm, "Previous raid lockout bosskills", vm.PreviousLock)
+	}
+}
+
+// PerformersShell wraps the top-performers section in a stable #perf-shell
+// container so htmx can swap it in place. The handler renders this templ
+// directly for HX-Request navigation.
+templ PerformersShell(vm ViewModel) {
+	<div id="perf-shell">
+		@currentPerformersSection(vm.Realm, vm.CurrentPerformerRaid, vm.PerformerLock, vm.PerformerLockOffset, vm.PerformerDifficulties, vm.SelectedPerformerMode, vm.PerformerLimit, vm.CurrentPerformers)
+	</div>
+}
+
+templ currentPerformersSection(realmName string, raidName string, lock LockSummary, lockOffset int, difficulties []DifficultyChoice, selectedMode int, performerLimit int, bosses []BossPerformers) {
+	<section class="mt-6">
+		@components.Panel("Raid lockout top performers") {
+			<div class="mb-3 text-xs text-bk-muted">
+				if raidName != "" {
+					<span>{ raidName } · </span>
+				}
+				<span>top { viewhelpers.Itoa(performerLimit) } DPS and HPS per boss between { lock.StartLabel } and { lock.EndLabel }</span>
+			</div>
+			<nav class="mb-3 flex flex-wrap items-center gap-3 text-sm" aria-label="Raid lock">
+				<span class="text-xs text-bk-muted">{ lock.StartLabel } → { lock.EndLabel }</span>
+				<a
+					hx-get={ string(performerLockHref(realmName, lockOffset+1, selectedMode, performerLimit, bosses)) }
+					hx-target="#perf-shell"
+					hx-swap="outerHTML"
+					hx-push-url="true"
+					href={ performerLockHref(realmName, lockOffset+1, selectedMode, performerLimit, bosses) }
+					class="text-bk-accent"
+				>(see previous)</a>
+				if lockOffset > 0 {
+					<a
+						hx-get={ string(performerLockHref(realmName, lockOffset-1, selectedMode, performerLimit, bosses)) }
+						hx-target="#perf-shell"
+						hx-swap="outerHTML"
+						hx-push-url="true"
+						href={ performerLockHref(realmName, lockOffset-1, selectedMode, performerLimit, bosses) }
+						class="text-bk-accent"
+					>(see newer)</a>
+				}
+			</nav>
+			if len(difficulties) > 0 {
+				<nav class="mb-3 flex flex-wrap gap-2 text-sm" aria-label="Difficulty">
+					for _, d := range difficulties {
+						<a
+							hx-get={ string(performerDifficultyHref(realmName, lockOffset, d.Mode, performerLimit, bosses)) }
+							hx-target="#perf-shell"
+							hx-swap="outerHTML"
+							hx-push-url="true"
+							href={ performerDifficultyHref(realmName, lockOffset, d.Mode, performerLimit, bosses) }
+							class={ viewhelpers.TabActiveClass(d.Mode == selectedMode) }
+						>{ d.Label }</a>
+					}
+				</nav>
+			}
+			if len(bosses) == 0 {
+				@components.EmptyState("No performer data for the latest raid in this lock yet.")
+			} else {
+				<nav class="mb-4 flex flex-wrap gap-2 text-sm" role="tablist">
+					for _, b := range bosses {
+						<a
+							hx-get={ string(performerBossHref(realmName, lockOffset, selectedMode, performerLimit, b.BossID)) }
+							hx-target="#perf-shell"
+							hx-swap="outerHTML"
+							hx-push-url="true"
+							href={ performerBossHref(realmName, lockOffset, selectedMode, performerLimit, b.BossID) }
+							class={ viewhelpers.TabActiveClass(b.Active) }
+							role="tab"
+						>{ b.BossName }</a>
+					}
+				</nav>
+				for _, b := range bosses {
+					if b.Active {
+						<div role="tabpanel">
+							<div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+								<h3 class="font-semibold">
+									<a href={ viewhelpers.BossHref(realmName, b.BossID) }>{ b.BossName }</a>
+								</h3>
+								<span class="text-xs text-bk-muted">{ raidName }</span>
+							</div>
+							<div class="grid gap-4 md:grid-cols-2">
+								<div class="space-y-2">
+									<h4 class="text-xs font-semibold uppercase text-bk-muted">Top DPS</h4>
+									@performerList(realmName, b.TopDPS, "DPS")
+								</div>
+								<div class="space-y-2">
+									<h4 class="text-xs font-semibold uppercase text-bk-muted">Top HPS</h4>
+									@performerList(realmName, b.TopHPS, "HPS")
+								</div>
+							</div>
+							if b.HasMore && performerLimit < topPerformerMaxLimit {
+								<div class="mt-4">
+									<a
+										hx-get={ string(performerLoadMoreHref(realmName, lockOffset, selectedMode, performerLimit, b.BossID)) }
+										hx-target="#perf-shell"
+										hx-swap="outerHTML"
+										hx-push-url="true"
+										href={ performerLoadMoreHref(realmName, lockOffset, selectedMode, performerLimit, b.BossID) }
+										class="inline-flex border border-bk-border px-2 py-1 text-sm text-bk-muted hover:text-bk-fg"
+									>
+										Load more
+									</a>
+								</div>
+							}
+						</div>
+					}
+				}
+			}
+		}
+	</section>
+}
+
+templ performerList(realmName string, rows []Performer, metric string) {
+	if len(rows) == 0 {
+		@components.EmptyState("No data.")
+	} else {
+		<div class="space-y-1">
+			for _, r := range rows {
+				<div class="flex items-center gap-2 text-sm" title={ r.SpecLabel + " - " + r.ModeLabel + " - " + r.KilledAt }>
+					<span class="w-6 shrink-0 text-bk-muted">{ viewhelpers.Itoa(r.Rank) }</span>
+					<span class="flex min-w-0 flex-1 items-center gap-1">
+						@components.ClassSpecIcons(realmName, r.Class, r.Spec)
+						<a class="truncate" href={ viewhelpers.CharacterHref(realmName, r.Name) }>{ r.Name }</a>
+					</span>
+					<span class="shrink-0 text-xs text-bk-muted">{ r.ModeLabel }</span>
+					<span class="shrink-0 font-mono">
+						if metric == "DPS" {
+							if r.RemoteID != "" {
+								<a href={ viewhelpers.BossKillHref(realmName, r.RemoteID) }>{ format.Int64Ctx(ctx, r.DPS) }</a>
+							} else {
+								{ format.Int64Ctx(ctx, r.DPS) }
+							}
+						} else {
+							if r.RemoteID != "" {
+								<a href={ viewhelpers.BossKillHref(realmName, r.RemoteID) }>{ format.Int64Ctx(ctx, r.HPS) }</a>
+							} else {
+								{ format.Int64Ctx(ctx, r.HPS) }
+							}
+						}
+					</span>
+				</div>
+			}
+		</div>
+	}
+}
+
+func performerLockHref(realmName string, lockOffset, mode, limit int, bosses []BossPerformers) templ.SafeURL {
+	href := "/?raidlock=" + viewhelpers.Itoa(lockOffset) + "&difficulty=" + viewhelpers.Itoa(mode) + "&perf_limit=" + viewhelpers.Itoa(limit)
+	for _, b := range bosses {
+		if b.Active {
+			href += "&perf_boss=" + viewhelpers.Itoa(int(b.BossID))
+			break
+		}
+	}
+	return viewhelpers.RealmPathHref(realmName, href)
+}
+
+func performerDifficultyHref(realmName string, lockOffset, mode, limit int, bosses []BossPerformers) templ.SafeURL {
+	return performerLockHref(realmName, lockOffset, mode, limit, bosses)
+}
+
+func performerBossHref(realmName string, lockOffset, mode, limit int, bossID uint32) templ.SafeURL {
+	return viewhelpers.RealmPathHref(realmName, "/?raidlock="+viewhelpers.Itoa(lockOffset)+"&difficulty="+viewhelpers.Itoa(mode)+"&perf_limit="+viewhelpers.Itoa(limit)+"&perf_boss="+viewhelpers.Itoa(int(bossID)))
+}
+
+func performerLoadMoreHref(realmName string, lockOffset, mode, limit int, bossID uint32) templ.SafeURL {
+	next := limit + topPerformerLimitIncrement
+	if next > topPerformerMaxLimit {
+		next = topPerformerMaxLimit
+	}
+	return performerBossHref(realmName, lockOffset, mode, next, bossID)
+}
+
+templ lockSection(realmName string, title string, lock LockSummary) {
+	<section class="mt-8 space-y-3">
+		<header>
+			<h2 class="text-lg font-semibold">{ title }</h2>
+			<div class="text-xs text-bk-muted">between { lock.StartLabel } and { lock.EndLabel }</div>
+		</header>
+		<div class="grid gap-6 lg:grid-cols-2">
+			<div class="space-y-2">
+				<h3 class="font-semibold">
+					Most kills - total <span class="text-bk-accent">{ format.IntCtx(ctx, lock.TotalKills) }</span>
+				</h3>
+				@bossCountTable(realmName, lock.TopKills)
+			</div>
+			<div class="space-y-2">
+				<h3 class="font-semibold">
+					Most wipes - total <span style="color: tomato">{ format.IntCtx(ctx, lock.TotalWipes) }</span>,
+					wipe chance <span style="color: tomato">{ viewhelpers.FormatFloat(lock.WipeChance, 2) }%</span>
+				</h3>
+				@bossCountTable(realmName, lock.TopWipes)
+			</div>
+		</div>
+		<div class="mt-6">
+			<h3 class="font-semibold mb-1">Number of bosskills grouped by day of week</h3>
+			if lock.TopDayName != "" {
+				<div class="text-xs"><span style="color: lawngreen">{ lock.TopDayName }</span> is top raiding day</div>
+			}
+			if len(lock.ByDayJSON) > 2 {
+				@components.ChartFromJSON("block w-full h-72", lock.ByDayJSON)
+			}
+		</div>
+		<div class="mt-4">
+			<h3 class="font-semibold mb-1">Number of bosskills grouped by hour</h3>
+			if lock.TopHourName != "" {
+				<div class="text-xs"><span style="color: lawngreen">{ lock.TopHourName }</span> is top raiding hour</div>
+			}
+			if len(lock.ByHourJSON) > 2 {
+				@components.ChartFromJSON("block w-full h-72", lock.ByHourJSON)
+			}
+		</div>
+	</section>
+}
+
+templ bossCountTable(realmName string, rows []BossCount) {
+	@components.Table() {
+		<thead>
+			<tr>
+				<th>Count ↓</th>
+				<th>Boss</th>
+				<th>Difficulty</th>
+			</tr>
+		</thead>
+		<tbody>
+			for _, r := range rows {
+				<tr>
+					<td>{ format.IntCtx(ctx, r.Count) }</td>
+					<td>
+						<a href={ viewhelpers.BossWithDifficultyHref(realmName,r.BossID, int(r.Mode))} >{ r.BossName }</a>
+					</td>
+					<td>{ r.ModeLabel }</td>
+				</tr>
+			}
+		</tbody>
+	}
+}

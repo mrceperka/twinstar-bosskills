@@ -1,0 +1,300 @@
+package stats
+
+import (
+	"net/url"
+	"strconv"
+
+	"twinstar-bosskills/internal/format"
+	"twinstar-bosskills/internal/links"
+	"twinstar-bosskills/internal/web/views/components"
+	"twinstar-bosskills/internal/web/views/layouts"
+	"twinstar-bosskills/internal/web/views/viewhelpers"
+)
+
+type ViewModel struct {
+	Meta              layouts.PageMeta
+	Realm             string
+	LockLabel         string
+	LockOffset        int
+	SelectedModes     []int
+	SelectedModeLabel string
+	CanFilterDifficulty bool
+	Difficulties      []DifficultyChoice
+	Summary           Summary
+	ClassRows         []ClassRow
+	SpecRows          []SpecRow
+	DifficultyRows    []DifficultyRow
+	GuildRows         []GuildRow
+}
+
+type Summary struct {
+	Characters int
+	Kills      int
+	Guilds     int
+	Bosses     int
+}
+
+type DifficultyChoice struct {
+	Mode     int
+	Label    string
+	Selected bool
+}
+
+type ClassRow struct {
+	Class      int
+	ClassLabel string
+	Characters int
+	Kills      int
+}
+
+type SpecRow struct {
+	Spec       int
+	SpecLabel  string
+	Class      int
+	Characters int
+	Kills      int
+}
+
+type DifficultyRow struct {
+	Mode       int
+	Label      string
+	Characters int
+	Kills      int
+	Selected   bool
+}
+
+type GuildRow struct {
+	Guild      string
+	Characters int
+	Kills      int
+}
+
+templ Page(vm ViewModel) {
+	@layouts.Root(vm.Meta) {
+		<div class="space-y-6">
+			<header>
+				<div>
+					<h1 class="text-2xl font-semibold">{ vm.Realm } / Stats</h1>
+					<p class="text-sm text-bk-muted">Characters that participated in boss kills.</p>
+				</div>
+			</header>
+			@StatsShell(vm)
+		</div>
+	}
+}
+
+templ StatsShell(vm ViewModel) {
+	<div id="stats-shell" class="space-y-6">
+		@components.Panel("Filters") {
+			@difficultyTabs(vm)
+		}
+		@StatsContent(vm)
+	</div>
+}
+
+templ difficultyTabs(vm ViewModel) {
+	<div class="flex flex-wrap items-center gap-3 text-sm">
+		if vm.CanFilterDifficulty {
+			<a
+				hx-get={ statsURL(vm.Realm, vm.LockOffset, nil) }
+				hx-target="#stats-shell"
+				hx-swap="outerHTML"
+				hx-push-url="true"
+				href={ templ.SafeURL(statsURL(vm.Realm, vm.LockOffset, nil)) }
+				class={ "cursor-pointer", viewhelpers.TabActiveClass(len(vm.SelectedModes) == 0) }
+			>All difficulties</a>
+		}
+		<span class="text-xs text-bk-muted">
+			{ vm.LockLabel }
+			<a
+				hx-get={ statsURL(vm.Realm, vm.LockOffset + 1, vm.SelectedModes) }
+				hx-target="#stats-shell"
+				hx-swap="outerHTML"
+				hx-push-url="true"
+				href={ templ.SafeURL(statsURL(vm.Realm, vm.LockOffset + 1, vm.SelectedModes)) }
+				class="ml-2 text-bk-accent"
+			>(see previous)</a>
+		</span>
+		if vm.LockOffset > 0 {
+			<a
+				hx-get={ statsURL(vm.Realm, vm.LockOffset - 1, vm.SelectedModes) }
+				hx-target="#stats-shell"
+				hx-swap="outerHTML"
+				hx-push-url="true"
+				href={ templ.SafeURL(statsURL(vm.Realm, vm.LockOffset - 1, vm.SelectedModes)) }
+				class="text-xs text-bk-accent"
+			>(see newer)</a>
+		}
+		if vm.CanFilterDifficulty {
+			for _, d := range vm.Difficulties {
+				<a
+					hx-get={ statsURL(vm.Realm, vm.LockOffset, []int{d.Mode}) }
+					hx-target="#stats-shell"
+					hx-swap="outerHTML"
+					hx-push-url="true"
+					href={ templ.SafeURL(statsURL(vm.Realm, vm.LockOffset, []int{d.Mode})) }
+					class={ "cursor-pointer", viewhelpers.TabActiveClass(d.Selected && len(vm.SelectedModes) == 1) }
+				>{ d.Label }</a>
+			}
+		}
+	</div>
+}
+
+templ StatsContent(vm ViewModel) {
+	<section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+	@statCard("Characters", format.IntCtx(ctx, vm.Summary.Characters))
+	@statCard("Boss kills", format.IntCtx(ctx, vm.Summary.Kills))
+	@statCard("Guilds", format.IntCtx(ctx, vm.Summary.Guilds))
+	@statCard("Bosses", format.IntCtx(ctx, vm.Summary.Bosses))
+</section>
+	<div class="text-sm text-bk-muted">
+		{ vm.SelectedModeLabel } · { vm.LockLabel }
+	</div>
+	<div class={ classBreakdownGridClass(vm) }>
+		@components.Panel("Characters by class") {
+			if len(vm.ClassRows) == 0 {
+				@components.EmptyState("No boss kill participation for this filter.")
+			} else {
+				@components.Table() {
+					<thead>
+						<tr>
+							<th class="bk-class-spec-column">Class</th>
+							<th class="text-right">Characters</th>
+							<th class="text-right">Kills</th>
+						</tr>
+					</thead>
+					<tbody>
+				for _, r := range vm.ClassRows {
+					<tr>
+						<td class="bk-class-spec-column">
+							<span class="inline-flex items-center gap-1">
+								@components.ClassSpecIcons(vm.Realm, r.Class, 0)
+								<span>{ r.ClassLabel }</span>
+							</span>
+						</td>
+						<td class="text-right">{ format.IntCtx(ctx, r.Characters) }</td>
+						<td class="text-right">{ format.IntCtx(ctx, r.Kills) }</td>
+					</tr>
+					}
+				</tbody>
+				}
+			}
+		}
+		if vm.CanFilterDifficulty {
+			@components.Panel("Characters by difficulty") {
+				if len(vm.DifficultyRows) == 0 {
+					@components.EmptyState("No difficulty data for this raid lock.")
+				} else {
+					@components.Table() {
+						<thead>
+							<tr>
+								<th>Difficulty</th>
+								<th class="text-right">Characters</th>
+								<th class="text-right">Kills</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, r := range vm.DifficultyRows {
+								<tr class={ selectedRowClass(r.Selected) }>
+									<td>
+										<a href={ templ.SafeURL(statsURL(vm.Realm, vm.LockOffset, []int{r.Mode})) } class="hover:text-bk-accent">{ r.Label }</a>
+									</td>
+									<td class="text-right">{ format.IntCtx(ctx, r.Characters) }</td>
+									<td class="text-right">{ format.IntCtx(ctx, r.Kills) }</td>
+								</tr>
+							}
+						</tbody>
+					}
+				}
+			}
+		}
+	</div>
+	@components.Panel("Characters by spec") {
+		if len(vm.SpecRows) == 0 {
+			@components.EmptyState("No spec data for this filter.")
+		} else {
+			@components.Table() {
+				<thead>
+					<tr>
+						<th class="bk-class-spec-column">Spec</th>
+						<th class="text-right">Characters</th>
+						<th class="text-right">Kills</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, r := range vm.SpecRows {
+						<tr>
+							<td class="bk-class-spec-column">
+								@components.ClassSpecIcons(vm.Realm, r.Class, r.Spec)
+							</td>
+							<td class="text-right">{ format.IntCtx(ctx, r.Characters) }</td>
+							<td class="text-right">{ format.IntCtx(ctx, r.Kills) }</td>
+						</tr>
+					}
+				</tbody>
+			}
+		}
+	}
+	@components.Panel("Top guilds") {
+		if len(vm.GuildRows) == 0 {
+			@components.EmptyState("No guild data for this filter.")
+		} else {
+			@components.Table() {
+				<thead>
+					<tr>
+					<th>Guild</th>
+					<th class="text-right">Characters</th>
+					<th class="text-right">Kills</th>
+				</tr>
+			</thead>
+			<tbody>
+					for _, r := range vm.GuildRows {
+						<tr>
+						<td>{ r.Guild }</td>
+						<td class="text-right">{ format.IntCtx(ctx, r.Characters) }</td>
+						<td class="text-right">{ format.IntCtx(ctx, r.Kills) }</td>
+					</tr>
+				}
+			</tbody>
+			}
+		}
+	}
+}
+
+templ statCard(label string, value string) {
+	<div class="border border-bk-border bg-bk-panel p-4">
+		<div class="text-xs font-medium uppercase tracking-wide text-bk-muted">{ label }</div>
+		<div class="mt-2 font-mono text-2xl font-semibold">{ value }</div>
+	</div>
+}
+
+func selectedRowClass(selected bool) string {
+	if selected {
+		return "bg-bk-accent/10"
+	}
+	return ""
+}
+
+func classBreakdownGridClass(vm ViewModel) string {
+	if vm.CanFilterDifficulty {
+		return "grid gap-6 lg:grid-cols-2"
+	}
+	return "grid gap-6"
+}
+
+func statsURL(realmName string, offset int, modes []int) string {
+	values := url.Values{}
+	if offset > 0 {
+		values.Set("raidlock", strconv.Itoa(offset))
+	}
+	for _, mode := range modes {
+		if mode >= 0 {
+			values.Add("difficulty", strconv.Itoa(mode))
+		}
+	}
+	path := links.Stats(realmName)
+	if encoded := values.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	return path
+}

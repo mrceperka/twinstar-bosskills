@@ -1,0 +1,154 @@
+package bosskills
+
+import (
+	"twinstar-bosskills/internal/format"
+	"twinstar-bosskills/internal/links"
+	"twinstar-bosskills/internal/web/views/components"
+	"twinstar-bosskills/internal/web/views/layouts"
+	"twinstar-bosskills/internal/web/views/viewhelpers"
+)
+
+type ViewModel struct {
+	Meta       layouts.PageMeta
+	Realm      string
+	Filter     FilterValues
+	BossOptions []Option
+	RaidOptions []Option
+	ModeOptions []Option
+	ClassOptions []Option
+	SpecOptions []Option
+	Rows       []KillRow
+	Page       int
+	PageSize   int
+	Total      int
+}
+
+type FilterValues struct {
+	Bosses        []uint32
+	Raids         []string
+	Difficulties  []int
+	Classes       []int
+	Specs         []int
+	SortBy        string // kill_time (default), length, wipes, deaths
+	SortDir       string // asc, desc
+	// GuildOverride is set by the handler when on a private realm; it forces
+	// queries to filter by the user's guild from the cookie.
+	GuildOverride string
+}
+
+type Option = components.CheckboxOption
+
+type KillRow struct {
+	RemoteID   string
+	KillTime   string
+	BossName   string
+	BossID     uint32
+	RaidName   string
+	Mode       int
+	ModeLabel  string
+	Guild      string
+	LengthSec  int
+	Wipes      int
+	Deaths     int
+}
+
+templ Page(vm ViewModel) {
+	@layouts.Root(vm.Meta) {
+		<div class="space-y-6">
+			<header class="flex items-baseline justify-between">
+				<h1 class="text-2xl font-semibold">{ vm.Realm } / Boss kills</h1>
+				<div class="text-sm text-bk-muted">{ format.IntCtx(ctx, vm.Total) } total kills</div>
+			</header>
+			@components.CollapsiblePanel("Filters", false) {
+				@filterForm(vm)
+			}
+			<div id="kills-table">
+				@TableFragment(vm)
+			</div>
+		</div>
+	}
+}
+
+// TableFragment is rendered both as part of the full page and as an htmx
+// partial response when the user changes filters or pagination.
+templ TableFragment(vm ViewModel) {
+	if len(vm.Rows) == 0 {
+		<div class="border border-bk-border bg-bk-panel p-6 text-center text-bk-muted">
+			No kills match your filters.
+		</div>
+	} else {
+		@components.Panel("Latest kills") {
+			@components.Table() {
+				<thead>
+					<tr>
+						<th>Boss</th>
+						<th>Raid</th>
+						<th>Difficulty</th>
+						<th>Guild</th>
+							<th>@components.SortHeader(sortHeaderProps(vm, "length", "Fight length"))</th>
+							<th>@components.SortHeader(sortHeaderProps(vm, "kill_time", "Killed"))</th>
+						<th>Fight details</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, r := range vm.Rows {
+						<tr>
+							<td>
+								<a href={ viewhelpers.BossWithDifficultyHref(vm.Realm, r.BossID, r.Mode) }>{ r.BossName }</a>
+							</td>
+							<td>{ r.RaidName }</td>
+							<td>{ r.ModeLabel }</td>
+							<td>{ r.Guild }</td>
+							<td>{ format.Duration(r.LengthSec) }</td>
+							<td>{ r.KillTime }</td>
+							<td>
+								<a href={ templ.SafeURL(links.BossKill(vm.Realm, r.RemoteID)) }>Detail</a>
+								<span class="mx-1 text-bk-muted">·</span>
+								<a href={ templ.SafeURL(links.TwinheadBossKill(vm.Realm, r.RemoteID)) } target="_blank" rel="noopener">Twinhead ↗</a>
+							</td>
+						</tr>
+					}
+				</tbody>
+			}
+				@components.Pagination(paginationProps(vm))
+		}
+	}
+}
+
+templ filterForm(vm ViewModel) {
+	@components.FilterForm(components.FilterFormProps{Action: links.BossKills(vm.Realm), HTMXTarget: "#kills-table", ResetURL: links.BossKills(vm.Realm)}) {
+		<input type="hidden" name="sort" value={ vm.Filter.SortBy }/>
+		<input type="hidden" name="dir" value={ vm.Filter.SortDir }/>
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Raid</span>
+			@components.CheckboxFilter("raid", vm.RaidOptions, len(vm.Filter.Raids) > 0, "min-h-24")
+		</label>
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Boss</span>
+			@components.CheckboxFilter("boss", vm.BossOptions, len(vm.Filter.Bosses) > 0, "min-h-24")
+		</label>
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Difficulty</span>
+			@components.CheckboxFilter("difficulty", vm.ModeOptions, len(vm.Filter.Difficulties) > 0, "min-h-24")
+		</label>
+		if len(vm.ClassOptions) > 0 {
+			<label class="flex flex-col gap-1 text-sm">
+				<span class="text-bk-muted">Class</span>
+				@components.IconCheckboxFilter("class", vm.ClassOptions, len(vm.Filter.Classes) > 0, "min-h-24")
+			</label>
+		} else {
+			<label class="flex flex-col gap-1 text-sm">
+				<span class="text-bk-muted">Spec</span>
+				@components.IconCheckboxFilter("spec", vm.SpecOptions, len(vm.Filter.Specs) > 0, "min-h-24")
+			</label>
+		}
+	}
+}
+
+func sortHeaderProps(vm ViewModel, col, label string) components.SortHeaderProps {
+	return components.SortHeaderProps{Label: label, URL: sortHref(vm, col), HTMXTarget: "#kills-table", Active: vm.Filter.SortBy == col, Direction: vm.Filter.SortDir}
+}
+
+func paginationProps(vm ViewModel) components.PaginationProps {
+	return components.PaginationProps{Page: vm.Page, PageSize: vm.PageSize, Visible: len(vm.Rows), Total: vm.Total, PreviousURL: pagedURL(vm, vm.Page-1), NextURL: pagedURL(vm, vm.Page+1), HTMXTarget: "#kills-table"}
+}

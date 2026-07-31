@@ -1,0 +1,550 @@
+package boss
+
+import (
+	"twinstar-bosskills/internal/api"
+	"twinstar-bosskills/internal/format"
+	"twinstar-bosskills/internal/links"
+	"twinstar-bosskills/internal/web/views/components"
+	"twinstar-bosskills/internal/web/views/layouts"
+	"twinstar-bosskills/internal/web/views/viewhelpers"
+	"twinstar-bosskills/internal/wow"
+)
+
+type ViewModel struct {
+	Meta             layouts.PageMeta
+	Realm            string
+	Boss             BossInfo
+	Siblings         []SiblingBoss
+	Stats            HeaderStats
+	Difficulties     []DifficultyChoice
+	SelectedMode     int
+	LockLabel        string
+	LockOffset       int
+	LockScoped       bool
+	SelectedSpec     int
+	SelectedClass    int
+	ClassMode        bool
+	AvailableSpecs   []int
+	AvailableClasses []int
+	SelectedPctile   int
+	DPSCurveJSON     []byte
+	HPSCurveJSON     []byte
+	DPSBoxJSON       []byte
+	HPSBoxJSON       []byte
+	DPSRows          int
+	HPSRows          int
+	AtPercentile     []SpecAtPercentile
+	TopDPS           []Ranking
+	TopHPS           []Ranking
+	Loot             []LootDrop
+}
+
+// LootDrop is one distinct item that dropped from this boss on the selected
+// difficulty, with its aggregate drop chance across all kills of that mode.
+type LootDrop struct {
+	ItemID uint32
+	// DropChanceLabel is "3 of 12 ~ 25.00%" style text - computed in handler.
+	DropChanceLabel string
+	// Tier is the difficulty / forged label parsed from the item tooltip
+	// ("Heroic", "Warforged", "Heroic Warforged", ...); empty for normal items.
+	Tier string
+	// ItemLevel is parsed from the item tooltip; 0 when unknown.
+	ItemLevel int
+	Item      *api.Item
+}
+
+type BossInfo struct {
+	RemoteID uint32
+	Name     string
+	RaidName string
+}
+
+type SiblingBoss struct {
+	RemoteID uint32
+	Name     string
+	Current  bool
+}
+
+type HeaderStats struct {
+	ModeLabel    string
+	Kills        int
+	Wipes        int
+	AvgWipes     float64
+	KillChance   float64
+	WipeChance   float64
+	FastestSec   int
+	AverageSec   int
+	SlowestSec   int
+}
+
+type DifficultyChoice struct {
+	Mode  int
+	Label string
+}
+
+type Ranking struct {
+	Rank       int
+	Name       string
+	RemoteID   string
+	Spec       int
+	SpecLabel  string
+	Class      int
+	ClassLabel string
+	DPS        int64
+	HPS        int64
+	DmgDone    int64
+	HealDone   int64
+	LengthSec  int
+	KilledAt   string
+	ItemLevel  float64
+}
+
+templ Page(vm ViewModel) {
+	@layouts.Root(vm.Meta) {
+		<section class="space-y-3">
+			<h1 class="text-2xl font-semibold">Boss { vm.Boss.Name }</h1>
+			@siblingNav(vm)
+			@bossHeaderStats(vm)
+		</section>
+		@bossFilters(vm)
+		@bossLoot(vm)
+		<section class="mt-6 space-y-3">
+			<h2 class="text-lg font-semibold">Top stats by { groupLabel(vm) }</h2>
+			<div id="boss-content" class="space-y-6">
+				@Content(vm)
+			</div>
+		</section>
+	}
+}
+
+templ Fragment(vm ViewModel) {
+	@siblingNav(vm)
+	@bossHeaderStats(vm)
+	@bossFilters(vm)
+	@bossLoot(vm)
+	@Content(vm)
+}
+
+// bossFilters is the opened filter card holding the difficulty tabs and the
+// spec/class filter row. Rendered above the loot section. Uses hx-swap-oob so
+// clicking a tab/filter (which swaps #boss-content) also refreshes the active
+// states here even though the card lives outside that container.
+templ bossFilters(vm ViewModel) {
+	<section id="boss-filters" hx-swap-oob="true" class="mt-6">
+		@components.CollapsiblePanel("Filters", true) {
+			<div class="space-y-3">
+				@difficultyTabs(vm)
+				@filterRow(vm)
+			</div>
+		}
+	</section>
+}
+
+// bossLoot renders the collapsed loot disclosure. The table is fetched lazily
+// on first expand (hx-trigger="toggle once"). It uses hx-swap-oob so
+// difficulty-tab / lock changes (which swap #boss-content) also replace this
+// section with a fresh collapsed shell carrying the new difficulty in its URL.
+templ bossLoot(vm ViewModel) {
+	<section id="boss-loot" hx-swap-oob="true" class="mt-6">
+		<details
+			class="border border-bk-border"
+			hx-get={ string(lootHref(vm)) }
+			hx-trigger="toggle once"
+			hx-target="#boss-loot-body"
+			hx-swap="innerHTML"
+		>
+			<summary class="flex cursor-pointer select-none items-center gap-2 px-4 py-3 font-semibold">
+				@components.LootIcon("h-5 w-5 shrink-0 text-bk-accent")
+				<span>Loot</span>
+			</summary>
+			<div id="boss-loot-body" class="px-4 pb-4">
+				<span class="text-sm text-bk-muted">Loading…</span>
+			</div>
+		</details>
+	</section>
+}
+
+// LootTable is the lazily-loaded fragment: one row per distinct item that
+// dropped on the selected difficulty, sorted by drop chance descending.
+templ LootTable(vm ViewModel) {
+	if len(vm.Loot) == 0 {
+		<div class="py-2 text-sm text-bk-muted">No loot recorded for this difficulty yet.</div>
+	} else {
+		@components.Table() {
+			<thead>
+				<tr>
+					<th>Item</th>
+					<th>Name</th>
+					<th>Tier</th>
+					<th>iLvl</th>
+					<th>Drop chance</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, l := range vm.Loot {
+					<tr class="bk-tip-row" data-tooltip-url={ viewhelpers.ItemTooltipURL(vm.Realm, l.ItemID) }>
+						<td>
+							<img src={ viewhelpers.ItemIconHref(l.ItemID) } alt="" loading="lazy" width="24" height="24" class="border border-bk-border"/>
+						</td>
+						<td>
+							if l.Item != nil {
+								<a href={ templ.SafeURL(links.TwinheadItem(vm.Realm, l.ItemID)) } target="_blank" rel="noopener" style={ "color: " + api.QualityColor(l.Item.Quality) } tabindex="0">{ l.Item.Name }</a>
+							} else {
+								<a href={ templ.SafeURL(links.TwinheadItem(vm.Realm, l.ItemID)) } target="_blank" rel="noopener" class="text-bk-muted">Item { viewhelpers.Uitoa(uint64(l.ItemID)) }</a>
+							}
+							<span class="bk-tip">
+								if l.Item != nil && l.Item.Tooltip != "" {
+									@templ.Raw(l.Item.Tooltip)
+								}
+							</span>
+						</td>
+						<td>
+							if l.Tier != "" {
+								<span class="text-bk-accent">{ l.Tier }</span>
+							} else {
+								<span class="text-bk-muted">-</span>
+							}
+						</td>
+						<td>
+							if l.ItemLevel > 0 {
+								{ viewhelpers.Itoa(l.ItemLevel) }
+							} else {
+								<span class="text-bk-muted">-</span>
+							}
+						</td>
+						<td class="text-bk-accent">{ l.DropChanceLabel }</td>
+					</tr>
+				}
+			</tbody>
+		}
+	}
+}
+
+templ Content(vm ViewModel) {
+	<div class="grid gap-6 lg:grid-cols-2">
+		@components.Panel("Top DPS") {
+			@topTable(vm, vm.TopDPS, "DPS")
+		}
+		@components.Panel("Top HPS") {
+			@topTable(vm, vm.TopHPS, "HPS")
+		}
+	</div>
+	<section class="mt-6">
+		<h2 class="mb-2 text-lg font-semibold">DPS by { groupTitle(vm) }</h2>
+		if len(vm.DPSBoxJSON) > 2 {
+			@components.ChartFromJSONStyled("block w-full", boxChartStyle(vm.DPSRows), vm.DPSBoxJSON)
+		} else {
+			@emptyChart()
+		}
+	</section>
+	<section class="mt-6">
+		<h2 class="mb-2 text-lg font-semibold">HPS by { groupTitle(vm) }</h2>
+		if len(vm.HPSBoxJSON) > 2 {
+			@components.ChartFromJSONStyled("block w-full", boxChartStyle(vm.HPSRows), vm.HPSBoxJSON)
+		} else {
+			@emptyChart()
+		}
+	</section>
+	@components.Panel("At percentile (exact, 1–99)") {
+		@percentileForm(vm)
+		@percentileTable(vm)
+	}
+}
+
+templ siblingNav(vm ViewModel) {
+	if len(vm.Siblings) > 0 {
+		<nav id="boss-sibling-nav" hx-swap-oob="true" class="flex flex-wrap items-center gap-1.5 text-xs">
+			for _, s := range vm.Siblings {
+				if s.Current {
+					<span class="inline-flex items-center border border-bk-accent px-2 py-0.5 font-medium text-bk-accent" aria-current="page">{ s.Name }</span>
+				} else {
+					<a href={ siblingHref(vm, s.RemoteID) } class="inline-flex items-center border border-bk-border px-2 py-0.5 text-bk-muted hover:border-bk-accent hover:text-bk-accent">{ s.Name }</a>
+				}
+			}
+		</nav>
+	}
+}
+
+// bossHeaderStats wraps the mode-dependent kills/wipes narrative and the
+// duration line. hx-swap-oob keeps them in sync when a difficulty/lock change
+// swaps #boss-content, since they live in the static page header.
+templ bossHeaderStats(vm ViewModel) {
+	<div id="boss-header-stats" hx-swap-oob="true" class="space-y-3">
+		@narrative(vm)
+		@durations(vm)
+	</div>
+}
+
+templ narrative(vm ViewModel) {
+	<p class="text-sm">
+		{ vm.Boss.Name } ({ vm.Stats.ModeLabel }) was killed
+		<span class="text-bk-accent">{ format.IntCtx(ctx, vm.Stats.Kills) }</span>
+		times by raiders and wiped them
+		<span style="color: tomato">{ format.IntCtx(ctx, vm.Stats.Wipes) }</span>
+		times ({ viewhelpers.FormatFloat(vm.Stats.AvgWipes, 2) } times on average).
+		<br/>
+		You have
+		<span class="text-bk-accent">{ viewhelpers.FormatFloat(vm.Stats.KillChance, 2) }%</span>
+		chance to make a kill and
+		<span style="color: tomato">{ viewhelpers.FormatFloat(vm.Stats.WipeChance, 2) }%</span>
+		chance to wipe.
+	</p>
+}
+
+templ durations(vm ViewModel) {
+	if vm.Stats.Kills > 0 {
+		<p class="text-sm">
+			<span class="text-bk-accent">Fastest</span> kill took
+			{ viewhelpers.LongDuration(vm.Stats.FastestSec) },
+			average kill took { viewhelpers.LongDuration(vm.Stats.AverageSec) } and
+			<span style="color: tomato">slowest</span> kill took
+			{ viewhelpers.LongDuration(vm.Stats.SlowestSec) }.
+		</p>
+	}
+}
+
+templ difficultyTabs(vm ViewModel) {
+	<div class="flex flex-wrap items-center gap-3 text-sm">
+		<a
+			hx-get={ resetDifficultyHref(vm) }
+			hx-target="#boss-content"
+			hx-swap="innerHTML"
+			hx-push-url="true"
+			href={ templ.SafeURL(resetDifficultyHref(vm)) }
+			class="text-bk-muted hover:text-bk-fg"
+		>Reset</a>
+		<span class="text-xs text-bk-muted">
+			{ vm.LockLabel }
+			if vm.LockScoped {
+				<a
+					hx-get={ string(previousLockHref(vm)) }
+					hx-target="#boss-content"
+					hx-swap="innerHTML"
+					hx-push-url="true"
+					href={ previousLockHref(vm) }
+					class="ml-2 text-bk-accent"
+				>(see previous)</a>
+			} else {
+				<a
+					hx-get={ string(currentLockHref(vm)) }
+					hx-target="#boss-content"
+					hx-swap="innerHTML"
+					hx-push-url="true"
+					href={ currentLockHref(vm) }
+					class="ml-2 text-bk-accent"
+				>(current lock)</a>
+			}
+		</span>
+		for _, d := range vm.Difficulties {
+			<a
+				hx-get={ string(tabHref(vm, d.Mode)) }
+				hx-target="#boss-content"
+				hx-swap="innerHTML"
+				hx-push-url="true"
+				href={ tabHref(vm, d.Mode) }
+				class={ "cursor-pointer", viewhelpers.TabActiveClass(d.Mode == vm.SelectedMode) }>
+				{ d.Label }
+			</a>
+		}
+	</div>
+}
+
+templ percentileForm(vm ViewModel) {
+	<form
+		hx-get={ links.Boss(vm.Realm, vm.Boss.RemoteID) }
+		hx-target="#boss-content"
+		hx-swap="innerHTML"
+		hx-push-url="true"
+		hx-trigger="input changed delay:250ms, submit"
+		class="mb-3 flex items-center gap-3 text-sm"
+	>
+		<input type="hidden" name="difficulty" value={ viewhelpers.Itoa(vm.SelectedMode) }/>
+		if vm.LockScoped {
+			<input type="hidden" name="raidlock" value={ viewhelpers.Itoa(vm.LockOffset) }/>
+		}
+		if !vm.ClassMode && vm.SelectedSpec > 0 {
+			<input type="hidden" name="spec" value={ viewhelpers.Itoa(vm.SelectedSpec) }/>
+		}
+		if vm.ClassMode && vm.SelectedClass > 0 {
+			<input type="hidden" name="class" value={ viewhelpers.Itoa(vm.SelectedClass) }/>
+		}
+		<label class="text-bk-muted">Show value at percentile</label>
+		<input type="number" name="p" min="1" max="99" value={ viewhelpers.Itoa(vm.SelectedPctile) } class="w-20 border border-bk-accent bg-bk-bg p-1 text-bk-fg"/>
+		<span class="text-xs text-bk-muted">Exact, not bucketed</span>
+	</form>
+}
+
+templ percentileTable(vm ViewModel) {
+	if len(vm.AtPercentile) == 0 {
+		@components.EmptyState("No samples.")
+	} else {
+		@components.Table() {
+			<thead>
+				<tr>
+					<th class="bk-class-spec-column">{ groupTitle(vm) }</th>
+					<th>DPS @ p{ viewhelpers.Itoa(vm.SelectedPctile) }</th>
+					<th>HPS @ p{ viewhelpers.Itoa(vm.SelectedPctile) }</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, r := range vm.AtPercentile {
+					<tr>
+						<td class="bk-class-spec-column">
+							if vm.ClassMode {
+								@components.ClassSpecIcons(vm.Realm, r.Class, 0)
+							} else {
+								@components.ClassSpecCell(vm.Realm, wow.ClassFromSpecForRealm(vm.Realm, r.Spec), r.Spec)
+							}
+						</td>
+						<td>
+							if r.DPS > 0 {
+								{ format.Int64Ctx(ctx, r.DPS) }
+							} else {
+								<span class="text-bk-muted">-</span>
+							}
+						</td>
+						<td>
+							if r.HPS > 0 {
+								{ format.Int64Ctx(ctx, r.HPS) }
+							} else {
+								<span class="text-bk-muted">-</span>
+							}
+						</td>
+					</tr>
+				}
+			</tbody>
+		}
+	}
+}
+
+// filterRow renders one icon strip: classes for Vanilla, specs for later
+// expansions. Clicking an icon toggles ?class=N or ?spec=N and reloads via htmx.
+templ filterRow(vm ViewModel) {
+	if len(vm.AvailableClasses) > 0 || len(vm.AvailableSpecs) > 0 {
+		<div class="space-y-2 text-sm">
+			if vm.ClassMode && len(vm.AvailableClasses) > 0 {
+				<div class="flex flex-wrap items-center gap-2">
+					<a
+						hx-get={ filterHref(vm, 0, 0) }
+						hx-target="#boss-content"
+						hx-swap="innerHTML"
+						hx-push-url="true"
+						href={ templ.SafeURL(filterHref(vm, 0, 0)) }
+						class={ "px-2 py-1", filterCellClass(vm.SelectedClass == 0) }
+					>Reset</a>
+					for _, c := range vm.AvailableClasses {
+						<a
+							hx-get={ filterHref(vm, 0, c) }
+							hx-target="#boss-content"
+							hx-swap="innerHTML"
+							hx-push-url="true"
+							href={ templ.SafeURL(filterHref(vm, 0, c)) }
+							title={ wow.Class(c) }
+							class={ "inline-flex items-center justify-center p-1", filterCellClass(vm.SelectedClass == c) }
+						>
+							<img src={ templ.SafeURL(links.ClassIcon(c)) } alt={ wow.Class(c) } width="22" height="22"/>
+						</a>
+					}
+				</div>
+			}
+			if !vm.ClassMode && len(vm.AvailableSpecs) > 0 {
+				<div class="flex flex-wrap items-center gap-2">
+					<a
+						hx-get={ filterHref(vm, 0, 0) }
+						hx-target="#boss-content"
+						hx-swap="innerHTML"
+						hx-push-url="true"
+						href={ templ.SafeURL(filterHref(vm, 0, 0)) }
+						class={ "px-2 py-1", filterCellClass(vm.SelectedSpec == 0) }
+					>Reset</a>
+					for _, s := range vm.AvailableSpecs {
+						<a
+							hx-get={ filterHref(vm, s, 0) }
+							hx-target="#boss-content"
+							hx-swap="innerHTML"
+							hx-push-url="true"
+							href={ templ.SafeURL(filterHref(vm, s, 0)) }
+							title={ wow.SpecForRealm(vm.Realm, s) }
+							class={ "inline-flex items-center justify-center p-1", filterCellClass(vm.SelectedSpec == s) }
+						>
+							<img src={ templ.SafeURL(links.TalentIcon(vm.Realm, s)) } alt={ wow.SpecForRealm(vm.Realm, s) } width="22" height="22"/>
+						</a>
+					}
+				</div>
+			}
+		</div>
+	}
+}
+
+templ topTable(vm ViewModel, rows []Ranking, metric string) {
+	if len(rows) == 0 {
+		@components.EmptyState("No data for this difficulty yet.")
+	} else {
+		@components.CappedTable("max-h-[70vh]") {
+			<thead>
+				<tr>
+					<th>#</th>
+					<th>Character</th>
+					<th class="bk-class-spec-column">{ groupTitle(vm) }</th>
+					<th>{ metric } ↓</th>
+					if metric == "DPS" {
+						<th>Dmg Done</th>
+					} else {
+						<th>Healing Done</th>
+					}
+					<th>Fight Length</th>
+					<th>Killed</th>
+					<th>iLvl</th>
+					<th>Details</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, r := range rows {
+					<tr>
+						<td>
+							<span class="text-bk-muted">{ viewhelpers.Itoa(r.Rank) }</span>
+						</td>
+						<td>
+							<a href={ templ.SafeURL(links.Character(vm.Realm, r.Name)) }>{ r.Name }</a>
+						</td>
+						<td class="bk-class-spec-column">
+							if vm.ClassMode {
+								@components.ClassSpecIcons(vm.Realm, r.Class, 0)
+							} else {
+								@components.ClassSpecIcons(vm.Realm, r.Class, r.Spec)
+							}
+						</td>
+						<td>
+							if metric == "DPS" {
+								{ format.Int64Ctx(ctx, r.DPS) }
+							} else {
+								{ format.Int64Ctx(ctx, r.HPS) }
+							}
+						</td>
+						<td>
+							if metric == "DPS" {
+								{ format.Int64Ctx(ctx, r.DmgDone) }
+							} else {
+								{ format.Int64Ctx(ctx, r.HealDone) }
+							}
+						</td>
+						<td>{ viewhelpers.LongDuration(r.LengthSec) }</td>
+						<td>{ r.KilledAt }</td>
+						<td>{ viewhelpers.FormatFloat(r.ItemLevel, 0) }</td>
+						<td>
+							if r.RemoteID != "" {
+								<a href={ templ.SafeURL(links.BossKill(vm.Realm, r.RemoteID)) }>Detail</a>
+							}
+						</td>
+					</tr>
+				}
+			</tbody>
+		}
+	}
+}
+
+templ emptyChart() {
+	<div class="flex h-72 items-center justify-center text-sm text-bk-muted">
+		No samples for this difficulty yet.
+	</div>
+}

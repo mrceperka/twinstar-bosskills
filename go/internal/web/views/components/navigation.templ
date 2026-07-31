@@ -1,0 +1,117 @@
+package components
+
+import "strconv"
+
+type SortHeaderProps struct {
+	Label      string
+	URL        string
+	HTMXTarget string
+	Active     bool
+	Direction  string
+}
+
+templ SortHeader(p SortHeaderProps) {
+	<a
+		hx-get={ p.URL }
+		hx-target={ p.HTMXTarget }
+		hx-push-url="true"
+		href={ templ.SafeURL(p.URL) }
+		class="-m-2 flex items-center gap-1 p-2 cursor-pointer hover:text-bk-accent"
+	>
+		{ p.Label }
+		if p.Active {
+			if p.Direction == "asc" {
+				<span class="text-bk-accent">↑</span>
+			} else {
+				<span class="text-bk-accent">↓</span>
+			}
+		}
+	</a>
+}
+
+type PaginationProps struct {
+	Page        int
+	PageSize    int
+	Visible     int
+	Total       int
+	PreviousURL string
+	NextURL     string
+	HTMXTarget  string
+}
+
+templ Pagination(p PaginationProps) {
+	if p.Total > 0 {
+		<nav class="mt-4 flex items-center justify-between text-sm">
+			<div class="text-bk-muted">
+				Page { paginationInt(p.Page + 1) }
+				· showing { paginationInt(p.Visible) } of { paginationInt(p.Total) }
+			</div>
+			<div class="flex gap-1">
+				if p.Page > 0 && p.PreviousURL != "" {
+					@paginationLink("Prev", p.PreviousURL, p.HTMXTarget)
+				}
+				if p.PageSize > 0 && (p.Page+1)*p.PageSize < p.Total && p.NextURL != "" {
+					@paginationLink("Next", p.NextURL, p.HTMXTarget)
+				}
+			</div>
+		</nav>
+	}
+}
+
+templ paginationLink(label, url, target string) {
+	<a
+		hx-get={ url }
+		hx-target={ target }
+		hx-push-url="true"
+		href={ templ.SafeURL(url) }
+		class="border border-bk-border px-2 py-1 hover:text-bk-accent cursor-pointer"
+	>{ label }</a>
+}
+
+type FilterFormProps struct {
+	Action     string
+	HTMXTarget string
+	HTMXSwap   string
+	ResetURL   string
+}
+
+// FilterForm standardizes the responsive filter grid and its actions. When an
+// HTMX target is supplied, GET responses are swapped into that target;
+// otherwise it behaves as a regular progressively-enhanced GET form.
+templ FilterForm(p FilterFormProps) {
+	if p.HTMXTarget != "" {
+		<form
+			hx-get={ p.Action }
+			hx-target={ p.HTMXTarget }
+			hx-swap={ filterSwap(p.HTMXSwap) }
+			hx-push-url="true"
+			class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+		>
+			{ children... }
+			@FilterActions(p.ResetURL)
+		</form>
+	} else {
+		<form method="GET" action={ p.Action } class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+			{ children... }
+			@FilterActions(p.ResetURL)
+		</form>
+	}
+}
+
+templ FilterActions(resetURL string) {
+	<div class="sm:col-span-2 lg:col-span-4 flex justify-end gap-2">
+		<a href={ templ.SafeURL(resetURL) } class="border border-bk-border px-3 py-1 text-sm text-bk-muted hover:text-bk-text">Reset</a>
+		<button type="submit" class="bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Apply</button>
+	</div>
+}
+
+func filterSwap(value string) string {
+	if value == "" {
+		return "innerHTML"
+	}
+	return value
+}
+
+func paginationInt(value int) string {
+	return strconv.Itoa(value)
+}

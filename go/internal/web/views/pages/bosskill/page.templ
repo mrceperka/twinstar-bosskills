@@ -1,0 +1,257 @@
+package bosskill
+
+import (
+	"twinstar-bosskills/internal/api"
+	"twinstar-bosskills/internal/format"
+	"twinstar-bosskills/internal/links"
+	"twinstar-bosskills/internal/web/views/components"
+	"twinstar-bosskills/internal/web/views/layouts"
+	"twinstar-bosskills/internal/web/views/viewhelpers"
+)
+
+type ViewModel struct {
+	Meta         layouts.PageMeta
+	Realm        string
+	Kill         KillInfo
+	Players      []PlayerRow
+	Loot         []LootRow
+	Deaths       []DeathRow
+	TimelineJSON []byte
+	// Sort state for the stats table.
+	SortBy  string // dps (default), hps, dmg_done, heal_done, ilvl, name
+	SortDir string // asc, desc
+}
+
+type KillInfo struct {
+	RemoteID      string
+	BossID        uint32
+	BossName      string
+	RaidName      string
+	Mode          int
+	ModeLabel     string
+	Guild         string
+	KillTime      string
+	LengthSec     int
+	Wipes         int
+	Deaths        int
+	Ressurects    int
+	RessUsed      int
+	AvgIlvl       float64
+	TotalDmgDone  int64
+	TotalHealDone int64
+	TotalDmgTaken int64
+	RaidDPS       int64
+	RaidHPS       int64
+}
+
+type PlayerRow struct {
+	Rank          int
+	Name          string
+	Guid          uint64
+	Class         int
+	ClassLabel    string
+	Race          int
+	Spec          int
+	SpecLabel     string
+	ItemLvl       float64
+	DPS           int64
+	HPS           int64
+	DPSPercentile float64 // -1 means N/A (no sample)
+	HPSPercentile float64
+	DmgDone       int64
+	DmgTaken      int64
+	DmgAbsorbed   int64
+	HealDone      int64
+	AbsDone       int64
+	HealTaken     int64
+	Overheal      int64
+	Interrupts    int
+	Dispels       int
+	IsDead        bool
+}
+
+type LootRow struct {
+	ItemID uint32
+	Count  int
+	// DropChance is "1 of 6 ~ 16.67%" style text - computed in handler.
+	DropChanceLabel string
+	Item            *api.Item
+}
+
+type DeathRow struct {
+	TimeSec int
+	Name    string
+	IsRess  bool
+}
+
+templ Page(vm ViewModel) {
+	@layouts.Root(vm.Meta) {
+		<section class="space-y-1">
+			<h1 class="text-2xl font-semibold">
+				Boss Kill Details - { vm.Kill.RemoteID }
+				<a href={ templ.SafeURL(links.TwinheadBossKill(vm.Realm, vm.Kill.RemoteID)) } target="_blank" rel="noopener" class="ml-2 text-sm">Twinhead ↗</a>
+			</h1>
+		</section>
+		<section class="mt-4 grid gap-6 lg:grid-cols-2">
+			@metaList(vm)
+			@bossLoot(vm)
+		</section>
+		<section class="mt-8">
+			<h2 class="text-lg font-semibold mb-3">Fight timeline</h2>
+			if len(vm.TimelineJSON) > 2 {
+				@components.ChartFromJSON("block w-full h-[24rem]", vm.TimelineJSON)
+			} else {
+				@components.EmptyState("No timeline data.")
+			}
+		</section>
+		<section class="mt-8">
+			<h2 class="text-lg font-semibold mb-3">Stats</h2>
+			<div id="stats-table">
+				@StatsTableFragment(vm)
+			</div>
+		</section>
+	}
+}
+
+templ StatsTableFragment(vm ViewModel) {
+	@statsTable(vm)
+}
+
+templ metaList(vm ViewModel) {
+	<dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1 text-sm">
+		<dt class="text-bk-muted">Boss</dt>
+		<dd>
+			<a href={ viewhelpers.BossWithDifficultyHref(vm.Realm, vm.Kill.BossID, vm.Kill.Mode) }>{ vm.Kill.BossName }</a>
+			<span class="mx-1 text-bk-muted">-</span>
+			<a href={ templ.SafeURL(links.TwinheadNPC(vm.Realm, vm.Kill.BossID)) } target="_blank" rel="noopener">Twinhead ↗</a>
+		</dd>
+		<dt class="text-bk-muted">Raid</dt>
+		<dd>{ vm.Kill.RaidName } ({ vm.Kill.ModeLabel })</dd>
+		<dt class="text-bk-muted">Guild</dt>
+		<dd>
+			if vm.Kill.Guild != "" {
+				{ vm.Kill.Guild }
+			} else {
+				<span class="text-bk-muted">-</span>
+			}
+		</dd>
+		<dt class="text-bk-muted">Realm</dt>
+		<dd>{ vm.Realm }</dd>
+		<dt class="text-bk-muted">Killed</dt>
+		<dd>{ vm.Kill.KillTime }</dd>
+		<dt class="text-bk-muted">Avg iLvl</dt>
+		<dd>{ viewhelpers.FormatFloat(vm.Kill.AvgIlvl, 0) }</dd>
+		<dt class="text-bk-muted">Wipes</dt>
+		<dd>{ format.IntCtx(ctx, vm.Kill.Wipes) }</dd>
+		<dt class="text-bk-muted">Total dmg done</dt>
+		<dd>{ format.Int64Ctx(ctx, vm.Kill.TotalDmgDone) } <span class="text-bk-muted">({ format.Int64Ctx(ctx, vm.Kill.RaidDPS) } DPS)</span></dd>
+		<dt class="text-bk-muted">Total healing done</dt>
+		<dd>{ format.Int64Ctx(ctx, vm.Kill.TotalHealDone) } <span class="text-bk-muted">({ format.Int64Ctx(ctx, vm.Kill.RaidHPS) } HPS)</span></dd>
+		<dt class="text-bk-muted">Total dmg taken</dt>
+		<dd>{ format.Int64Ctx(ctx, vm.Kill.TotalDmgTaken) }</dd>
+		<dt class="text-bk-muted">Fight Length</dt>
+		<dd>{ viewhelpers.LongDuration(vm.Kill.LengthSec) }</dd>
+		<dt class="text-bk-muted">Deaths / Ressurects</dt>
+		<dd>{ format.IntCtx(ctx, vm.Kill.Deaths) } / { format.IntCtx(ctx, vm.Kill.Ressurects) }</dd>
+	</dl>
+}
+
+templ bossLoot(vm ViewModel) {
+	<div>
+		<h2 class="text-lg font-semibold mb-2">Boss Loot</h2>
+		if len(vm.Loot) == 0 {
+			<div class="py-2 text-sm text-bk-muted">No loot recorded.</div>
+		} else {
+			<ul class="space-y-1">
+				for _, l := range vm.Loot {
+					<li class="bk-tip-row flex items-center gap-2 text-sm" data-tooltip-url={ viewhelpers.ItemTooltipURL(vm.Realm, l.ItemID) }>
+						<img src={ viewhelpers.ItemIconHref(l.ItemID) } alt="" loading="lazy" width="24" height="24" class="border border-bk-border"/>
+						if l.Item != nil {
+							<a href={ templ.SafeURL(links.TwinheadItem(vm.Realm, l.ItemID)) } target="_blank" rel="noopener" style={ "color: " + api.QualityColor(l.Item.Quality) } tabindex="0">{ l.Item.Name }</a>
+						} else {
+							<a href={ templ.SafeURL(links.TwinheadItem(vm.Realm, l.ItemID)) } target="_blank" rel="noopener" class="text-bk-muted">Item { viewhelpers.Uitoa(uint64(l.ItemID)) }</a>
+						}
+						if l.DropChanceLabel != "" {
+							<span class="text-bk-accent">({ l.DropChanceLabel })</span>
+						}
+						<span class="bk-tip">
+							if l.Item != nil && l.Item.Tooltip != "" {
+								@templ.Raw(l.Item.Tooltip)
+							}
+						</span>
+					</li>
+				}
+			</ul>
+		}
+	</div>
+}
+
+templ statsTable(vm ViewModel) {
+	@components.Table() {
+		<thead>
+			<tr>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "name", "Name"))</th>
+				<th>Rank %</th>
+				<th class="bk-class-spec-column">Class</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "dps", "DPS"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "dmg_done", "Dmg Done"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "dmg_taken", "Dmg Taken"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "dmg_absorbed", "Dmg Absorb"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "hps", "HPS"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "heal_done", "Healing Done"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "abs_done", "Absorb Done"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "heal_taken", "Heal Taken"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "interrupts", "I"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "dispels", "D"))</th>
+					<th>@components.SortHeader(statsSortHeaderProps(vm, "ilvl", "iLvl"))</th>
+			</tr>
+		</thead>
+		<tbody>
+			for _, p := range vm.Players {
+				<tr class={ playerRowClass(p) }>
+					<td>
+						<a href={ templ.SafeURL(links.Character(vm.Realm, p.Name)) }>{ p.Name }</a>
+					</td>
+					<td>
+						@percentileCell(p.DPSPercentile, "dmg")
+						<span class="mx-1 text-bk-muted">|</span>
+						@percentileCell(p.HPSPercentile, "heal")
+					</td>
+					<td class="bk-class-spec-column">
+						@components.ClassSpecIcons(vm.Realm, p.Class, p.Spec)
+					</td>
+					<td>{ format.Int64Ctx(ctx, p.DPS) }</td>
+					<td>{ format.Int64Ctx(ctx, p.DmgDone) }</td>
+					<td>{ format.Int64Ctx(ctx, p.DmgTaken) }</td>
+					<td>{ format.Int64Ctx(ctx, p.DmgAbsorbed) }</td>
+					<td>{ format.Int64Ctx(ctx, p.HPS) }</td>
+					<td>{ format.Int64Ctx(ctx, p.HealDone) }</td>
+					<td>{ format.Int64Ctx(ctx, p.AbsDone) }</td>
+					<td>{ format.Int64Ctx(ctx, p.HealTaken) }</td>
+					<td>{ format.IntCtx(ctx, p.Interrupts) }</td>
+					<td>{ format.IntCtx(ctx, p.Dispels) }</td>
+					<td>{ viewhelpers.FormatFloat(p.ItemLvl, 0) }</td>
+				</tr>
+			}
+		</tbody>
+	}
+}
+
+func statsSortHeaderProps(vm ViewModel, col, label string) components.SortHeaderProps {
+	return components.SortHeaderProps{Label: label, URL: statsSortURL(vm, col), HTMXTarget: "#stats-table", Active: vm.SortBy == col, Direction: vm.SortDir}
+}
+
+// percentileCell renders one half of the "Rank %" cell with a metric-tinted
+// color. `kind` is "dmg" or "heal" so the color matches SvelteKit's
+// TextColorDamage / TextColorHealing components.
+templ percentileCell(p float64, kind string) {
+	if p < 0 {
+		<span class="text-bk-muted">N/A</span>
+	} else {
+		if kind == "heal" {
+			<span style="color: #1eff00">{ viewhelpers.FormatFloat(p, 0) }</span>
+		} else {
+			<span style="color: #ffd100">{ viewhelpers.FormatFloat(p, 0) }</span>
+		}
+	}
+}

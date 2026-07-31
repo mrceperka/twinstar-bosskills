@@ -1,0 +1,109 @@
+package boss
+
+import (
+	"strconv"
+
+	"twinstar-bosskills/internal/links"
+	"twinstar-bosskills/internal/web/views/viewhelpers"
+
+	"github.com/a-h/templ"
+)
+
+// lootHref builds the lazy-load URL for the loot table, preserving the current
+// difficulty and raid-lock window.
+func lootHref(vm ViewModel) templ.SafeURL {
+	href := links.Boss(vm.Realm, vm.Boss.RemoteID) + "/loot?difficulty=" + strconv.Itoa(vm.SelectedMode)
+	if vm.LockScoped {
+		href += "&raidlock=" + strconv.Itoa(vm.LockOffset)
+	}
+	return templ.SafeURL(href)
+}
+
+func tabHref(vm ViewModel, mode int) templ.SafeURL {
+	return templ.SafeURL(bossHrefWithFilters(vm, vm.Boss.RemoteID, mode, vm.SelectedSpec, vm.SelectedClass, vm.LockScoped, vm.LockOffset))
+}
+
+// previousLockHref builds a Boss URL for the previous raid lockout while
+// preserving the current mode/spec/class/percentile filters.
+func previousLockHref(vm ViewModel) templ.SafeURL {
+	return templ.SafeURL(bossHrefWithFilters(vm, vm.Boss.RemoteID, vm.SelectedMode, vm.SelectedSpec, vm.SelectedClass, true, vm.LockOffset+1))
+}
+
+// currentLockHref switches the overall view to the current raid lockout.
+func currentLockHref(vm ViewModel) templ.SafeURL {
+	return templ.SafeURL(bossHrefWithFilters(vm, vm.Boss.RemoteID, vm.SelectedMode, vm.SelectedSpec, vm.SelectedClass, true, 0))
+}
+
+// siblingHref links to a sibling boss while preserving the current mode/spec/class/percentile.
+func siblingHref(vm ViewModel, remoteID uint32) templ.SafeURL {
+	return templ.SafeURL(bossHrefWithFilters(vm, remoteID, vm.SelectedMode, vm.SelectedSpec, vm.SelectedClass, vm.LockScoped, vm.LockOffset))
+}
+
+// filterHref builds a /{realm}/boss/{id} URL with the requested
+// spec/class/mode/percentile combination. Used by the spec/class filter
+// row and by Reset.
+func filterHref(vm ViewModel, spec, class int) string {
+	return bossHrefWithFilters(vm, vm.Boss.RemoteID, vm.SelectedMode, spec, class, vm.LockScoped, vm.LockOffset)
+}
+
+func bossHrefWithFilters(vm ViewModel, remoteID uint32, mode, spec, class int, includeLock bool, lockOffset int) string {
+	href := string(viewhelpers.BossWithDifficultyHref(vm.Realm, remoteID, mode))
+	if includeLock {
+		href += "&raidlock=" + strconv.Itoa(lockOffset)
+	}
+	href += "&p=" + strconv.Itoa(vm.SelectedPctile)
+	if !vm.ClassMode && spec > 0 {
+		href += "&spec=" + strconv.Itoa(spec)
+	}
+	if vm.ClassMode && class > 0 {
+		href += "&class=" + strconv.Itoa(class)
+	}
+	return href
+}
+
+// resetDifficultyHref reverts the difficulty to the server default (no
+// ?difficulty param) and the raid lock back to overall (no ?raidlock param),
+// while preserving the spec/class/percentile filters so resetting does not
+// also clear the spec selection.
+func resetDifficultyHref(vm ViewModel) string {
+	href := links.Boss(vm.Realm, vm.Boss.RemoteID) + "?p=" + strconv.Itoa(vm.SelectedPctile)
+	if !vm.ClassMode && vm.SelectedSpec > 0 {
+		href += "&spec=" + strconv.Itoa(vm.SelectedSpec)
+	}
+	if vm.ClassMode && vm.SelectedClass > 0 {
+		href += "&class=" + strconv.Itoa(vm.SelectedClass)
+	}
+	return href
+}
+
+// boxChartStyle returns an inline height for a horizontal boxplot that grows
+// with the number of rows, so rows keep comfortable vertical padding whether
+// there are 8 classes or 25 specs.
+func boxChartStyle(rows int) string {
+	h := rows*42 + 56
+	if h < 320 {
+		h = 320
+	}
+	return "height: " + strconv.Itoa(h) + "px"
+}
+
+func groupLabel(vm ViewModel) string {
+	if vm.ClassMode {
+		return "class"
+	}
+	return "spec"
+}
+
+func groupTitle(vm ViewModel) string {
+	if vm.ClassMode {
+		return "Class"
+	}
+	return "Spec"
+}
+
+func filterCellClass(selected bool) string {
+	if selected {
+		return "ring-2 ring-bk-accent"
+	}
+	return "opacity-70 hover:opacity-100"
+}

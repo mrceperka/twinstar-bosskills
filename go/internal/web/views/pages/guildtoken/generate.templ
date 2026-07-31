@@ -1,0 +1,66 @@
+package guildtoken
+
+import "twinstar-bosskills/internal/web/views/components"
+import "twinstar-bosskills/internal/web/views/layouts"
+
+type GenerateViewModel struct {
+	Meta            layouts.PageMeta
+	Realm           string
+	HasAdmin        bool
+	GeneratedToken  string
+	GeneratedGuild  string
+	StatusError     string
+}
+
+templ GeneratePage(vm GenerateViewModel) {
+	@layouts.Root(vm.Meta) {
+		<div class="space-y-6">
+			<header>
+				<h1 class="text-2xl font-semibold">{ vm.Realm } / Generate guild token</h1>
+				<p class="text-sm text-bk-muted">
+					Admin tool. Compute a guild token for a guild on this realm.
+					Requires the admin token (SECRET_TOKEN_ADMIN) - stored in an httpOnly cookie once verified.
+				</p>
+			</header>
+			@components.Panel("Generate") {
+				if vm.StatusError != "" {
+					<div class="mb-3 border border-red-500/40 bg-red-500/10 p-2 text-sm text-red-300">
+						{ vm.StatusError }
+					</div>
+				}
+				if vm.GeneratedToken != "" {
+					<div class="mb-3 border border-green-500/40 bg-green-500/10 p-2 text-sm">
+						<div class="text-green-300 mb-1">Token for { vm.GeneratedGuild }:</div>
+						<code class="font-mono text-bk-accent break-all">{ vm.GeneratedToken }</code>
+					</div>
+				}
+				<form method="POST" class="space-y-3">
+					<label class="block text-sm">
+						<span class="text-bk-muted">Guild name</span>
+						<input
+							name="guild"
+							type="text"
+							value={ vm.GeneratedGuild }
+							required
+							class="mt-1 w-full border border-bk-border bg-bk-bg p-2 font-mono"
+						/>
+					</label>
+					<label class="block text-sm">
+						<span class="text-bk-muted">Admin token</span>
+						<input
+							name="admin_token"
+							type="text"
+							autocomplete="off"
+							required?={ !vm.HasAdmin }
+							placeholder={ adminPlaceholder(vm.HasAdmin) }
+							class="mt-1 w-full border border-bk-border bg-bk-bg p-2 font-mono"
+						/>
+					</label>
+					<div class="flex justify-end">
+						<button type="submit" class="bg-bk-accent/20 border border-bk-accent px-3 py-1 text-sm text-bk-accent">Generate</button>
+					</div>
+				</form>
+			}
+		</div>
+	}
+}
