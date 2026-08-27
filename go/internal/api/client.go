@@ -92,9 +92,7 @@ func (c *Client) GetRaids(ctx context.Context, realmName string, expansion int) 
 		raids[i].Bosses = sanitizeBosses(raids[i].Bosses)
 		raids[i].Bosses = renameBosses(raids[i].Bosses)
 	}
-	if realmName == "Kronos" {
-		raids = filterKronosVanillaRaids(raids)
-	}
+	raids = filterVanillaRaids(realmName, raids)
 	return raids, nil
 }
 

@@ -1,5 +1,7 @@
 package api
 
+import "twinstar-bosskills/internal/realm"
+
 // Boss filter/rename rules ported from packages/api/src/raid.ts.
 // The upstream API exposes some redundant or oddly-named bosses;
 // the existing SvelteKit app filters them out and applies display names.
@@ -78,7 +80,11 @@ func renameBosses(in []Boss) []Boss {
 	return in
 }
 
-var kronosVanillaRaids = map[string]bool{
+// vanillaRaids is the raid whitelist shared by every vanilla realm. Both
+// Kronos and KronosV run all of these; Blackrock Spire is a busy raid on
+// both (it was the 4th most-killed map on Kronos while it was excluded).
+var vanillaRaids = map[string]bool{
+	"Blackrock Spire":    true,
 	"Molten Core":        true,
 	"Onyxia's Lair":      true,
 	"Blackwing Lair":     true,
@@ -88,10 +94,19 @@ var kronosVanillaRaids = map[string]bool{
 	"Naxxramas":          true,
 }
 
-func filterKronosVanillaRaids(in []Raid) []Raid {
+// filterVanillaRaids drops the world zones upstream returns for
+// expansion=0 (Kalimdor, Eastern Kingdoms, Deeprun Tram, Stratholme,
+// Dire Maul, Alterac Valley) so only real raids survive. Non-vanilla
+// realms pass through untouched.
+func filterVanillaRaids(realmName string, in []Raid) []Raid {
+	switch realmName {
+	case realm.Kronos, realm.KronosV:
+	default:
+		return in
+	}
 	out := in[:0]
 	for _, r := range in {
-		if kronosVanillaRaids[r.Map] {
+		if vanillaRaids[r.Map] {
 			out = append(out, r)
 		}
 	}

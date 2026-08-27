@@ -12,9 +12,11 @@ func TestForEachRealmPrefix(t *testing.T) {
 	})
 	want := []string{
 		"/Helios", "/helios",
+		"/Perses", "/perses",
 		"/Proudmoore", "/proudmoore",
 		"/MoPPvE", "/moppve",
 		"/Kronos", "/kronos",
+		"/KronosV", "/kronosv",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v\nwant %v", got, want)

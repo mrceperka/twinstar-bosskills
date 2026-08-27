@@ -8,14 +8,18 @@ import "strings"
 
 const (
 	Kronos         = "Kronos"
+	KronosV        = "KronosV"
 	Helios         = "Helios"
+	Perses         = "Perses"
 	CataProudmoore = "Proudmoore"
 	MoPPrivatePvE  = "MoPPvE"
 )
 
 const (
 	IDKronos        = 4
+	IDKronosV       = 26
 	IDHelios        = 18
+	IDPerses        = 28
 	IDCataPrivate   = 21
 	IDMoPPrivatePvE = 24
 )
@@ -29,7 +33,9 @@ const (
 
 var canonical = map[string]string{
 	strings.ToLower(Kronos):         Kronos,
+	strings.ToLower(KronosV):        KronosV,
 	strings.ToLower(Helios):         Helios,
+	strings.ToLower(Perses):         Perses,
 	strings.ToLower(CataProudmoore): CataProudmoore,
 	strings.ToLower(MoPPrivatePvE):  MoPPrivatePvE,
 }
@@ -40,16 +46,20 @@ var privateRealms = map[string]bool{
 
 var toExpansion = map[string]int{
 	Kronos:         ExpansionVanilla,
+	KronosV:        ExpansionVanilla,
 	Helios:         ExpansionMoP,
+	Perses:         ExpansionMoP,
 	CataProudmoore: ExpansionCata,
 	MoPPrivatePvE:  ExpansionMoP,
 }
 
 var toID = map[string]int{
 	Helios:         IDHelios,
+	Perses:         IDPerses,
 	CataProudmoore: IDCataPrivate,
 	MoPPrivatePvE:  IDMoPPrivatePvE,
 	Kronos:         IDKronos,
+	KronosV:        IDKronosV,
 }
 
 var mergedTo = map[string]string{}
@@ -91,5 +101,5 @@ func IsVanilla(expansion int) bool { return expansion == ExpansionVanilla }
 
 // All canonical realms in a stable order (handy for CLI defaults).
 func All() []string {
-	return []string{Helios, CataProudmoore, MoPPrivatePvE, Kronos}
+	return []string{Helios, Perses, CataProudmoore, MoPPrivatePvE, Kronos, KronosV}
 }
