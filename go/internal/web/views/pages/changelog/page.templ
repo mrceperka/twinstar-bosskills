@@ -1,0 +1,67 @@
+package changelog
+
+import "twinstar-bosskills/internal/web/views/layouts"
+
+type ViewModel struct {
+	Meta    layouts.PageMeta
+	Entries []Entry
+}
+
+// Entry mirrors one <section> of the SvelteKit changelog. Title and paragraph
+// bodies pass through templ.Raw so the entry list can inline styling tokens
+// (colored spans, links, <code>). The rest of the app renders untrusted user
+// input as text; this file is source-controlled by us, so the raw HTML here
+// is safe by construction.
+type Entry struct {
+	Date       string
+	TitleHTML  string   // rendered raw - may include <a>
+	Paragraphs []string // each becomes a <p>, rendered raw
+	Hint       *Hint    // optional explanation callout
+}
+
+type Hint struct {
+	Title      string   // shown in a colored tab; plain text
+	Paragraphs []string // each becomes a <p>, rendered raw
+}
+
+templ Page(vm ViewModel) {
+	@layouts.Root(vm.Meta) {
+		<div class="space-y-6">
+			<h1 class="text-2xl font-semibold">Changelog (YYYY-MM-DD)</h1>
+			<ol class="space-y-4">
+				for _, e := range vm.Entries {
+					@entrySection(e)
+				}
+			</ol>
+		</div>
+	}
+}
+
+templ entrySection(e Entry) {
+	<li class="border-l-2 border-bk-accent pl-3 py-3 space-y-3">
+		<h2 class="text-lg font-semibold m-0">
+			@templ.Raw(e.Date + " - " + e.TitleHTML)
+		</h2>
+		for _, p := range e.Paragraphs {
+			<p class="text-sm text-bk-text">
+				@templ.Raw(p)
+			</p>
+		}
+		if e.Hint != nil {
+			@hintBox(*e.Hint)
+		}
+	</li>
+}
+
+templ hintBox(h Hint) {
+	<div class="border-2 border-sky-500 px-2">
+		if h.Title != "" {
+			<h3 class="inline-block bg-sky-500 text-white px-2 py-1 text-sm font-semibold m-0 -ml-2">{ h.Title }</h3>
+		}
+		for i, p := range h.Paragraphs {
+			<p class={ paragraphClass(i, h.Title != "") }>
+				@templ.Raw(p)
+			</p>
+		}
+	</div>
+}

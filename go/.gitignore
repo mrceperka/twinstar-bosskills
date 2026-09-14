@@ -1,0 +1,7 @@
+bin/
+var/
+.env
+*.test
+*.out
+*_templ.go
+internal/web/static/app.css

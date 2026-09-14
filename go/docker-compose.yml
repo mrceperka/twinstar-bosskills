@@ -1,0 +1,42 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.3
+    container_name: bk-clickhouse
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9000:9000" # native protocol
+      - "127.0.0.1:8123:8123" # HTTP protocol
+    environment:
+      CLICKHOUSE_DB: bosskills
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      # Mounted as individual files, NOT as the config.d directory: a directory
+      # mount shadows the image's own docker_related_config.xml, which is what
+      # sets listen_host to 0.0.0.0. Without it ClickHouse binds loopback inside
+      # the container and the published port refuses every connection.
+      - ./clickhouse/config.d/logs.xml:/etc/clickhouse-server/config.d/logs.xml:ro
+      - ./clickhouse/config.d/query_cache.xml:/etc/clickhouse-server/config.d/query_cache.xml:ro
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - "--quiet"
+        - "--tries=1"
+        - "--spider"
+        - "http://localhost:8123/ping"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  clickhouse-data:
+  clickhouse-logs:

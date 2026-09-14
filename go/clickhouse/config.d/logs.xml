@@ -1,0 +1,44 @@
+<clickhouse>
+    <!-- The dataset is ~150k boss kills. Default telemetry produced 1.6 billion
+         rows of system logs, which starved SELECT threads and filled the disk.
+         Keep query_log (needed to find slow queries) and the two tiny
+         diagnostic logs; drop the rest. -->
+
+    <!-- Docker image default is `trace`, which is what fed text_log 872M rows. -->
+    <logger>
+        <level>warning</level>
+    </logger>
+
+    <!-- remove="1" only stops NEW writes. If a table already has rows from
+         before this config was applied, they stay on disk forever - ClickHouse
+         doesn't retroactively drop it. Seen 2026-07-31: processors_profile_log
+         (and every table below) still had weeks of pre-fix data despite
+         already being remove="1"'d. Fix: DROP TABLE system.<name> SYNC once,
+         by hand; nothing to change here. -->
+    <text_log remove="1"/>
+    <trace_log remove="1"/>
+    <processors_profile_log remove="1"/>
+    <asynchronous_metric_log remove="1"/>
+    <metric_log remove="1"/>
+    <query_metric_log remove="1"/>
+    <query_views_log remove="1"/>
+    <part_log remove="1"/>
+    <asynchronous_insert_log remove="1"/>
+    <latency_log remove="1"/>
+    <backup_log remove="1"/>
+    <blob_storage_log remove="1"/>
+    <session_log remove="1"/>
+    <opentelemetry_span_log remove="1"/>
+
+    <!-- Kept: this is how slow queries get diagnosed. Bounded so it can't grow
+         into the previous situation. -->
+    <query_log>
+        <ttl>event_date + INTERVAL 3 DAY DELETE</ttl>
+    </query_log>
+
+    <!-- Kept: both are tiny (single-digit thousands of rows) and are the first
+         place to look when something fails. -->
+    <error_log>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+    </error_log>
+</clickhouse>

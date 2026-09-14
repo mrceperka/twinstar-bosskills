@@ -1,0 +1,98 @@
+package characterperf
+
+import (
+	"twinstar-bosskills/internal/links"
+	"twinstar-bosskills/internal/web/views/components"
+	"twinstar-bosskills/internal/web/views/layouts"
+	"twinstar-bosskills/internal/web/views/viewhelpers"
+)
+
+type ViewModel struct {
+	Meta        layouts.PageMeta
+	Realm       string
+	CharName    string
+	Char        CharacterInfo
+	Filter      FilterValues
+	BossOptions []Option
+	RaidOptions []Option
+	SpecOptions []Option
+	ModeOptions []Option
+	Charts      []BossChart
+}
+
+type CharacterInfo struct {
+	Class      int
+	ClassLabel string
+	KillCount  int
+	LastSeen   string
+}
+
+type FilterValues struct {
+	Bosses  []uint32
+	Raids   []string
+	Modes   []int
+	Specs   []int
+	IlvlMin int
+	IlvlMax int
+}
+
+type Option = components.CheckboxOption
+
+templ Page(vm ViewModel) {
+	@layouts.Root(vm.Meta) {
+		<div class="space-y-6">
+			@components.CharacterHeader(vm.Realm, vm.CharName, vm.Char.Class, "performance")
+			@components.CollapsiblePanel("Filters", false) {
+				@filterForm(vm)
+			}
+			if len(vm.Charts) == 0 {
+				@components.EmptyState("No performance records found yet.")
+			} else {
+				<div class="space-y-6">
+					for _, chart := range vm.Charts {
+						<section class="border border-bk-border bg-bk-panel">
+							<header class="border-b border-bk-border px-4 py-2 text-sm font-medium">
+								Performance on
+								<a href={ viewhelpers.BossWithDifficultyHref(vm.Realm, chart.BossID, chart.Mode) } class="hover:text-bk-accent">
+									{ chart.BossName } ({ chart.ModeLabel })
+								</a>
+							</header>
+							<div class="p-4">
+								@components.ChartFromJSON("block h-72 w-full", chart.ChartJSON)
+							</div>
+						</section>
+					}
+				</div>
+			}
+		</div>
+	}
+}
+
+templ filterForm(vm ViewModel) {
+	@components.FilterForm(components.FilterFormProps{Action: links.CharacterPerformance(vm.Realm, vm.CharName), ResetURL: links.CharacterPerformance(vm.Realm, vm.CharName)}) {
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Raid</span>
+			@components.CheckboxFilter("raid", vm.RaidOptions, len(vm.Filter.Raids) > 0, "min-h-32")
+		</label>
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Boss</span>
+			@components.CheckboxFilter("boss", vm.BossOptions, len(vm.Filter.Bosses) > 0, "min-h-32")
+		</label>
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Spec</span>
+			@components.IconCheckboxFilter("spec", vm.SpecOptions, len(vm.Filter.Specs) > 0, "min-h-32")
+		</label>
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Difficulty</span>
+			@components.CheckboxFilter("difficulty", vm.ModeOptions, len(vm.Filter.Modes) > 0, "min-h-32")
+		</label>
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Min iLvl</span>
+			<input name="ilvl_min" type="number" min="0" value={ viewhelpers.EmptyItoa(vm.Filter.IlvlMin) } class="border border-bk-border bg-bk-bg p-2"/>
+		</label>
+		<label class="flex flex-col gap-1 text-sm">
+			<span class="text-bk-muted">Max iLvl</span>
+			<input name="ilvl_max" type="number" min="0" value={ viewhelpers.EmptyItoa(vm.Filter.IlvlMax) } class="border border-bk-border bg-bk-bg p-2"/>
+		</label>
+	}
+}

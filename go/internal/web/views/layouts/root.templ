@@ -1,0 +1,198 @@
+package layouts
+
+import (
+	"strings"
+
+	"twinstar-bosskills/internal/realm"
+	"twinstar-bosskills/internal/web/static"
+	"twinstar-bosskills/internal/web/views/components"
+)
+
+// Root is the base HTML layout. Pages compose it with `@layouts.Root(...) { ... }`.
+// Subnav, page title and meta come in via PageMeta.
+type PageMeta struct {
+	Title       string
+	Subtitle    string
+	Realm       string // empty = no realm selected
+	ActivePath  string // for highlighting nav links
+	CSSHash     string // for cache-busting; "" disables
+	JSHash      string
+	IsHTMXBoot  bool
+	NeedsChart  bool // include echarts + bk-chart if true
+}
+
+templ Root(meta PageMeta) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ pageTitle(meta) }</title>
+			<link rel="icon" href={ faviconURL() } sizes="any"/>
+			<link rel="stylesheet" href={ cssURL(meta) }/>
+			<script src={ jsURL(meta, "htmx.min.js") } defer></script>
+			<script src={ jsURL(meta, "bk-ui.js") } defer></script>
+			<script defer src="https://cloud.umami.is/script.js" data-website-id="800b4377-90d9-48d2-adf8-a1b0cd7672bd"></script>
+			if meta.NeedsChart {
+				<script src={ jsURL(meta, "echarts.min.js") } defer></script>
+				<script src={ jsURL(meta, "bk-chart.js") } defer></script>
+			}
+		</head>
+		<body class={ bodyClass(meta) } hx-history="false">
+			@topbar(meta)
+			<main>
+				{ children... }
+			</main>
+			@mobileNav(meta)
+			@footer()
+		</body>
+	</html>
+}
+
+templ topbar(meta PageMeta) {
+	if meta.Realm != "" {
+		<header class="bk-topbar">
+			@realmPicker(meta.Realm)
+			@desktopNav(meta)
+		</header>
+	}
+}
+
+templ desktopNav(meta PageMeta) {
+	<nav class="bk-desktop-nav" aria-label="Main">
+		@primaryNavList(meta, false)
+	</nav>
+}
+
+templ mobileNav(meta PageMeta) {
+	if meta.Realm != "" {
+		<nav class="bk-mobile-nav" data-mobile-nav aria-label="Main">
+			@primaryNavList(meta, true)
+		</nav>
+	}
+}
+
+templ primaryNavList(meta PageMeta, withIcons bool) {
+	<ul>
+		<li><a class={ primaryNavLinkClass(meta, "/boss-kills") } href={ realmHref(meta.Realm, "/boss-kills") }>@primaryNavIcon("latest", withIcons)<span>Latest</span></a></li>
+		<li><a class={ primaryNavLinkClass(meta, "/raids") } href={ realmHref(meta.Realm, "/raids") }>@primaryNavIcon("raids", withIcons)<span>Raids</span></a></li>
+		if realm.IsPublic(meta.Realm) {
+			<li><a class={ primaryNavLinkClass(meta, "/ranks") } href={ realmHref(meta.Realm, "/ranks") }>@primaryNavIcon("ranks", withIcons)<span>Ranks</span></a></li>
+		}
+		<li><a class={ primaryNavLinkClass(meta, "/stats") } href={ realmHref(meta.Realm, "/stats") }>@primaryNavIcon("stats", withIcons)<span>Stats</span></a></li>
+		<li><a class={ primaryNavLinkClass(meta, "/characters") } href={ realmHref(meta.Realm, "/characters") }>@primaryNavIcon("characters", withIcons)<span>Characters</span></a></li>
+	</ul>
+}
+
+templ primaryNavIcon(name string, enabled bool) {
+	if enabled {
+		if name == "latest" {
+			@components.LatestIcon("")
+		} else if name == "raids" {
+			@components.RaidsIcon("")
+		} else if name == "ranks" {
+			@components.RankingsIcon("")
+		} else if name == "stats" {
+			@components.StatsIcon("")
+		} else if name == "characters" {
+			@components.CharactersIcon("")
+		}
+	}
+}
+
+templ realmPicker(activeRealm string) {
+	<div class="bk-realm-picker" role="list" aria-label="Realm">
+		for _, r := range realmPickerRealms() {
+			<a
+				href={ realmHref(r, "/") }
+				class={ realmPickerClass(r, activeRealm) }
+				aria-label={ "Realm " + r }
+				role="listitem"
+			>
+				<img src={ realmLogoURL(r) } width="32" height="32" alt={ "Realm " + r + " icon" }/>
+			</a>
+		}
+	</div>
+}
+
+templ footer() {
+	<footer class="bk-footer">
+		<a href="/changelog">🗒️ Changelog</a>
+		<div>
+			Made by hop and hopefully some others, maybe you?
+			<a href="https://github.com/twinstar-bosskills/twinstar-bosskills" target="_blank" rel="noopener">
+				We are open source ↗
+			</a>
+		</div>
+	</footer>
+}
+
+func pageTitle(m PageMeta) string {
+	if m.Title == "" {
+		return "Twinstar Bosskills"
+	}
+	return m.Title + " - Twinstar Bosskills"
+}
+
+func faviconURL() templ.SafeURL {
+	if h := static.Hash("favicon.ico"); h != "" {
+		return templ.SafeURL("/favicon.ico?v=" + h)
+	}
+	return "/favicon.ico"
+}
+
+func cssURL(m PageMeta) string {
+	if m.CSSHash == "" {
+		return "/static/app.css"
+	}
+	return "/static/app.css?v=" + m.CSSHash
+}
+
+func jsURL(m PageMeta, name string) string {
+	if h := static.Hash(name); h != "" {
+		return "/static/" + name + "?v=" + h
+	}
+	if m.JSHash == "" {
+		return "/static/" + name
+	}
+	return "/static/" + name + "?v=" + m.JSHash
+}
+
+func realmHref(realmName, suffix string) templ.SafeURL {
+	return templ.SafeURL("/" + realmName + suffix)
+}
+
+func realmPickerRealms() []string {
+	out := make([]string, 0, len(realm.All()))
+	for _, r := range realm.All() {
+		if realm.IsPublic(r) && realm.MergedTo(r) == "" {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func realmPickerClass(realmName, activeRealm string) string {
+	if realm.Normalize(realmName) == realm.Normalize(activeRealm) {
+		return "bk-realm-link active"
+	}
+	return "bk-realm-link"
+}
+
+func realmLogoURL(realmName string) templ.SafeURL {
+	return templ.SafeURL("/static/logos/32x32/" + strings.ToLower(realm.Normalize(realmName)) + ".png")
+}
+
+func primaryNavLinkClass(meta PageMeta, path string) string {
+	if meta.ActivePath == path {
+		return "bk-primary-link active"
+	}
+	return "bk-primary-link"
+}
+
+func bodyClass(meta PageMeta) string {
+	if meta.Realm != "" {
+		return "bk-has-mobile-nav"
+	}
+	return ""
+}

@@ -1,0 +1,25 @@
+<clickhouse>
+    <!-- Query cache sizing. These four are SERVER-level settings and must live
+         here; use_query_cache / query_cache_ttl are per-query and are set on the
+         web server's DSN in internal/ch/conn.go. Mixing them up silently does
+         nothing.
+
+         Sizing rationale: the hot query set is the boss pages - ~257 bosses x
+         ~5 difficulty modes x ~5 queries per page, so several thousand distinct
+         entries. The default max_entries of 1024 is the binding limit and would
+         thrash long before the default 1 GiB budget filled. Entries are small
+         (topRowLimit = 200 rows, compressed), so trade budget for slots. -->
+    <query_cache>
+        <!-- ~8k entries at 10-20 KB each lands near 150 MB; 256 MiB is headroom,
+             and a lower ceiling than the 1 GiB default matters because this is
+             server-lifetime RAM inside the container's memory budget. -->
+        <max_size_in_bytes>268435456</max_size_in_bytes>
+        <max_entries>8192</max_entries>
+        <!-- Defaults, pinned so a version bump can't move them under us. Raise
+             max_entry_rows only if system.query_cache shows the wide queries
+             (boxplot, percentiles) never landing - oversized results are skipped
+             silently, not logged. -->
+        <max_entry_size_in_bytes>1048576</max_entry_size_in_bytes>
+        <max_entry_rows>30000</max_entry_rows>
+    </query_cache>
+</clickhouse>
