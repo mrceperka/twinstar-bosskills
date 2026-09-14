@@ -31,6 +31,16 @@
 //     → first-column cells are capped in CSS. This script marks truncated
 //       first-column cells and shows their full text on hover/focus/tap.
 //
+//   <table data-sortable>
+//     <thead><tr><th>Name</th><th>DPS</th><th data-no-sort>Details</th></tr></thead>
+//     <tbody><tr><td>Foo</td><td data-sort="1234">1,234</td><td>...</td></tr></tbody>
+//   </table>
+//     → every <th> becomes a click/keyboard sort toggle. Cell values come
+//       from td[data-sort] when present and from the cell text otherwise -
+//       formatted numbers MUST carry data-sort with the raw value, because
+//       locale thousand separators ("1.234" in de) are not parseable. Mark
+//       headers that must not sort with th[data-no-sort].
+//
 //   [data-mobile-nav]
 //     → fixed mobile nav hides on downward scroll and reappears on upward
 //       scroll, page edges, keyboard navigation, and resize.
@@ -290,6 +300,103 @@
     initStickyTableCells(document);
   });
 
+  // ---- sortable tables ---------------------------------------------------
+
+  function sortCellValue(row, index) {
+    var cell = row.cells[index];
+    if (!cell) return '';
+    var raw = cell.getAttribute('data-sort');
+    return raw !== null ? raw : cellText(cell);
+  }
+
+  // A column counts as numeric only when every non-empty value parses as a
+  // number; one stray label ("3 days ago") makes the whole column textual.
+  function isNumericColumn(rows, index) {
+    var seen = false;
+    for (var i = 0; i < rows.length; i++) {
+      var v = sortCellValue(rows[i], index);
+      if (v === '' || v === '-') continue;
+      if (isNaN(Number(v))) return false;
+      seen = true;
+    }
+    return seen;
+  }
+
+  function sortTableRows(tbody, rows, index, numeric, dir) {
+    var sign = dir === 'asc' ? 1 : -1;
+    // Array.prototype.sort is stable, so equal keys keep the server's order.
+    rows.slice().sort(function (a, b) {
+      var av = sortCellValue(a, index);
+      var bv = sortCellValue(b, index);
+      if (numeric) return sign * ((Number(av) || 0) - (Number(bv) || 0));
+      return sign * av.localeCompare(bv);
+    }).forEach(function (row) {
+      tbody.appendChild(row);
+    });
+  }
+
+  function markSortedHeader(headRow, active, dir) {
+    Array.prototype.forEach.call(headRow.cells, function (cell) {
+      var indicator = cell.querySelector('.bk-sort-indicator');
+      if (cell !== active) {
+        cell.removeAttribute('aria-sort');
+        if (indicator) indicator.remove();
+        return;
+      }
+      cell.setAttribute('aria-sort', dir === 'asc' ? 'ascending' : 'descending');
+      if (!indicator) {
+        indicator = document.createElement('span');
+        indicator.className = 'bk-sort-indicator';
+        cell.appendChild(indicator);
+      }
+      indicator.textContent = dir === 'asc' ? ' \u2191' : ' \u2193';
+    });
+  }
+
+  function initSortableTables(root) {
+    root.querySelectorAll('table[data-sortable]').forEach(function (table) {
+      if (table._bkSortBound) return;
+      table._bkSortBound = true;
+      var headRow = table.tHead && table.tHead.rows[0];
+      var tbody = table.tBodies[0];
+      if (!headRow || !tbody) return;
+
+      Array.prototype.forEach.call(headRow.cells, function (th, index) {
+        if (th.hasAttribute('data-no-sort')) return;
+        th.classList.add('bk-sortable-th');
+        th.setAttribute('role', 'button');
+        th.setAttribute('tabindex', '0');
+
+        function activate() {
+          var rows = Array.prototype.slice.call(tbody.rows);
+          if (rows.length < 2) return;
+          var numeric = isNumericColumn(rows, index);
+          var current = th.getAttribute('aria-sort');
+          var dir;
+          if (current === 'ascending') {
+            dir = 'desc';
+          } else if (current === 'descending') {
+            dir = 'asc';
+          } else {
+            // First click: leaderboards want the biggest number on top,
+            // name columns want A-Z.
+            dir = numeric ? 'desc' : 'asc';
+          }
+          sortTableRows(tbody, rows, index, numeric, dir);
+          markSortedHeader(headRow, th, dir);
+        }
+
+        th.addEventListener('click', function () { activate(); });
+        th.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+            e.preventDefault();
+            activate();
+          }
+        });
+      });
+    });
+  }
+
   function init(root) {
     root.querySelectorAll('select[data-navigate]').forEach(function (el) {
       if (el._bkBound) return;
@@ -307,6 +414,7 @@
       });
     });
     initTooltips(root);
+    initSortableTables(root);
     initStickyTableCells(root);
     initMobileNav();
   }

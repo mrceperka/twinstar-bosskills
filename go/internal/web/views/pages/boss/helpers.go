@@ -107,3 +107,29 @@ func filterCellClass(selected bool) string {
 	}
 	return "opacity-70 hover:opacity-100"
 }
+
+// metricValue / metricTotal pick the DPS- or HPS-side number for the shared
+// topTable template, so the cell and its data-sort attribute can never drift
+// apart.
+func metricValue(r Ranking, metric string) int64 {
+	if metric == "DPS" {
+		return r.DPS
+	}
+	return r.HPS
+}
+
+func metricTotal(r Ranking, metric string) int64 {
+	if metric == "DPS" {
+		return r.DmgDone
+	}
+	return r.HealDone
+}
+
+// groupSortValue is the sort key for the class/spec column, which renders as
+// icons and therefore has no sortable text of its own.
+func groupSortValue(vm ViewModel, r Ranking) string {
+	if vm.ClassMode {
+		return r.ClassLabel
+	}
+	return r.ClassLabel + " " + r.SpecLabel
+}

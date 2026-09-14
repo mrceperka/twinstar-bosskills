@@ -96,7 +96,10 @@ type Ranking struct {
 	HealDone   int64
 	LengthSec  int
 	KilledAt   string
-	ItemLevel  float64
+	// KilledAtUnix is the raw kill time; KilledAt is humanized ("3 days
+	// ago") and therefore unsortable as text.
+	KilledAtUnix int64
+	ItemLevel    float64
 }
 
 templ Page(vm ViewModel) {
@@ -480,13 +483,13 @@ templ topTable(vm ViewModel, rows []Ranking, metric string) {
 	if len(rows) == 0 {
 		@components.EmptyState("No data for this difficulty yet.")
 	} else {
-		@components.CappedTable("max-h-[70vh]") {
+		@components.SortableTable("max-h-[70vh]") {
 			<thead>
 				<tr>
 					<th>#</th>
 					<th>Character</th>
 					<th class="bk-class-spec-column">{ groupTitle(vm) }</th>
-					<th>{ metric } ↓</th>
+					<th aria-sort="descending">{ metric }<span class="bk-sort-indicator"> ↓</span></th>
 					if metric == "DPS" {
 						<th>Dmg Done</th>
 					} else {
@@ -495,7 +498,7 @@ templ topTable(vm ViewModel, rows []Ranking, metric string) {
 					<th>Fight Length</th>
 					<th>Killed</th>
 					<th>iLvl</th>
-					<th>Details</th>
+					<th data-no-sort>Details</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -507,29 +510,21 @@ templ topTable(vm ViewModel, rows []Ranking, metric string) {
 						<td>
 							<a href={ templ.SafeURL(links.Character(vm.Realm, r.Name)) }>{ r.Name }</a>
 						</td>
-						<td class="bk-class-spec-column">
+						<td class="bk-class-spec-column" data-sort={ groupSortValue(vm, r) }>
 							if vm.ClassMode {
 								@components.ClassSpecIcons(vm.Realm, r.Class, 0)
 							} else {
 								@components.ClassSpecIcons(vm.Realm, r.Class, r.Spec)
 							}
 						</td>
-						<td>
-							if metric == "DPS" {
-								{ format.Int64Ctx(ctx, r.DPS) }
-							} else {
-								{ format.Int64Ctx(ctx, r.HPS) }
-							}
+						<td data-sort={ viewhelpers.Int64(metricValue(r, metric)) }>
+							{ format.Int64Ctx(ctx, metricValue(r, metric)) }
 						</td>
-						<td>
-							if metric == "DPS" {
-								{ format.Int64Ctx(ctx, r.DmgDone) }
-							} else {
-								{ format.Int64Ctx(ctx, r.HealDone) }
-							}
+						<td data-sort={ viewhelpers.Int64(metricTotal(r, metric)) }>
+							{ format.Int64Ctx(ctx, metricTotal(r, metric)) }
 						</td>
-						<td>{ viewhelpers.LongDuration(r.LengthSec) }</td>
-						<td>{ r.KilledAt }</td>
+						<td data-sort={ viewhelpers.Itoa(r.LengthSec) }>{ viewhelpers.LongDuration(r.LengthSec) }</td>
+						<td data-sort={ viewhelpers.Int64(r.KilledAtUnix) }>{ r.KilledAt }</td>
 						<td>{ viewhelpers.FormatFloat(r.ItemLevel, 0) }</td>
 						<td>
 							if r.RemoteID != "" {

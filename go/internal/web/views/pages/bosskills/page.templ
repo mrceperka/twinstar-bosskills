@@ -29,7 +29,9 @@ type FilterValues struct {
 	Difficulties  []int
 	Classes       []int
 	Specs         []int
-	SortBy        string // kill_time (default), length, wipes, deaths
+	// SortBy is a key of validBKSortCols: kill_time (default), length,
+	// wipes, deaths, boss_name, raid_name, guild.
+	SortBy        string
 	SortDir       string // asc, desc
 	// GuildOverride is set by the handler when on a private realm; it forces
 	// queries to filter by the user's guild from the cookie.
@@ -81,12 +83,12 @@ templ TableFragment(vm ViewModel) {
 			@components.Table() {
 				<thead>
 					<tr>
-						<th>Boss</th>
-						<th>Raid</th>
+						<th>@components.SortHeader(sortHeaderProps(vm, "boss_name", "Boss"))</th>
+						<th>@components.SortHeader(sortHeaderProps(vm, "raid_name", "Raid"))</th>
 						<th>Difficulty</th>
-						<th>Guild</th>
-							<th>@components.SortHeader(sortHeaderProps(vm, "length", "Fight length"))</th>
-							<th>@components.SortHeader(sortHeaderProps(vm, "kill_time", "Killed"))</th>
+						<th>@components.SortHeader(sortHeaderProps(vm, "guild", "Guild"))</th>
+						<th>@components.SortHeader(sortHeaderProps(vm, "length", "Fight length"))</th>
+						<th>@components.SortHeader(sortHeaderProps(vm, "kill_time", "Killed"))</th>
 						<th>Fight details</th>
 					</tr>
 				</thead>

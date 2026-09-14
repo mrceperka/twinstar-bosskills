@@ -208,6 +208,21 @@ a:hover {
   background: rgba(0, 0, 0, 0.5);
 }
 
+/* Client-side sortable headers (see initSortableTables in bk-ui.js). The
+ * class is added by JS, so unsortable tables stay visually unchanged. */
+.bk-table-wrap th.bk-sortable-th {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.bk-table-wrap th.bk-sortable-th:hover,
+.bk-table-wrap th.bk-sortable-th:focus-visible {
+  color: var(--color-bk-fg);
+}
+.bk-sort-indicator {
+  color: var(--color-bk-accent);
+}
+
 /* Sticky header + first column. Disabled on very narrow screens. */
 .bk-table-wrap thead th {
   position: -webkit-sticky;

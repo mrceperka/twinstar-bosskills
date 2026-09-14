@@ -38,7 +38,16 @@ var validBKSortCols = map[string]string{
 	"length":    "length",
 	"wipes":     "wipes",
 	"deaths":    "deaths",
+	"boss_name": "boss_name",
+	"raid_name": "raid_name",
+	"guild":     "guild",
 }
+
+// Difficulty is deliberately not sortable. Raw `mode` is a WoW difficulty ID,
+// not a progression rank - on MoP realms LFR is 7 and Flex is 14, so ascending
+// mode puts the two easiest difficulties after both heroics. A correct order
+// would need a per-expansion rank baked into the ORDER BY, and the difficulty
+// checkbox filter above the grid already covers what sorting would be for.
 
 func Handler(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

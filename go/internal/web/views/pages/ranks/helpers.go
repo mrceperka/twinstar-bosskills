@@ -81,3 +81,21 @@ func rankGroupLabel(vm ViewModel) string {
 	}
 	return "Spec"
 }
+
+// rankMetricValue picks the DPS- or HPS-side number for the shared rank
+// table, so the rendered cell and its data-sort attribute stay in step.
+func rankMetricValue(r Rank, metric string) int64 {
+	if metric == "DPS" {
+		return r.DPS
+	}
+	return r.HPS
+}
+
+// rankGroupSortValue is the sort key for the class/spec column, which renders
+// as icons and so has no sortable text of its own.
+func rankGroupSortValue(vm ViewModel, r Rank) string {
+	if vm.ClassMode {
+		return r.ClassLabel
+	}
+	return r.ClassLabel + " " + r.SpecLabel
+}

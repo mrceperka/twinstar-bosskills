@@ -59,23 +59,21 @@ templ Table() {
 	</div>
 }
 
-// CappedTable is Table with a vertical height cap so long leaderboards
-// scroll inside the container instead of stretching the page. The sticky
-// thead (see input.css) keeps the header pinned while scrolling.
-// maxHeightClass is a Tailwind max-h utility, e.g. "max-h-[70vh]".
-templ CappedTable(maxHeightClass string) {
+// SortableTable is Table with `data-sortable`, which the client-side sorter
+// in static/bk-ui.js picks up to make every <th> a sort toggle. Use it for
+// grids whose rows are all rendered at once (leaderboards, rank tables) -
+// NOT for server-paginated grids, where sorting one page is misleading;
+// those want sort links in the query string instead.
+//
+// Cells holding a formatted number must carry `data-sort` with the raw
+// value; locale thousand separators make the rendered text unparseable.
+// Headers that must not sort get `data-no-sort`.
+//
+// maxHeightClass is an optional Tailwind max-h utility (e.g. "max-h-[70vh]")
+// that caps the height so long tables scroll inside the container instead of
+// stretching the page; the sticky thead (see input.css) stays pinned.
+templ SortableTable(maxHeightClass string) {
 	<div class={ "bk-table-wrap", maxHeightClass }>
-		<table class="w-full text-sm">
-			{ children... }
-		</table>
-	</div>
-}
-
-// SortableTable is Table with `data-sortable` so the small client-side
-// sorter in static/bk-sortable.js (when present) can attach. Use for player
-// rows on the bosskill detail page, etc.
-templ SortableTable() {
-	<div class="bk-table-wrap">
 		<table class="w-full text-sm" data-sortable>
 			{ children... }
 		</table>

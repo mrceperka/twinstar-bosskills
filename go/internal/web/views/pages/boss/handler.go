@@ -521,19 +521,20 @@ func loadRankings(ctx context.Context, db *sql.DB, realmName string, id uint32, 
 	now := time.Now().UTC()
 	to := func(s sample, isDPS bool) Ranking {
 		return Ranking{
-			Name:       s.Name,
-			RemoteID:   s.RemoteID,
-			Spec:       int(s.Spec),
-			SpecLabel:  wow.SpecForExpansion(expansion, int(s.Spec)),
-			Class:      int(s.Class),
-			ClassLabel: wow.Class(int(s.Class)),
-			DPS:        int64(s.DPS),
-			HPS:        int64(s.HPS),
-			DmgDone:    int64(s.DmgDone),
-			HealDone:   int64(s.HealDone),
-			LengthSec:  int(s.Length) / 1000,
-			KilledAt:   humanizeAgo(now, s.KillTime),
-			ItemLevel:  float64(s.ILvl),
+			Name:         s.Name,
+			RemoteID:     s.RemoteID,
+			Spec:         int(s.Spec),
+			SpecLabel:    wow.SpecForExpansion(expansion, int(s.Spec)),
+			Class:        int(s.Class),
+			ClassLabel:   wow.Class(int(s.Class)),
+			DPS:          int64(s.DPS),
+			HPS:          int64(s.HPS),
+			DmgDone:      int64(s.DmgDone),
+			HealDone:     int64(s.HealDone),
+			LengthSec:    int(s.Length) / 1000,
+			KilledAt:     humanizeAgo(now, s.KillTime),
+			KilledAtUnix: s.KillTime.Unix(),
+			ItemLevel:    float64(s.ILvl),
 		}
 	}
 

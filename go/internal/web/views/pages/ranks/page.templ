@@ -208,16 +208,16 @@ templ bossRankTable(vm ViewModel, rows []Rank, metric string) {
 	if len(rows) == 0 {
 		@components.EmptyState("No data yet.")
 	} else {
-		@components.Table() {
+		@components.SortableTable("") {
 			<thead>
 				<tr>
 					<th class="w-8">#</th>
 					<th>Character</th>
 					<th class="bk-class-spec-column">{ rankGroupLabel(vm) }</th>
-					<th class="text-right">{ metric }</th>
+					<th class="text-right" aria-sort="descending">{ metric }<span class="bk-sort-indicator"> ↓</span></th>
 					<th>Length</th>
 					<th>iLvl</th>
-					<th>Details</th>
+					<th data-no-sort>Details</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -227,21 +227,17 @@ templ bossRankTable(vm ViewModel, rows []Rank, metric string) {
 						<td>
 							<a href={ viewhelpers.CharacterHref(vm.Realm, r.Name) } class="hover:underline">{ r.Name }</a>
 						</td>
-						<td class="bk-class-spec-column text-xs">
+						<td class="bk-class-spec-column text-xs" data-sort={ rankGroupSortValue(vm, r) }>
 							if vm.ClassMode {
 								@components.ClassSpecIcons(vm.Realm, r.Class, 0)
 							} else {
 								@components.ClassSpecIcons(vm.Realm, r.Class, r.Spec)
 							}
 						</td>
-						<td class="text-right">
-							if metric == "DPS" {
-								{ format.Int64Ctx(ctx, r.DPS) }
-							} else {
-								{ format.Int64Ctx(ctx, r.HPS) }
-							}
+						<td class="text-right" data-sort={ viewhelpers.Int64(rankMetricValue(r, metric)) }>
+							{ format.Int64Ctx(ctx, rankMetricValue(r, metric)) }
 						</td>
-						<td>{ format.Duration(r.LengthSec) }</td>
+						<td data-sort={ viewhelpers.Itoa(r.LengthSec) }>{ format.Duration(r.LengthSec) }</td>
 						<td>{ viewhelpers.Ilvl(r.Ilvl) }</td>
 						<td>
 							if r.KillID != "" {
